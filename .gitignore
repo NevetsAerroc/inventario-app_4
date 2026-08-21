@@ -1,0 +1,11 @@
+node_modules/
+db/inventario.db
+db/inventario.db-shm
+db/inventario.db-wal
+uploads/*
+!uploads/.gitkeep
+exports/*
+!exports/.gitkeep
+.env
+*.log
+certs/*.pem
