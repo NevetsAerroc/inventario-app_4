@@ -29,7 +29,13 @@ router.get('/:id', (req, res) => {
   const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id);
   if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado.' });
 
-  const items = db.prepare('SELECT * FROM detalle_pedidos WHERE pedido_id = ? ORDER BY id ASC').all(req.params.id);
+  const items = db.prepare(`
+    SELECT d.*, COALESCE(p.precio, 0) AS precio
+    FROM detalle_pedidos d
+    LEFT JOIN productos p ON p.id = d.producto_id OR (d.producto_id IS NULL AND p.sku = d.sku)
+    WHERE d.pedido_id = ?
+    ORDER BY d.id ASC
+  `).all(req.params.id);
   res.json({ ok: true, data: { ...pedido, items } });
 });
 

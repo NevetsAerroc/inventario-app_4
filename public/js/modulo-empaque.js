@@ -258,7 +258,7 @@ const ModuloEmpaque = (() => {
       </head>
       <body>
         <div class="text-center">
-          <img src="/img/logo.png" class="logo" alt="Logo Jispiplast" onerror="this.style.display='none';" />
+          <img src="/img/Logo.png" class="logo" alt="Logo Jispiplast" onerror="this.style.display='none';" />
           <p class="bold" style="font-size: 15px; margin: 0;">Jispiplast</p>
           <p style="margin: 2px 0;">Olga Inés Bueno Pineda</p>
           <p style="margin: 2px 0;">Calle 13 #15-20</p>

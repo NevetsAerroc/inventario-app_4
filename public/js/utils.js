@@ -5,10 +5,17 @@
 const API_BASE = '/api';
 
 async function apiFetch(url, options = {}) {
-  const res = await fetch(API_BASE + url, {
-    headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
-    ...options,
-  });
+    let res;
+  try {
+    res = await fetch(API_BASE + url, {
+      headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+      ...options,
+    });
+  } catch (e) {
+    // fetch() lanza cuando no hay red o el servidor esta caido (no cuando responde con error HTTP)
+    return { ok: false, error: 'Sin conexion con el servidor. Verifica tu red e intenta de nuevo.' };
+  }
+
   let data;
   try { data = await res.json(); } catch (e) { data = { ok: false, error: 'Respuesta invalida del servidor.' }; }
   if (!res.ok && data.ok !== false) data.ok = false;
