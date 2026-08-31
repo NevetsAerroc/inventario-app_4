@@ -48,13 +48,24 @@ app.post('/api/domiciliarios', (req, res) => {
 
 app.get('/api/domicilios/pendientes', (req, res) => {
   try {
-    const pedidos = db.prepare(`
+    // ?fecha=YYYY-MM-DD filtra por el dia en que el pedido quedo EMPACADO
+    // (o, si no tiene fecha_cierre, por el dia en que se creo). Sin el
+    // parametro, se devuelven todos los pendientes sin filtrar por fecha.
+    const fecha = (req.query.fecha || '').trim();
+    let sql = `
       SELECT * FROM pedidos
       WHERE estado = 'EMPACADO'
         AND (ruta_id IS NULL OR ruta_id = 0 OR ruta_id = '')
         AND (COALESCE(estado_liquidacion, 'PENDIENTE') = 'PENDIENTE' OR estado_liquidacion = '')
-      ORDER BY id DESC
-    `).all();
+    `;
+    const params = [];
+    if (fecha) {
+      sql += ` AND date(COALESCE(fecha_cierre, fecha_creacion), 'localtime') = ?`;
+      params.push(fecha);
+    }
+    sql += ` ORDER BY id DESC`;
+
+    const pedidos = db.prepare(sql).all(...params);
     res.json({ ok: true, pedidos });
   } catch (err) { 
     res.status(500).json({ ok: false, error: err.message }); 
@@ -127,15 +138,28 @@ app.post('/api/rutas/despachar', (req, res) => {
 app.get('/api/rutas', (req, res) => {
   try {
     const estado = req.query.estado || 'EN_RUTA';
-    const rutas = db.prepare(`
+    const fecha = (req.query.fecha || '').trim();
+
+    // Para rutas LIQUIDADAS filtramos por el dia en que se liquidaron;
+    // para rutas EN_RUTA filtramos por el dia en que se despacharon.
+    const columnaFecha = estado === 'LIQUIDADA' ? 'r.fecha_liquidacion' : 'r.fecha_creacion';
+
+    let sql = `
       SELECT r.*, d.nombre as domiciliario_nombre,
              (SELECT COUNT(*) FROM pedidos p WHERE p.ruta_id = r.id) as cantidad_pedidos,
              (SELECT SUM(total) FROM pedidos p WHERE p.ruta_id = r.id) as total_dinero
       FROM rutas_domicilio r
       LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
       WHERE r.estado = ?
-      ORDER BY r.fecha_creacion DESC
-    `).all(estado);
+    `;
+    const params = [estado];
+    if (fecha) {
+      sql += ` AND date(COALESCE(${columnaFecha}, r.fecha_creacion), 'localtime') = ?`;
+      params.push(fecha);
+    }
+    sql += ` ORDER BY r.fecha_creacion DESC`;
+
+    const rutas = db.prepare(sql).all(...params);
     res.json({ ok: true, rutas });
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });

@@ -3,6 +3,7 @@ const ModuloDomicilios = {
   pedidosPendientes: [],
   domiciliarios: [],
   rutaSeleccionadaId: null,
+  fechaFiltro: null, // null = aun no inicializado (se pone la fecha de hoy), '' = ver todos (todas las pestañas)
 
   // Variables para creación de pedidos e ítems
   itemsManual: [],
@@ -21,6 +22,11 @@ const ModuloDomicilios = {
     const container = document.getElementById('view-domicilios');
     if (!container) return;
 
+    // La primera vez que se entra al modulo, filtramos por la fecha de hoy en todas las pestañas.
+    if (this.fechaFiltro === null) {
+      this.fechaFiltro = this.fechaHoyLocal();
+    }
+
     container.innerHTML = `
       <div class="bg-white rounded-lg shadow-sm p-4 space-y-4">
         <div class="flex items-center justify-between border-b pb-3">
@@ -36,6 +42,24 @@ const ModuloDomicilios = {
             </button>
             <button id="btn-refresh-dom" class="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium">
               🔄
+            </button>
+          </div>
+        </div>
+
+        <!-- FILTRO DE FECHA GLOBAL: aplica a Despachar, En Curso y Cuadre -->
+        <div class="flex items-center justify-between gap-2 -mt-2">
+          <label class="text-xs font-semibold text-slate-600">📅 Ver pedidos y rutas del día:</label>
+          <div class="flex items-center gap-1">
+            <input type="date" id="input-fecha-dom" value="${this.fechaFiltro || ''}"
+                   class="text-[11px] border rounded-md px-1.5 py-1 bg-white"
+                   onchange="ModuloDomicilios.cambiarFecha(this.value)">
+            <button id="btn-fecha-hoy" onclick="ModuloDomicilios.cambiarFecha(ModuloDomicilios.fechaHoyLocal())"
+                    class="text-[10px] px-2 py-1 rounded-md font-semibold ${this.fechaFiltro === this.fechaHoyLocal() ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}">
+              Hoy
+            </button>
+            <button id="btn-fecha-todos" onclick="ModuloDomicilios.cambiarFecha('')"
+                    class="text-[10px] px-2 py-1 rounded-md font-semibold ${!this.fechaFiltro ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}">
+              Todos
             </button>
           </div>
         </div>
@@ -411,7 +435,8 @@ const ModuloDomicilios = {
     cont.innerHTML = `<p class="text-center text-xs text-slate-400 py-4">Cargando pedidos disponibles...</p>`;
 
     try {
-      const res = await apiFetch('/domicilios/pendientes');
+      const qs = this.fechaFiltro ? `?fecha=${encodeURIComponent(this.fechaFiltro)}` : '';
+      const res = await apiFetch('/domicilios/pendientes' + qs);
       if (!res.ok) throw new Error(res.error || 'Error al cargar pedidos');
       this.pedidosPendientes = res.pedidos || [];
 
@@ -427,7 +452,7 @@ const ModuloDomicilios = {
           <div class="border-t pt-2">
             <label class="block text-xs font-bold text-slate-800 mb-2">Pedidos Disponibles para Despacho (Empacados y Directos)</label>
             <div id="lista-check-pedidos" class="space-y-2 max-h-72 overflow-y-auto border p-2 rounded-md bg-slate-50">
-              ${this.pedidosPendientes.length === 0 ? '<p class="text-xs text-slate-400 text-center py-3">No hay pedidos pendientes de despacho</p>' : ''}
+              ${this.pedidosPendientes.length === 0 ? `<p class="text-xs text-slate-400 text-center py-3">No hay pedidos pendientes${this.fechaFiltro ? ' para la fecha seleccionada' : ''}</p>` : ''}
               ${this.pedidosPendientes.map(p => {
                 const total = Number(p.total) || 0;
                 const devuelta = this.calcularDevueltaPedido(total);
@@ -475,6 +500,34 @@ const ModuloDomicilios = {
     } catch (err) {
       cont.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error: ${err.message}</p>`;
     }
+  },
+
+  // Fecha de hoy en horario LOCAL del dispositivo (no UTC), formato YYYY-MM-DD,
+  // para que el filtro por defecto coincida con "hoy" para quien usa la app.
+  fechaHoyLocal() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  },
+
+  cambiarFecha(valor) {
+    this.fechaFiltro = valor || ''; // '' = ver todos, sin filtrar por fecha
+
+    // Refresca el input y el resaltado de los botones "Hoy"/"Todos" sin
+    // volver a dibujar todo el encabezado (evita perder el estado del formulario abierto).
+    const input = document.getElementById('input-fecha-dom');
+    if (input) input.value = this.fechaFiltro;
+
+    const activo = 'text-[10px] px-2 py-1 rounded-md font-semibold bg-slate-900 text-white';
+    const inactivo = 'text-[10px] px-2 py-1 rounded-md font-semibold bg-slate-100 text-slate-600';
+    const btnHoy = document.getElementById('btn-fecha-hoy');
+    const btnTodos = document.getElementById('btn-fecha-todos');
+    if (btnHoy) btnHoy.className = this.fechaFiltro === this.fechaHoyLocal() ? activo : inactivo;
+    if (btnTodos) btnTodos.className = !this.fechaFiltro ? activo : inactivo;
+
+    this.cargarTabActual(); // refresca la pestaña que este activa (Despachar, En Curso o Cuadre)
   },
 
     calcularDevueltaPedido(totalPedido) {
@@ -551,9 +604,10 @@ const ModuloDomicilios = {
     cont.innerHTML = `<p class="text-center text-xs text-slate-400 py-4">Cargando rutas...</p>`;
 
     try {
+      const qsLiquidadas = this.fechaFiltro ? `&fecha=${encodeURIComponent(this.fechaFiltro)}` : '';
       const [resActivas, resLiquidadas] = await Promise.all([
-        apiFetch('/rutas?estado=EN_RUTA'),
-        apiFetch('/rutas?estado=LIQUIDADA')
+        apiFetch('/rutas?estado=EN_RUTA'), // las rutas activas se ven siempre, sin importar la fecha
+        apiFetch('/rutas?estado=LIQUIDADA' + qsLiquidadas)
       ]);
 
       const activas = resActivas.rutas || [];
@@ -586,7 +640,7 @@ const ModuloDomicilios = {
           <div>
             <p class="text-xs font-bold text-slate-800 mb-2">✅ Rutas liquidadas</p>
             ${liquidadas.length === 0
-              ? `<p class="text-center text-xs text-slate-400 py-3">Aún no hay rutas liquidadas.</p>`
+              ? `<p class="text-center text-xs text-slate-400 py-3">Aún no hay rutas liquidadas${this.fechaFiltro ? ' para la fecha seleccionada' : ''}.</p>`
               : liquidadas.slice(0, 15).map(r => `
                 <div class="border p-3 rounded-lg bg-white space-y-1 mb-2 opacity-90">
                   <div class="flex justify-between items-center">

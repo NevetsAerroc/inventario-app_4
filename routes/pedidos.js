@@ -29,6 +29,9 @@ router.get('/:id', (req, res) => {
   const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id);
   if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado.' });
 
+  // Trae el precio unitario desde productos (por producto_id, o por sku si el item
+  // no quedo vinculado). Sin este JOIN, d.precio no existe y la factura POS
+  // calculaba el total en $0.
   const items = db.prepare(`
     SELECT d.*, COALESCE(p.precio, 0) AS precio
     FROM detalle_pedidos d

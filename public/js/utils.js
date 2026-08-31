@@ -5,7 +5,7 @@
 const API_BASE = '/api';
 
 async function apiFetch(url, options = {}) {
-    let res;
+  let res;
   try {
     res = await fetch(API_BASE + url, {
       headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
