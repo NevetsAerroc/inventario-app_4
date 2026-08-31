@@ -2,13 +2,41 @@ const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const path = require('path');
+const fs = require('fs');
 const db = require('../db/database');
 
 const router = express.Router();
 const upload = multer({ dest: path.join(__dirname, '..', 'uploads') });
 
 // ------------------------------------------------------------------
-// GET /api/productos  -> listado completo, filtrable por ?q= (sku/nombre/barcode/ubicacion)
+// GET /api/productos/siguiente-sku -> Devuelve el consecutivo (P001, P002...)
+// (IMPORTANTE: Debe ir antes de rutas dinámicas como /:id)
+// ------------------------------------------------------------------
+router.get('/siguiente-sku', (req, res) => {
+  try {
+    const row = db.prepare(
+      "SELECT sku FROM productos WHERE sku LIKE 'P%' ORDER BY LENGTH(sku) DESC, sku DESC LIMIT 1"
+    ).get();
+
+    let siguienteNumero = 1;
+
+    if (row && row.sku) {
+      const numeroActual = parseInt(row.sku.replace(/\D/g, ''), 10);
+      if (!isNaN(numeroActual)) {
+        siguienteNumero = numeroActual + 1;
+      }
+    }
+
+    const siguienteSku = `P${String(siguienteNumero).padStart(3, '0')}`;
+    res.json({ ok: true, siguienteSku });
+  } catch (err) {
+    console.error('Error al obtener el siguiente SKU:', err);
+    res.status(500).json({ ok: false, error: 'Error al consultar la base de datos' });
+  }
+});
+
+// ------------------------------------------------------------------
+// GET /api/productos -> listado completo, filtrable por ?q=
 // ------------------------------------------------------------------
 router.get('/', (req, res) => {
   const { q, sinBarcode } = req.query;
@@ -31,9 +59,7 @@ router.get('/', (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// POST /api/productos  { sku, nombre, categoria, subcategoria, ubicacion,
-//                         stock, precio, codigo_barras }
-// Crea UN producto manualmente desde el formulario "+ Agregar producto".
+// POST /api/productos -> Crea UN producto manualmente
 // ------------------------------------------------------------------
 router.post('/', (req, res) => {
   const { sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras } = req.body;
@@ -54,14 +80,12 @@ router.post('/', (req, res) => {
   const stockFinal = Number.isInteger(stockNum) && stockNum >= 0 ? stockNum : 0;
   const precioFinal = !isNaN(precioNum) && precioNum >= 0 ? precioNum : 0;
 
-  let codigoFinal = null;
-  const codigoLimpio = String(codigo_barras || '').trim();
-  if (codigoLimpio) {
-    const yaUsado = db.prepare('SELECT sku, nombre FROM productos WHERE codigo_barras = ?').get(codigoLimpio);
+  let codigoFinal = db.normalizarCodigoBarras(codigo_barras);
+  if (codigoFinal) {
+    const yaUsado = db.prepare('SELECT sku, nombre FROM productos WHERE codigo_barras = ?').get(codigoFinal);
     if (yaUsado) {
       return res.status(409).json({ ok: false, error: `El codigo de barras ya esta vinculado a "${yaUsado.nombre}" (SKU ${yaUsado.sku}).` });
     }
-    codigoFinal = codigoLimpio;
   }
 
   const info = db.prepare(`
@@ -74,34 +98,52 @@ router.post('/', (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// GET /api/productos/sugerencias?q=texto -> autocompletar de busqueda.
-// Devuelve coincidencias por nombre, SKU, ubicacion, categoria o subcategoria.
-// Pensado para mostrarse como lista desplegable mientras el usuario escribe.
+// GET /api/productos/sugerencias?q=&limit=&offset=
 // ------------------------------------------------------------------
 router.get('/sugerencias', (req, res) => {
   const q = (req.query.q || '').trim();
-  if (!q) return res.json({ ok: true, data: [] });
+  const limit = parseInt(req.query.limit, 10) || 8;
+  const offset = parseInt(req.query.offset, 10) || 0;
+  const soloConCodigo = req.query.con_codigo === '1' || req.query.con_codigo === 'true';
+  if (!q) return res.json({ ok: true, data: [], total: 0 });
+
+  const qNorm = db.normalizarCodigoBarras(q) || q;
+  const like = `%${q}%`;
+  const likeNorm = `%${qNorm}%`;
+  let where = `(nombre LIKE ? OR sku LIKE ? OR ubicacion LIKE ? OR categoria LIKE ? OR subcategoria LIKE ?
+                 OR codigo_barras LIKE ? OR codigo_caja LIKE ? OR codigo_barras LIKE ? OR codigo_caja LIKE ?)`;
+  const params = [like, like, like, like, like, like, like, likeNorm, likeNorm];
+
+  if (soloConCodigo) {
+    where += ` AND ((codigo_barras IS NOT NULL AND codigo_barras != '') OR (codigo_caja IS NOT NULL AND codigo_caja != ''))`;
+  }
+
+  const totalRow = db.prepare(`
+    SELECT COUNT(*) as total
+    FROM productos
+    WHERE ${where}
+  `).get(...params);
 
   const productos = db.prepare(`
     SELECT id, sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras, codigo_caja, unidades_por_caja
     FROM productos
-    WHERE nombre LIKE ? OR sku LIKE ? OR ubicacion LIKE ? OR categoria LIKE ? OR subcategoria LIKE ?
+    WHERE ${where}
     ORDER BY
-      CASE WHEN nombre LIKE ? THEN 0 ELSE 1 END,
+      CASE
+        WHEN codigo_barras = ? OR codigo_caja = ? OR sku = ? THEN 0
+        WHEN codigo_barras = ? OR codigo_caja = ? THEN 0
+        WHEN nombre LIKE ? THEN 1
+        ELSE 2
+      END,
       nombre ASC
-    LIMIT 8
-  `).all(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `${q}%`);
+    LIMIT ? OFFSET ?
+  `).all(...params, q, q, q, qNorm, qNorm, `${q}%`, limit, offset);
 
-  res.json({ ok: true, data: productos });
+  res.json({ ok: true, data: productos, total: totalRow.total });
 });
 
 // ------------------------------------------------------------------
-// GET /api/productos/exportar -> genera un .xlsx con el catalogo ACTUAL
-// (SKU, Nombre, Categoria, Subcategoria, Ubicacion, StockInicial, Precio,
-//  CodigoBarras, CodigoCaja, UnidadesPorCaja).
-// Sirve como "plantilla siempre actualizada": se descarga, se edita
-// (incluyendo escribir codigos a mano) y se vuelve a subir por /importar
-// para actualizar la base de datos masivamente.
+// GET /api/productos/exportar
 // ------------------------------------------------------------------
 router.get('/exportar', (req, res) => {
   const productos = db.prepare('SELECT * FROM productos ORDER BY nombre ASC').all();
@@ -120,8 +162,6 @@ router.get('/exportar', (req, res) => {
   }));
 
   const header = ['SKU', 'Nombre', 'Categoria', 'Subcategoria', 'Ubicacion', 'StockInicial', 'Precio', 'CodigoBarras', 'CodigoCaja', 'UnidadesPorCaja'];
-  // Si el catalogo esta vacio, igual generamos el archivo con los encabezados
-  // correctos para que sirva como plantilla desde cero.
   const ws = XLSX.utils.json_to_sheet(filas, { header });
   ws['!cols'] = [{ wch: 14 }, { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 16 }];
 
@@ -135,341 +175,549 @@ router.get('/exportar', (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// GET /api/productos/buscar/:codigo -> busca por codigo_barras (unidad),
-// codigo_caja (caja cerrada) o SKU. El campo "tipo_match" en la respuesta
-// indica cual de los tres fue el que coincidio, para que el frontend
-// decida si debe ofrecer "recepcion de caja" (sumar varias unidades de una vez).
+// GET /api/productos/buscar/:codigo
 // ------------------------------------------------------------------
 router.get('/buscar/:codigo', (req, res) => {
-  const { codigo } = req.params;
-  const producto = db.prepare(
-    'SELECT * FROM productos WHERE codigo_barras = ? OR codigo_caja = ? OR sku = ?'
-  ).get(codigo, codigo, codigo);
-
-  if (!producto) {
-    return res.status(404).json({ ok: false, error: 'Producto no encontrado para ese codigo.' });
+  const rawCodigo = decodeURIComponent(req.params.codigo || '').trim();
+  if (!rawCodigo) {
+    return res.status(400).json({ ok: false, error: 'Escribe un código, SKU o nombre.' });
   }
 
+  const codigoNorm = db.normalizarCodigoBarras(rawCodigo) || rawCodigo;
+
+  // 1) Coincidencia exacta con código normalizado o crudo: unidad, caja o SKU
+  let producto = db.prepare(
+    'SELECT * FROM productos WHERE codigo_barras = ? OR codigo_caja = ? OR sku = ? OR codigo_barras = ? OR codigo_caja = ?'
+  ).get(codigoNorm, codigoNorm, rawCodigo, rawCodigo, rawCodigo);
+
   let tipo_match = 'sku';
-  if (producto.codigo_barras === codigo) tipo_match = 'unidad';
-  else if (producto.codigo_caja === codigo) tipo_match = 'caja';
+
+  if (producto) {
+    if (producto.codigo_barras === codigoNorm || producto.codigo_barras === rawCodigo) tipo_match = 'unidad';
+    else if (producto.codigo_caja === codigoNorm || producto.codigo_caja === rawCodigo) tipo_match = 'caja';
+    else tipo_match = 'sku';
+  } else {
+    // 2) Búsqueda por nombre / SKU parcial
+    const like = `%${rawCodigo}%`;
+    producto = db.prepare(`
+      SELECT * FROM productos
+      WHERE nombre LIKE ? OR sku LIKE ?
+      ORDER BY
+        CASE WHEN nombre LIKE ? THEN 0 WHEN sku LIKE ? THEN 1 ELSE 2 END,
+        nombre ASC
+      LIMIT 1
+    `).get(like, like, `${rawCodigo}%`, `${rawCodigo}%`);
+    tipo_match = 'nombre';
+  }
+
+  if (!producto) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+  }
 
   res.json({ ok: true, data: producto, tipo_match });
 });
 
 // ------------------------------------------------------------------
-// POST /api/productos/:id/vincular-barcode  { codigo_barras }
-// Vincula el codigo de barras de la UNIDAD individual a un producto.
+// PUT /api/productos/:id -> Edita datos del producto (nombre, unidades_por_caja, precio, etc.)
 // ------------------------------------------------------------------
+router.put('/:id', (req, res) => {
+  const { id } = req.params;
+  const { nombre, unidades_por_caja, categoria, subcategoria, ubicacion, precio } = req.body;
+
+  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+  if (!producto) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+  }
+
+  const updates = [];
+  const params = [];
+
+  if (nombre !== undefined) {
+    const nombreLimpio = String(nombre || '').trim();
+    if (!nombreLimpio) {
+      return res.status(400).json({ ok: false, error: 'El nombre del producto es obligatorio.' });
+    }
+    updates.push('nombre = ?');
+    params.push(nombreLimpio);
+  }
+
+  if (unidades_por_caja !== undefined) {
+    const upc = parseInt(unidades_por_caja, 10);
+    if (!Number.isInteger(upc) || upc < 1) {
+      return res.status(400).json({ ok: false, error: 'Las unidades por caja deben ser al menos 1.' });
+    }
+    updates.push('unidades_por_caja = ?');
+    params.push(upc);
+  }
+
+  if (categoria !== undefined) {
+    updates.push('categoria = ?');
+    params.push(String(categoria || '').trim());
+  }
+
+  if (subcategoria !== undefined) {
+    updates.push('subcategoria = ?');
+    params.push(String(subcategoria || '').trim());
+  }
+
+  if (ubicacion !== undefined) {
+    updates.push('ubicacion = ?');
+    params.push(String(ubicacion || '').trim());
+  }
+
+  if (precio !== undefined) {
+    const precioNum = parseFloat(precio);
+    if (!isNaN(precioNum) && precioNum >= 0) {
+      updates.push('precio = ?');
+      params.push(precioNum);
+    }
+  }
+
+  if (updates.length === 0) {
+    return res.json({ ok: true, data: producto, mensaje: 'Sin cambios.' });
+  }
+
+  updates.push("updated_at = datetime('now')");
+  params.push(id);
+
+  db.prepare(`UPDATE productos SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+  // Si se cambió el nombre, sincronizar con pedidos pendientes o en proceso
+  if (nombre !== undefined) {
+    try {
+      db.prepare(`
+        UPDATE detalle_pedidos 
+        SET nombre_producto = ? 
+        WHERE producto_id = ? AND pedido_id IN (SELECT id FROM pedidos WHERE estado != 'EMPACADO')
+      `).run(String(nombre).trim(), id);
+    } catch (e) {}
+  }
+
+  const productoActualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+  res.json({ ok: true, data: productoActualizado, mensaje: 'Producto actualizado exitosamente.' });
+});
+
+// PATCH /api/productos/:id -> Alias de PUT (misma lógica)
+router.patch('/:id', (req, res) => {
+  const { id } = req.params;
+  const { nombre, unidades_por_caja, categoria, subcategoria, ubicacion, precio } = req.body;
+
+  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+  if (!producto) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+  }
+
+  const updates = [];
+  const params = [];
+
+  if (nombre !== undefined) {
+    const nombreLimpio = String(nombre || '').trim();
+    if (!nombreLimpio) {
+      return res.status(400).json({ ok: false, error: 'El nombre del producto es obligatorio.' });
+    }
+    updates.push('nombre = ?');
+    params.push(nombreLimpio);
+  }
+
+  if (unidades_por_caja !== undefined) {
+    const upc = parseInt(unidades_por_caja, 10);
+    if (!Number.isInteger(upc) || upc < 1) {
+      return res.status(400).json({ ok: false, error: 'Las unidades por caja deben ser al menos 1.' });
+    }
+    updates.push('unidades_por_caja = ?');
+    params.push(upc);
+  }
+
+  if (categoria !== undefined) { updates.push('categoria = ?'); params.push(String(categoria || '').trim()); }
+  if (subcategoria !== undefined) { updates.push('subcategoria = ?'); params.push(String(subcategoria || '').trim()); }
+  if (ubicacion !== undefined) { updates.push('ubicacion = ?'); params.push(String(ubicacion || '').trim()); }
+  if (precio !== undefined) {
+    const precioNum = parseFloat(precio);
+    if (!isNaN(precioNum) && precioNum >= 0) { updates.push('precio = ?'); params.push(precioNum); }
+  }
+
+  if (updates.length === 0) {
+    return res.json({ ok: true, data: producto, mensaje: 'Sin cambios.' });
+  }
+
+  updates.push("updated_at = datetime('now')");
+  params.push(id);
+
+  db.prepare(`UPDATE productos SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+  if (nombre !== undefined) {
+    try {
+      db.prepare(`
+        UPDATE detalle_pedidos
+        SET nombre_producto = ?
+        WHERE producto_id = ? AND pedido_id IN (SELECT id FROM pedidos WHERE estado != 'EMPACADO')
+      `).run(String(nombre).trim(), id);
+    } catch (e) {}
+  }
+
+  const productoActualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+  res.json({ ok: true, data: productoActualizado, mensaje: 'Producto actualizado exitosamente.' });
+});
+
+// POST /api/productos/:id/vincular-barcode
+// Body: { codigo_barras, tipo_codigo, unidades_por_caja, accion, forzar }
 router.post('/:id/vincular-barcode', (req, res) => {
   const { id } = req.params;
-  const { codigo_barras } = req.body;
+  const { codigo_barras, tipo_codigo = 'UNIDAD', unidades_por_caja = 1, accion, forzar } = req.body;
 
-  if (!codigo_barras || !codigo_barras.trim()) {
-    return res.status(400).json({ ok: false, error: 'codigo_barras es requerido.' });
+  const productoExiste = db.prepare('SELECT id FROM productos WHERE id = ?').get(id);
+  if (!productoExiste) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
   }
 
-  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  if (!producto) return res.status(404).json({ ok: false, error: 'Producto no existe.' });
-
-  const codigo = codigo_barras.trim();
-  const yaUsado = db.prepare('SELECT * FROM productos WHERE codigo_barras = ? AND id != ?').get(codigo, id);
-  if (yaUsado) {
-    return res.status(409).json({ ok: false, error: `Ese codigo ya esta vinculado como codigo de UNIDAD a "${yaUsado.nombre}" (SKU ${yaUsado.sku}).` });
-  }
-  const usadoComoCaja = db.prepare('SELECT * FROM productos WHERE codigo_caja = ? AND id != ?').get(codigo, id);
-  if (usadoComoCaja) {
-    return res.status(409).json({ ok: false, error: `Ese codigo ya esta vinculado como codigo de CAJA a "${usadoComoCaja.nombre}" (SKU ${usadoComoCaja.sku}).` });
-  }
-
-  db.prepare("UPDATE productos SET codigo_barras = ?, updated_at = datetime('now') WHERE id = ?")
-    .run(codigo, id);
-
-  const actualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  res.json({ ok: true, data: actualizado });
-});
-
-// ------------------------------------------------------------------
-// POST /api/productos/:id/vincular-caja  { codigo_caja, unidades_por_caja }
-// Vincula el codigo de barras que trae la CAJA/CARTON cerrado (distinto al
-// codigo de la unidad) y cuantas unidades trae cada caja. Al escanear este
-// codigo despues (Modulo Inventario), se puede sumar el stock de toda la
-// caja de una sola vez.
-// ------------------------------------------------------------------
-router.post('/:id/vincular-caja', (req, res) => {
-  const { id } = req.params;
-  const { codigo_caja, unidades_por_caja } = req.body;
-
-  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  if (!producto) return res.status(404).json({ ok: false, error: 'Producto no existe.' });
-
-  const unidades = parseInt(unidades_por_caja, 10);
-  if (!Number.isInteger(unidades) || unidades <= 0) {
-    return res.status(400).json({ ok: false, error: 'unidades_por_caja debe ser un entero positivo.' });
-  }
-
-  let codigo = null;
-  if (codigo_caja && codigo_caja.trim()) {
-    codigo = codigo_caja.trim();
-    const yaUsadoCaja = db.prepare('SELECT * FROM productos WHERE codigo_caja = ? AND id != ?').get(codigo, id);
-    if (yaUsadoCaja) {
-      return res.status(409).json({ ok: false, error: `Ese codigo de caja ya esta vinculado a "${yaUsadoCaja.nombre}" (SKU ${yaUsadoCaja.sku}).` });
+  // Quitar código
+  if (accion === 'quitar') {
+    if (tipo_codigo === 'CAJA') {
+      db.prepare("UPDATE productos SET codigo_caja = NULL, updated_at = datetime('now') WHERE id = ?").run(id);
+    } else {
+      db.prepare("UPDATE productos SET codigo_barras = NULL, updated_at = datetime('now') WHERE id = ?").run(id);
     }
-    const usadoComoUnidad = db.prepare('SELECT * FROM productos WHERE codigo_barras = ? AND id != ?').get(codigo, id);
-    if (usadoComoUnidad) {
-      return res.status(409).json({ ok: false, error: `Ese codigo ya esta vinculado como codigo de UNIDAD a "${usadoComoUnidad.nombre}" (SKU ${usadoComoUnidad.sku}).` });
-    }
+    const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+    return res.json({ ok: true, data: producto, mensaje: 'Código eliminado' });
   }
 
-  db.prepare("UPDATE productos SET codigo_caja = ?, unidades_por_caja = ?, updated_at = datetime('now') WHERE id = ?")
-    .run(codigo, unidades, id);
+  const codigo = db.normalizarCodigoBarras(codigo_barras);
+  if (!codigo) {
+    return res.status(400).json({ ok: false, error: 'El código es obligatorio (o usa accion: "quitar").' });
+  }
 
-  const actualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  res.json({ ok: true, data: actualizado });
-});
+  // ¿Ya lo usan otros productos?
+  const conflictos = db.prepare(`
+    SELECT id, sku, nombre, codigo_barras, codigo_caja
+    FROM productos
+    WHERE (codigo_barras = ? OR codigo_caja = ?) AND id != ?
+  `).all(codigo, codigo, id);
 
-// ------------------------------------------------------------------
-// POST /api/productos/:id/recibir-caja  { cantidad_cajas, motivo }
-// Recepcion rapida de mercancia: suma (cantidad_cajas * unidades_por_caja)
-// al stock en un solo movimiento. Se usa despues de escanear el codigo_caja.
-// ------------------------------------------------------------------
-router.post('/:id/recibir-caja', (req, res) => {
-  const { id } = req.params;
-  const { cantidad_cajas, motivo } = req.body;
+  // Si hay conflicto y NO forzamos → devolver aviso (no bloquear del todo)
+  if (conflictos.length > 0 && !forzar) {
+    return res.status(409).json({
+      ok: false,
+      codigo_duplicado: true,
+      error: `Ese código ya está en uso.`,
+      conflictos: conflictos.map(c => ({
+        id: c.id,
+        sku: c.sku,
+        nombre: c.nombre,
+        tipo: c.codigo_barras === codigo ? 'UNIDAD' : 'CAJA',
+      })),
+    });
+  }
+
+  // Guardar (permite compartir si forzar = true)
+  if (tipo_codigo === 'CAJA') {
+    db.prepare("UPDATE productos SET codigo_caja = ?, unidades_por_caja = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(codigo, Number(unidades_por_caja) || 1, id);
+  } else {
+    db.prepare("UPDATE productos SET codigo_barras = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(codigo, id);
+  }
 
   const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  if (!producto) return res.status(404).json({ ok: false, error: 'Producto no existe.' });
-
-  const cajas = parseInt(cantidad_cajas, 10);
-  if (!Number.isInteger(cajas) || cajas <= 0) {
-    return res.status(400).json({ ok: false, error: 'cantidad_cajas debe ser un entero positivo.' });
-  }
-
-  const unidadesPorCaja = producto.unidades_por_caja || 1;
-  const totalUnidades = cajas * unidadesPorCaja;
-  const nuevoStock = producto.stock + totalUnidades;
-
-  const tx = db.transaction(() => {
-    db.prepare("UPDATE productos SET stock = ?, updated_at = datetime('now') WHERE id = ?").run(nuevoStock, id);
-    db.prepare(`INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo)
-                VALUES (?, 'entrada', ?, ?, ?)`)
-      .run(id, totalUnidades, nuevoStock,
-        motivo || `Recepcion de ${cajas} caja(s) x ${unidadesPorCaja} und`);
+  res.json({
+    ok: true,
+    data: producto,
+    advertencia: conflictos.length > 0
+      ? `Código compartido con: ${conflictos.map(c => c.nombre).join(', ')}`
+      : null,
   });
-  tx();
-
-  const actualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  res.json({ ok: true, data: actualizado, unidadesAgregadas: totalUnidades });
 });
 
 // ------------------------------------------------------------------
-// POST /api/productos/:id/ubicacion  { ubicacion }
-// Edita/asigna la ubicacion fisica del producto (pasillo, estante, bodega, etc).
-// ------------------------------------------------------------------
-router.post('/:id/ubicacion', (req, res) => {
-  const { id } = req.params;
-  const { ubicacion } = req.body;
-
-  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  if (!producto) return res.status(404).json({ ok: false, error: 'Producto no existe.' });
-
-  db.prepare("UPDATE productos SET ubicacion = ?, updated_at = datetime('now') WHERE id = ?")
-    .run((ubicacion || '').trim(), id);
-
-  const actualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  res.json({ ok: true, data: actualizado });
-});
-
-// ------------------------------------------------------------------
-// POST /api/productos/:id/subcategoria  { subcategoria }
-// Edita/asigna la subcategoria del producto.
-// ------------------------------------------------------------------
-router.post('/:id/subcategoria', (req, res) => {
-  const { id } = req.params;
-  const { subcategoria } = req.body;
-
-  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  if (!producto) return res.status(404).json({ ok: false, error: 'Producto no existe.' });
-
-  db.prepare("UPDATE productos SET subcategoria = ?, updated_at = datetime('now') WHERE id = ?")
-    .run((subcategoria || '').trim(), id);
-
-  const actualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  res.json({ ok: true, data: actualizado });
-});
-
-// ------------------------------------------------------------------
-// POST /api/productos/:id/ajustar-stock  { tipo: 'entrada'|'salida'|'ajuste', cantidad, motivo }
-// ------------------------------------------------------------------
-router.post('/:id/ajustar-stock', (req, res) => {
-  const { id } = req.params;
-  const { tipo, cantidad, motivo } = req.body;
-
-  if (!['entrada', 'salida', 'ajuste'].includes(tipo)) {
-    return res.status(400).json({ ok: false, error: 'tipo debe ser entrada, salida o ajuste.' });
-  }
-  const cant = parseInt(cantidad, 10);
-  if (!Number.isInteger(cant) || cant <= 0) {
-    return res.status(400).json({ ok: false, error: 'cantidad debe ser un entero positivo.' });
-  }
-
-  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  if (!producto) return res.status(404).json({ ok: false, error: 'Producto no existe.' });
-
-  let nuevoStock = producto.stock;
-  if (tipo === 'entrada') nuevoStock += cant;
-  else if (tipo === 'salida') nuevoStock -= cant;
-  else nuevoStock = cant; // ajuste = fija el stock al valor indicado
-
-  if (nuevoStock < 0) {
-    return res.status(400).json({ ok: false, error: 'El stock no puede quedar negativo.' });
-  }
-
-  const tx = db.transaction(() => {
-    db.prepare("UPDATE productos SET stock = ?, updated_at = datetime('now') WHERE id = ?").run(nuevoStock, id);
-    db.prepare(`INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo)
-                VALUES (?, ?, ?, ?, ?)`).run(id, tipo, cant, nuevoStock, motivo || '');
-  });
-  tx();
-
-  const actualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
-  res.json({ ok: true, data: actualizado });
-});
-
-// ------------------------------------------------------------------
-// POST /api/productos/importar  (multipart/form-data, campo "archivo")
-// Excel/CSV con columnas: SKU, Nombre, Categoria, Subcategoria, Ubicacion,
-// StockInicial, Precio, CodigoBarras, CodigoCaja, UnidadesPorCaja (todas
-// las ultimas 5 son opcionales). Inserta productos nuevos y actualiza los
-// existentes (por SKU). Si las columnas de codigo vienen con datos, tambien
-// actualizan/asignan los codigos masivamente (util para escribirlos a mano).
+// POST /api/productos/importar -> Importa catálogo desde Excel/CSV
 // ------------------------------------------------------------------
 router.post('/importar', upload.single('archivo'), (req, res) => {
-  if (!req.file) return res.status(400).json({ ok: false, error: 'No se recibio ningun archivo.' });
+  if (!req.file) return res.status(400).json({ ok: false, error: 'No se recibió ningún archivo.' });
 
   try {
     const workbook = XLSX.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ ok: false, error: 'El archivo Excel está vacío.' });
+    }
+
+    const get = (fila, ...keys) => {
+      for (const k of keys) {
+        const found = Object.keys(fila).find(fk => fk.trim().toLowerCase() === k.toLowerCase());
+        if (found !== undefined && fila[found] !== '') return fila[found];
+      }
+      return undefined;
+    };
+
+    let creados = 0;
+    let actualizados = 0;
+    let codigosAsignados = 0;
+    let cajasAsignadas = 0;
+    const errores = [];
 
     const buscarPorSku = db.prepare('SELECT * FROM productos WHERE sku = ?');
-    const buscarPorBarcode = db.prepare('SELECT sku, nombre FROM productos WHERE codigo_barras = ? AND sku != ?');
-    const buscarPorCodigoCaja = db.prepare('SELECT sku, nombre FROM productos WHERE codigo_caja = ? AND sku != ?');
+    const buscarPorBarcode = db.prepare('SELECT id, sku, nombre FROM productos WHERE codigo_barras = ?');
 
-    const insertar = db.prepare(`
-      INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras, codigo_caja, unidades_por_caja)
-      VALUES (@sku, @nombre, @categoria, @subcategoria, @ubicacion, @stock, @precio, @codigo_barras, @codigo_caja, @unidades_por_caja)
+    const updateStmt = db.prepare(`
+      UPDATE productos
+      SET nombre = ?, categoria = ?, subcategoria = ?, ubicacion = ?, stock = ?, precio = ?,
+          codigo_barras = ?, codigo_caja = ?, unidades_por_caja = ?, updated_at = datetime('now')
+      WHERE id = ?
     `);
 
-    let creados = 0, actualizados = 0, codigosAsignados = 0, cajasAsignadas = 0, errores = [];
+    const insertStmt = db.prepare(`
+      INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras, codigo_caja, unidades_por_caja)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-    const tx = db.transaction((filas) => {
-      filas.forEach((fila, idx) => {
-        // Tolerante a variaciones de nombre de columna (mayus/minus, con o sin acentos)
-        const buscarClave = (...keys) => Object.keys(fila).find(fk =>
-          keys.some(k => fk.trim().toLowerCase() === k.toLowerCase())
-        );
-        const get = (...keys) => {
-          const found = buscarClave(...keys);
-          return (found !== undefined && fila[found] !== '') ? fila[found] : undefined;
-        };
+    const insertMov = db.prepare(`
+      INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo)
+      VALUES (?, 'ajuste', ?, ?, 'Importación masiva')
+    `);
 
-        const sku = String(get('SKU') ?? '').trim();
-        const nombre = String(get('Nombre') ?? '').trim();
-        const categoria = String(get('Categoria', 'Categoría') ?? '').trim();
-        const subcategoria = String(get('Subcategoria', 'Subcategoría', 'Sub Categoria') ?? '').trim();
-        const ubicacion = String(get('Ubicacion', 'Ubicación', 'Location') ?? '').trim();
-        const stockInicial = parseInt(get('StockInicial', 'Stock Inicial', 'Stock') ?? 0, 10) || 0;
-        const precio = parseFloat(get('Precio') ?? 0) || 0;
-
+    const tx = db.transaction(() => {
+      for (let i = 0; i < rows.length; i++) {
+        const fila = rows[i];
+        const sku = String(get(fila, 'SKU', 'Sku', 'Código') ?? '').trim();
+        const nombre = String(get(fila, 'Nombre', 'NombreProducto', 'Producto', 'Descripcion') ?? '').trim();
         if (!sku || !nombre) {
-          errores.push(`Fila ${idx + 2}: falta SKU o Nombre, se omitio.`);
-          return;
+          if (sku || nombre) errores.push(`Fila ${i + 2}: SKU y Nombre son obligatorios.`);
+          continue;
         }
 
-        // --- Codigo de barras de UNIDAD (opcional, no se toca si la columna no viene) ---
-        const claveCodigo = buscarClave('CodigoBarras', 'Codigo de Barras', 'Código de Barras', 'Codigo Barras');
-        const columnaCodigoPresente = claveCodigo !== undefined;
-        const codigoCrudo = columnaCodigoPresente ? String(fila[claveCodigo] ?? '').trim() : '';
+        const categoria = String(get(fila, 'Categoria', 'Categoría') ?? '').trim();
+        const subcategoria = String(get(fila, 'Subcategoria', 'Subcategoría') ?? '').trim();
+        const ubicacion = String(get(fila, 'Ubicacion', 'Ubicación', 'Posicion') ?? '').trim();
 
-        let codigoFinal; // undefined = no tocar, null = limpiar, string = asignar
-        if (columnaCodigoPresente) {
-          if (!codigoCrudo) {
-            codigoFinal = null;
-          } else {
-            const conflicto = buscarPorBarcode.get(codigoCrudo, sku);
-            if (conflicto) {
-              errores.push(`Fila ${idx + 2} (SKU ${sku}): codigo de unidad "${codigoCrudo}" ya esta asignado a SKU ${conflicto.sku} (${conflicto.nombre}); se omitio ese codigo.`);
-              codigoFinal = undefined;
-            } else {
-              codigoFinal = codigoCrudo;
-              codigosAsignados++;
-            }
+        const rawStock = get(fila, 'StockInicial', 'Stock', 'Stock Inicial', 'Cantidad');
+        const stockNum = parseInt(rawStock, 10);
+        const precioNum = parseFloat(get(fila, 'Precio', 'PrecioUnitario', 'Valor') ?? 0);
+        const unidadesPorCaja = parseInt(get(fila, 'UnidadesPorCaja', 'UndPorCaja', 'UnidadesCaja') ?? 1, 10) || 1;
+
+        let codigoBarras = db.normalizarCodigoBarras(get(fila, 'CodigoBarras', 'Codigo_Barras', 'Barcode', 'Codigo'));
+        let codigoCaja = db.normalizarCodigoBarras(get(fila, 'CodigoCaja', 'Codigo_Caja', 'BarcodeCaja'));
+
+        const prodExistente = buscarPorSku.get(sku);
+
+        // Validar colisión de código de barras unidad
+        if (codigoBarras) {
+          const colision = buscarPorBarcode.get(codigoBarras);
+          if (colision && (!prodExistente || colision.id !== prodExistente.id)) {
+            errores.push(`SKU ${sku}: Código ${codigoBarras} ya está usado por "${colision.nombre}" (SKU ${colision.sku}).`);
+            codigoBarras = prodExistente ? prodExistente.codigo_barras : null;
           }
+        } else if (prodExistente) {
+          codigoBarras = prodExistente.codigo_barras;
         }
 
-        // --- Codigo de CAJA + unidades por caja (opcional) ---
-        const claveCodigoCaja = buscarClave('CodigoCaja', 'Codigo Caja', 'Código Caja', 'Codigo de Caja');
-        const columnaCajaPresente = claveCodigoCaja !== undefined;
-        const codigoCajaCrudo = columnaCajaPresente ? String(fila[claveCodigoCaja] ?? '').trim() : '';
-
-        let codigoCajaFinal; // undefined = no tocar
-        if (columnaCajaPresente) {
-          if (!codigoCajaCrudo) {
-            codigoCajaFinal = null;
-          } else {
-            const conflictoCaja = buscarPorCodigoCaja.get(codigoCajaCrudo, sku);
-            if (conflictoCaja) {
-              errores.push(`Fila ${idx + 2} (SKU ${sku}): codigo de caja "${codigoCajaCrudo}" ya esta asignado a SKU ${conflictoCaja.sku} (${conflictoCaja.nombre}); se omitio ese codigo.`);
-              codigoCajaFinal = undefined;
-            } else {
-              codigoCajaFinal = codigoCajaCrudo;
-              cajasAsignadas++;
-            }
-          }
+        if (!codigoCaja && prodExistente) {
+          codigoCaja = prodExistente.codigo_caja;
         }
 
-        const claveUnidadesCaja = buscarClave('UnidadesPorCaja', 'Unidades Por Caja', 'Unidades x Caja', 'UnidadesCaja');
-        const unidadesPorCajaCruda = claveUnidadesCaja !== undefined ? parseInt(fila[claveUnidadesCaja], 10) : undefined;
-        const unidadesPorCajaFinal = (Number.isInteger(unidadesPorCajaCruda) && unidadesPorCajaCruda > 0) ? unidadesPorCajaCruda : undefined;
+        if (codigoBarras) codigosAsignados++;
+        if (codigoCaja) cajasAsignadas++;
 
-        const existente = buscarPorSku.get(sku);
-        const baseParams = { sku, nombre, categoria, subcategoria, ubicacion, stock: stockInicial, precio };
-
-        if (existente) {
-          // Construye UPDATE dinamico: solo toca columnas de codigo que vinieron en el archivo.
-          const sets = ['nombre = @nombre', 'categoria = @categoria', 'subcategoria = @subcategoria',
-                        'ubicacion = @ubicacion', 'stock = @stock', 'precio = @precio', "updated_at = datetime('now')"];
-          const params = { ...baseParams };
-          if (codigoFinal !== undefined) { sets.push('codigo_barras = @codigo_barras'); params.codigo_barras = codigoFinal; }
-          if (codigoCajaFinal !== undefined) { sets.push('codigo_caja = @codigo_caja'); params.codigo_caja = codigoCajaFinal; }
-          if (unidadesPorCajaFinal !== undefined) { sets.push('unidades_por_caja = @unidades_por_caja'); params.unidades_por_caja = unidadesPorCajaFinal; }
-
-          db.prepare(`UPDATE productos SET ${sets.join(', ')} WHERE sku = @sku`).run({ ...params, sku });
+        if (prodExistente) {
+          const stockFinal = !isNaN(stockNum) ? stockNum : prodExistente.stock;
+          const precioFinal = !isNaN(precioNum) ? precioNum : prodExistente.precio;
+          updateStmt.run(
+            nombre,
+            categoria || prodExistente.categoria,
+            subcategoria || prodExistente.subcategoria,
+            ubicacion || prodExistente.ubicacion,
+            stockFinal,
+            precioFinal,
+            codigoBarras,
+            codigoCaja,
+            unidadesPorCaja,
+            prodExistente.id
+          );
           actualizados++;
         } else {
-          insertar.run({
-            ...baseParams,
-            codigo_barras: codigoFinal === undefined ? null : codigoFinal,
-            codigo_caja: codigoCajaFinal === undefined ? null : codigoCajaFinal,
-            unidades_por_caja: unidadesPorCajaFinal === undefined ? 1 : unidadesPorCajaFinal,
-          });
+          const stockFinal = Number.isInteger(stockNum) && stockNum >= 0 ? stockNum : 0;
+          const precioFinal = !isNaN(precioNum) && precioNum >= 0 ? precioNum : 0;
+          const resInsert = insertStmt.run(
+            sku,
+            nombre,
+            categoria,
+            subcategoria,
+            ubicacion,
+            stockFinal,
+            precioFinal,
+            codigoBarras,
+            codigoCaja,
+            unidadesPorCaja
+          );
+          if (stockFinal > 0) {
+            insertMov.run(resInsert.lastInsertRowid, stockFinal, stockFinal);
+          }
           creados++;
+        }
+      }
+    });
+
+    tx();
+
+    res.json({
+      ok: true,
+      resumen: {
+        totalFilas: rows.length,
+        creados,
+        actualizados,
+        codigosAsignados,
+        cajasAsignadas,
+        errores,
+      },
+    });
+  } catch (err) {
+    console.error('Error importando productos:', err);
+    res.status(500).json({ ok: false, error: 'Error procesando el archivo: ' + err.message });
+  } finally {
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+  }
+});
+
+// ------------------------------------------------------------------
+// POST /api/productos/escanear-entrada -> Entrada rápida por escáner (unidad / caja)
+// ------------------------------------------------------------------
+router.post('/escanear-entrada', (req, res) => {
+  const { codigo_barras, cantidad_ingresada = 1, distribucion } = req.body;
+  const rawCodigo = String(codigo_barras || '').trim();
+  const codigo = db.normalizarCodigoBarras(rawCodigo) || rawCodigo;
+
+  if (!codigo) {
+    return res.status(400).json({ ok: false, error: 'Código de barras no proporcionado.' });
+  }
+
+  // 1) Si viene con distribución (caso caja mixta confirmada por el usuario)
+  if (Array.isArray(distribucion) && distribucion.length > 0) {
+    const updateStock = db.prepare("UPDATE productos SET stock = stock + ?, updated_at = datetime('now') WHERE id = ?");
+    const insertMov = db.prepare(`
+      INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo)
+      VALUES (?, 'entrada', ?, (SELECT stock FROM productos WHERE id = ?), ?)
+    `);
+    const selectProd = db.prepare('SELECT id, nombre, stock FROM productos WHERE id = ?');
+
+    const tx = db.transaction(() => {
+      distribucion.forEach((linea) => {
+        const cant = parseInt(linea.cantidad, 10) || 0;
+        if (cant > 0 && linea.producto_id) {
+          updateStock.run(cant, linea.producto_id);
+          const p = selectProd.get(linea.producto_id);
+          if (p) {
+            insertMov.run(p.id, cant, p.stock, `Entrada caja mixta (${codigo})`);
+          }
         }
       });
     });
 
-    tx(rows);
-
-    res.json({
-      ok: true,
-      resumen: { totalFilas: rows.length, creados, actualizados, codigosAsignados, cajasAsignadas, errores }
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: 'Error procesando el archivo: ' + err.message });
+    tx();
+    return res.json({ ok: true, mensaje: 'Caja mixta ingresada exitosamente.' });
   }
+
+  // 2) Buscar productos que coincidan con el código normalizado o crudo
+  const cantIngreso = Math.max(1, parseInt(cantidad_ingresada, 10) || 1);
+
+  // Buscar todos los productos que tengan este código de caja
+  const prodsCaja = db.prepare('SELECT * FROM productos WHERE codigo_caja = ? OR codigo_caja = ?').all(codigo, rawCodigo);
+
+  if (prodsCaja.length > 1) {
+    // Es una caja compartida entre varios productos/sabores -> requiere distribución
+    return res.json({
+      ok: true,
+      requiere_distribucion: true,
+      codigo_caja: codigo,
+      capacidad_caja: prodsCaja[0].unidades_por_caja || 1,
+      productos: prodsCaja.map(p => ({ id: p.id, sku: p.sku, nombre: p.nombre, stock: p.stock })),
+    });
+  }
+
+  // Si no es caja compartida, buscar por código de barras de unidad, de caja o SKU
+  let producto = prodsCaja[0] || db.prepare('SELECT * FROM productos WHERE codigo_barras = ? OR codigo_caja = ? OR sku = ? OR codigo_barras = ? OR codigo_caja = ?').get(codigo, codigo, rawCodigo, rawCodigo, rawCodigo);
+
+  if (!producto) {
+    return res.status(404).json({ ok: false, error: 'NO_ENCONTRADO' });
+  }
+
+  const esCaja = producto.codigo_caja === codigo;
+  const unidadesPorCaja = Number(producto.unidades_por_caja) || 1;
+  const totalUnidades = esCaja ? cantIngreso * unidadesPorCaja : cantIngreso;
+
+  const nuevoStock = producto.stock + totalUnidades;
+  const motivo = esCaja
+    ? `Entrada ${cantIngreso} caja(s) de ${unidadesPorCaja} und (${codigo})`
+    : `Entrada ${cantIngreso} und (${codigo})`;
+
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE productos SET stock = ?, updated_at = datetime('now') WHERE id = ?").run(nuevoStock, producto.id);
+    db.prepare(`
+      INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo)
+      VALUES (?, 'entrada', ?, ?, ?)
+    `).run(producto.id, totalUnidades, nuevoStock, motivo);
+  });
+
+  tx();
+
+  const productoActualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(producto.id);
+  const textoDetalle = esCaja
+    ? `+${totalUnidades} und (${cantIngreso} caja de ${unidadesPorCaja}) a "${producto.nombre}"`
+    : `+${totalUnidades} und a "${producto.nombre}"`;
+
+  res.json({
+    ok: true,
+    mensaje: `${textoDetalle} (Stock actual: ${nuevoStock})`,
+    data: productoActualizado,
+  });
+});
+
+// ------------------------------------------------------------------
+// POST /api/productos/:id/ajustar-stock -> Ajuste manual de stock (+/-)
+// ------------------------------------------------------------------
+router.post('/:id/ajustar-stock', (req, res) => {
+  const { id } = req.params;
+  const { tipo = 'ajuste', cantidad, motivo } = req.body;
+
+  const cant = parseInt(cantidad, 10);
+  if (!Number.isInteger(cant) || cant < 0) {
+    return res.status(400).json({ ok: false, error: 'Cantidad inválida.' });
+  }
+
+  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+  if (!producto) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+  }
+
+  let nuevoStock = producto.stock;
+  let tipoMov = tipo;
+
+  if (tipo === 'entrada') {
+    nuevoStock = producto.stock + cant;
+  } else if (tipo === 'salida') {
+    nuevoStock = Math.max(0, producto.stock - cant);
+  } else if (tipo === 'ajuste') {
+    nuevoStock = cant;
+  } else {
+    return res.status(400).json({ ok: false, error: 'Tipo de ajuste no válido (entrada, salida, ajuste).' });
+  }
+
+  const delta = Math.abs(nuevoStock - producto.stock);
+  const motivoFinal = motivo || `Ajuste manual (${tipo})`;
+
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE productos SET stock = ?, updated_at = datetime('now') WHERE id = ?").run(nuevoStock, id);
+    db.prepare(`
+      INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, tipoMov, delta, nuevoStock, motivoFinal);
+  });
+
+  tx();
+
+  const productoActualizado = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+  res.json({ ok: true, data: productoActualizado });
 });
 
 module.exports = router;

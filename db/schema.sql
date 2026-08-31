@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS movimientos_stock (
 
 CREATE TABLE IF NOT EXISTS pedidos (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_id INTEGER REFERENCES clientes(id),
     codigo_pedido   TEXT NOT NULL UNIQUE,
     cliente         TEXT DEFAULT '',
     estado          TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','EN_PROCESO','EMPACADO')),
@@ -52,3 +53,13 @@ CREATE TABLE IF NOT EXISTS detalle_pedidos (
 
 CREATE INDEX IF NOT EXISTS idx_detalle_pedido_id ON detalle_pedidos(pedido_id);
 CREATE INDEX IF NOT EXISTS idx_detalle_sku ON detalle_pedidos(sku);
+
+CREATE TABLE IF NOT EXISTS clientes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    telefono TEXT,
+    empresa TEXT,
+    ciudad TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+

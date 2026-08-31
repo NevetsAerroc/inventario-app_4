@@ -27,6 +27,30 @@
   background-color: #ecfdf5;
   border-color: #10b981;
 }
+#reader-entrada,
+#reader-carga,
+#reader-nuevo-producto {
+  width: 100%;
+  min-height: 260px;
+  background: #000;
+  position: relative;
+}
 
+#reader-entrada video,
+#reader-carga video,
+#reader-nuevo-producto video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 0.75rem;
+}
+
+/* Evita que se recorten las esquinas del recuadro de escaneo */
+#reader-entrada > div,
+#reader-carga > div,
+#reader-nuevo-producto > div {
+  width: 100% !important;
+  height: 100% !important;
+}
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }

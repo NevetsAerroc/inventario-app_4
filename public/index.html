@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
-<title>Inventario &amp; Empaque</title>
-<meta name="theme-color" content="#0f172a" />
-<link rel="manifest" href="manifest.json" />
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<link rel="stylesheet" href="css/styles.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+  <title>Inventario &amp; Empaque</title>
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="manifest" href="manifest.json" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body class="bg-slate-100 min-h-screen text-slate-800">
 
@@ -34,6 +34,9 @@
     <!-- MODULO C: Checking / Empaque de pedidos -->
     <section id="view-empaque" class="view p-4 space-y-4 hidden"></section>
 
+    <!-- MODULO D: Domicilios & Liquidacion -->
+    <section id="view-domicilios" class="view p-4 space-y-4 hidden"></section>
+
   </main>
 
   <!-- ============ TOAST GLOBAL ============ -->
@@ -41,7 +44,7 @@
 
   <!-- ============ NAV INFERIOR (mobile-first) ============ -->
   <nav class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] z-40">
-    <div class="max-w-2xl mx-auto grid grid-cols-3">
+    <div class="max-w-2xl mx-auto grid grid-cols-4">
       <button data-tab="carga" class="tab-btn flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">📥</span><span class="text-xs font-medium">Carga</span>
       </button>
@@ -51,16 +54,21 @@
       <button data-tab="empaque" class="tab-btn flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">✅</span><span class="text-xs font-medium">Empaque</span>
       </button>
+      <button data-tab="domicilios" class="tab-btn flex flex-col items-center py-3 gap-1 text-slate-500">
+        <span class="text-xl">🚚</span><span class="text-xs font-medium">Domicilios</span>
+      </button>
     </div>
   </nav>
 
   <!-- ============ SCRIPTS ============ -->
-  <script src="js/utils.js"></script>
-  <script src="js/sound.js"></script>
-  <script src="js/scanner.js"></script>
-  <script src="js/modulo-carga.js"></script>
-  <script src="js/modulo-inventario.js"></script>
-  <script src="js/modulo-empaque.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/utils.js?v=1.2"></script>
+  <script src="js/sound.js?v=1.2"></script>
+  <script src="js/scanner.js?v=1.2"></script>
+  <script src="js/recortador.js?v=1.2"></script>
+  <script src="js/modulo-carga.js?v=1.4"></script>
+  <script src="js/modulo-inventario.js?v=1.4"></script>
+  <script src="js/modulo-empaque.js?v=1.4"></script>
+  <script src="js/modulo-domicilios.js?v=1.4"></script>
+  <script src="js/app.js?v=1.4"></script>
 </body>
 </html>

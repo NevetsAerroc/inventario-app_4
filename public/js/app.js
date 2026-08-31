@@ -1,33 +1,46 @@
-// ============================================================
-// APP: navegacion entre modulos (pestañas inferiores)
-// ============================================================
+// public/js/app.js (Versión corregida sin duplicados)
 
 const App = (() => {
   const tabs = {
-    carga: { view: 'view-carga', mod: ModuloCarga },
-    inventario: { view: 'view-inventario', mod: ModuloInventario },
-    empaque: { view: 'view-empaque', mod: ModuloEmpaque },
+    carga: { view: 'view-carga', mod: typeof ModuloCarga !== 'undefined' ? ModuloCarga : null },
+    inventario: { view: 'view-inventario', mod: typeof ModuloInventario !== 'undefined' ? ModuloInventario : null },
+    empaque: { view: 'view-empaque', mod: typeof ModuloEmpaque !== 'undefined' ? ModuloEmpaque : null },
+    domicilios: { view: 'view-domicilios', mod: typeof ModuloDomicilios !== 'undefined' ? ModuloDomicilios : null }
   };
   let tabActual = null;
-  let inicializados = new Set();
+  const montado = {};
 
   function switchTab(nombre) {
+    if (!tabs[nombre]) return;
     if (tabActual === nombre) return;
 
-    // Notificar salida del modulo anterior (para detener camara, etc.)
-    if (tabActual && tabs[tabActual].mod.onLeaveTab) tabs[tabActual].mod.onLeaveTab();
+    if (tabActual && tabs[tabActual].mod && typeof tabs[tabActual].mod.onLeaveTab === 'function') {
+      tabs[tabActual].mod.onLeaveTab();
+    }
 
     Object.entries(tabs).forEach(([key, cfg]) => {
-      document.getElementById(cfg.view).classList.toggle('hidden', key !== nombre);
+      const el = document.getElementById(cfg.view);
+      if (el) el.classList.toggle('hidden', key !== nombre);
     });
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === nombre);
+      const activo = btn.dataset.tab === nombre;
+      btn.classList.toggle('text-slate-900', activo);
+      btn.classList.toggle('text-slate-500', !activo);
+      btn.classList.toggle('active', activo);
     });
 
-    if (!inicializados.has(nombre)) {
-      tabs[nombre].mod.render();
-      inicializados.add(nombre);
+    const mod = tabs[nombre].mod;
+    const view = document.getElementById(tabs[nombre].view);
+    const yaListo = montado[nombre] && view && view.childElementCount > 0;
+
+    if (mod) {
+      if (!yaListo && typeof mod.render === 'function') {
+        mod.render();
+        montado[nombre] = true;
+      } else if (typeof mod.onEnterTab === 'function') {
+        mod.onEnterTab();
+      }
     }
 
     tabActual = nombre;
@@ -35,6 +48,7 @@ const App = (() => {
 
   async function checkConnection() {
     const statusEl = document.getElementById('conn-status');
+    if (!statusEl) return;
     try {
       const res = await fetch('/api/health');
       if (res.ok) {

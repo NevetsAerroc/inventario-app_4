@@ -34,17 +34,16 @@ router.get('/:id', (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// POST /api/pedidos  { codigo_pedido, cliente, items: [{sku, cantidad}] }
-// Creacion manual / desde JSON (por ejemplo generado por otro sistema)
+// POST /api/pedidos { codigo_pedido, cliente, items: [{sku, cantidad}] }
 // ------------------------------------------------------------------
 router.post('/', (req, res) => {
-  const { codigo_pedido, cliente, items } = req.body;
+  const { codigo_pedido, cliente, cliente_id, items } = req.body;
   if (!codigo_pedido || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ ok: false, error: 'codigo_pedido e items[] son requeridos.' });
   }
 
   try {
-    const pedidoId = crearPedidoConItems(codigo_pedido, cliente || '', items);
+    const pedidoId = crearPedidoConItems(codigo_pedido, cliente || '', items, { cliente_id });
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
     const detalle = db.prepare('SELECT * FROM detalle_pedidos WHERE pedido_id = ?').all(pedidoId);
     res.status(201).json({ ok: true, data: { ...pedido, items: detalle } });
@@ -53,10 +52,97 @@ router.post('/', (req, res) => {
   }
 });
 
+// POST /api/pedidos/manual — directo a despacho (EMPACADO) y descuenta stock
+router.post('/manual', (req, res) => {
+  try {
+    const {
+      codigo_pedido,
+      cliente_nombre,
+      cliente_id,
+      telefono,
+      direccion,
+      municipio,
+      total,
+      observacion,
+      items,
+      tipo_entrega
+    } = req.body;
+
+    if (!total || Number(total) <= 0) {
+      return res.status(400).json({ ok: false, error: 'El valor total del pedido es obligatorio' });
+    }
+
+    const tx = db.transaction(() => {
+      let finalClienteId = cliente_id || null;
+
+      if (!finalClienteId && telefono) {
+        const clienteExistente = db.prepare('SELECT id FROM clientes WHERE telefono = ?').get(telefono);
+        if (clienteExistente) {
+          finalClienteId = clienteExistente.id;
+        } else {
+          const resCliente = db.prepare(
+            'INSERT INTO clientes (nombre, telefono) VALUES (?, ?)'
+          ).run(cliente_nombre || 'Cliente General', telefono);
+          finalClienteId = resCliente.lastInsertRowid;
+        }
+      }
+
+      const stmtPedido = db.prepare(`
+        INSERT INTO pedidos (
+          codigo_pedido, cliente_id, cliente, telefono, direccion, municipio,
+          total, observacion, tipo_entrega, estado, estado_liquidacion, ruta_id, fecha_cierre
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EMPACADO', 'PENDIENTE', 0, datetime('now'))
+      `);
+
+      const info = stmtPedido.run(
+        codigo_pedido || `EMP-${Date.now()}`,
+        finalClienteId,
+        cliente_nombre || 'Cliente General',
+        telefono || '',
+        direccion || '',
+        municipio || '',
+        Number(total),
+        observacion || '',
+        tipo_entrega || 'DOMICILIO'
+      );
+
+      const pedidoId = info.lastInsertRowid;
+      const buscarProducto = db.prepare('SELECT * FROM productos WHERE sku = ?');
+      const stmtItem = db.prepare(`
+        INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada, cantidad_empacada, verificado)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
+      `);
+
+      if (items && Array.isArray(items) && items.length > 0) {
+        for (const item of items) {
+          const cant = Number(item.cantidad) || 1;
+          const prod = item.sku ? buscarProducto.get(item.sku) : null;
+          stmtItem.run(
+            pedidoId,
+            prod ? prod.id : null,
+            item.sku || '',
+            (prod && prod.nombre) || item.nombre || 'Producto',
+            cant,
+            cant
+          );
+        }
+        db.descontarStockDePedido(pedidoId, `Pedido domicilio ${codigo_pedido || pedidoId}`);
+      }
+
+      return pedidoId;
+    });
+
+    const pedidoId = tx();
+    res.json({ ok: true, pedidoId });
+  } catch (err) {
+    console.error('Error al guardar pedido manual:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ------------------------------------------------------------------
 // POST /api/pedidos/importar (multipart, campo "archivo")
-// Excel/CSV con columnas: CodigoPedido, Cliente, SKU, Cantidad
-// Varias filas con el mismo CodigoPedido conforman un mismo pedido.
 // ------------------------------------------------------------------
 router.post('/importar', upload.single('archivo'), (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'No se recibio ningun archivo.' });
@@ -74,7 +160,6 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
       return undefined;
     };
 
-    // Agrupar filas por CodigoPedido
     const pedidosAgrupados = {};
     rows.forEach((fila) => {
       const codigo = String(get(fila, 'CodigoPedido', 'Pedido', 'Codigo Pedido') ?? '').trim();
@@ -95,7 +180,7 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
     const creados = [];
     codigos.forEach((codigo) => {
       const existente = db.prepare('SELECT id FROM pedidos WHERE codigo_pedido = ?').get(codigo);
-      if (existente) return; // no duplicar pedidos ya importados
+      if (existente) return;
       const { cliente, items } = pedidosAgrupados[codigo];
       const id = crearPedidoConItems(codigo, cliente, items);
       creados.push(id);
@@ -108,21 +193,30 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
   }
 });
 
-// Helper: crea un pedido + su detalle, resolviendo producto_id por SKU si existe
-function crearPedidoConItems(codigo_pedido, cliente, items) {
-  const insertPedido = db.prepare(`INSERT INTO pedidos (codigo_pedido, cliente, estado) VALUES (?, ?, 'PENDIENTE')`);
+// Helper: crea un pedido + su detalle
+function crearPedidoConItems(codigo_pedido, cliente, items, extras = {}) {
+  const insertPedido = db.prepare(`
+    INSERT INTO pedidos (codigo_pedido, cliente, cliente_id, estado, total, tipo_entrega, estado_liquidacion)
+    VALUES (?, ?, ?, 'PENDIENTE', ?, 'TIENDA', 'PENDIENTE')
+  `);
   const insertDetalle = db.prepare(`
-    INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada, cantidad_empacada, verificado)
+    VALUES (?, ?, ?, ?, ?, 0, 0)
   `);
   const buscarProducto = db.prepare('SELECT * FROM productos WHERE sku = ?');
 
   let pedidoId;
   const tx = db.transaction(() => {
-    const info = insertPedido.run(codigo_pedido, cliente);
-    pedidoId = info.lastInsertRowid;
-    items.forEach((it) => {
+    let total = Number(extras.total) || 0;
+    const productos = items.map((it) => {
       const producto = buscarProducto.get(it.sku);
+      if (producto && !extras.total) total += (producto.precio || 0) * (Number(it.cantidad) || 0);
+      return { it, producto };
+    });
+
+    const info = insertPedido.run(codigo_pedido, cliente, extras.cliente_id || null, total);
+    pedidoId = info.lastInsertRowid;
+    productos.forEach(({ it, producto }) => {
       insertDetalle.run(
         pedidoId,
         producto ? producto.id : null,
@@ -137,8 +231,54 @@ function crearPedidoConItems(codigo_pedido, cliente, items) {
 }
 
 // ------------------------------------------------------------------
-// POST /api/pedidos/:id/escanear  { codigo_barras }
-// Logica central del modulo Pick & Pack.
+// DELETE /api/pedidos/:pedidoId/items/:itemId -> Eliminar ítem
+// ------------------------------------------------------------------
+router.delete('/:pedidoId/items/:itemId', (req, res) => {
+  const { pedidoId, itemId } = req.params;
+  
+  const pedido = db.prepare('SELECT estado FROM pedidos WHERE id = ?').get(pedidoId);
+  if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado.' });
+  if (pedido.estado === 'EMPACADO') {
+    return res.status(400).json({ ok: false, error: 'No se pueden modificar ítems de un pedido empacado.' });
+  }
+
+  db.prepare('DELETE FROM detalle_pedidos WHERE id = ? AND pedido_id = ?').run(itemId, pedidoId);
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------------------------
+// POST /api/pedidos/:pedidoId/items -> Agregar ítem extra a la lista
+// ------------------------------------------------------------------
+router.post('/:pedidoId/items', (req, res) => {
+  const { pedidoId } = req.params;
+  const { producto_id, cantidad } = req.body;
+
+  const pedido = db.prepare('SELECT estado FROM pedidos WHERE id = ?').get(pedidoId);
+  if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado.' });
+  if (pedido.estado === 'EMPACADO') {
+    return res.status(400).json({ ok: false, error: 'No se pueden modificar ítems de un pedido empacado.' });
+  }
+
+  const prod = db.prepare('SELECT id, nombre, sku FROM productos WHERE id = ?').get(producto_id);
+  if (!prod) return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+
+  const exist = db.prepare('SELECT id, cantidad_solicitada FROM detalle_pedidos WHERE pedido_id = ? AND producto_id = ?').get(pedidoId, producto_id);
+  
+  if (exist) {
+    db.prepare('UPDATE detalle_pedidos SET cantidad_solicitada = cantidad_solicitada + ? WHERE id = ?')
+      .run(Number(cantidad) || 1, exist.id);
+  } else {
+    db.prepare(`
+      INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada, cantidad_empacada, verificado)
+      VALUES (?, ?, ?, ?, ?, 0, 0)
+    `).run(pedidoId, prod.id, prod.sku, prod.nombre, Number(cantidad) || 1);
+  }
+
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------------------------
+// POST /api/pedidos/:id/escanear
 // ------------------------------------------------------------------
 router.post('/:id/escanear', (req, res) => {
   const { id } = req.params;
@@ -151,14 +291,17 @@ router.post('/:id/escanear', (req, res) => {
     return res.status(400).json({ ok: false, resultado: 'ERROR', mensaje: 'Este pedido ya fue EMPACADO y cerrado.' });
   }
 
-  // Resolver el producto escaneado (por codigo de barras o por SKU directo)
-  const producto = db.prepare('SELECT * FROM productos WHERE codigo_barras = ? OR sku = ?').get(codigo_barras, codigo_barras);
+  const rawCodigo = String(codigo_barras || '').trim();
+  const normCodigo = db.normalizarCodigoBarras(rawCodigo) || rawCodigo;
+
+  const producto = db.prepare(
+    'SELECT * FROM productos WHERE codigo_barras = ? OR codigo_caja = ? OR sku = ? OR codigo_barras = ? OR codigo_caja = ?'
+  ).get(normCodigo, normCodigo, rawCodigo, rawCodigo, rawCodigo);
 
   if (!producto) {
     return res.json({ ok: true, resultado: 'ERROR', mensaje: 'Codigo no reconocido en el catalogo de productos.' });
   }
 
-  // Buscar si ese SKU pertenece al pedido
   const item = db.prepare('SELECT * FROM detalle_pedidos WHERE pedido_id = ? AND sku = ?').get(id, producto.sku);
 
   if (!item) {
@@ -169,17 +312,17 @@ router.post('/:id/escanear', (req, res) => {
     });
   }
 
-  if (item.cantidad_empacada >= item.cantidad_solicitada) {
+  const cantEmpacada = item.cantidad_empacada || 0;
+  if (cantEmpacada >= item.cantidad_solicitada) {
     return res.json({
       ok: true,
       resultado: 'ERROR',
-      mensaje: `"${producto.nombre}" ya se completo (${item.cantidad_empacada}/${item.cantidad_solicitada}).`,
+      mensaje: `"${producto.nombre}" ya se completo (${cantEmpacada}/${item.cantidad_solicitada}).`,
       item
     });
   }
 
-  // Escaneo valido: incrementar
-  const nuevaCantidad = item.cantidad_empacada + 1;
+  const nuevaCantidad = cantEmpacada + 1;
   const verificado = nuevaCantidad >= item.cantidad_solicitada ? 1 : 0;
 
   const tx = db.transaction(() => {
@@ -207,8 +350,6 @@ router.post('/:id/escanear', (req, res) => {
 
 // ------------------------------------------------------------------
 // POST /api/pedidos/:id/cerrar
-// Solo permite cerrar si el 100% de items estan verificados.
-// Descuenta stock del inventario principal y marca estado EMPACADO.
 // ------------------------------------------------------------------
 router.post('/:id/cerrar', (req, res) => {
   const { id } = req.params;
@@ -227,21 +368,16 @@ router.post('/:id/cerrar', (req, res) => {
     });
   }
 
-  const restarStock = db.prepare('SELECT * FROM productos WHERE id = ?');
-  const updateStock = db.prepare("UPDATE productos SET stock = ?, updated_at = datetime('now') WHERE id = ?");
-  const insertMov = db.prepare(`INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo, pedido_id)
-                                 VALUES (?, 'empaque', ?, ?, ?, ?)`);
-
   const tx = db.transaction(() => {
-    items.forEach((item) => {
-      if (!item.producto_id) return; // SKU sin producto vinculado, no se puede descontar
-      const producto = restarStock.get(item.producto_id);
-      if (!producto) return;
-      const nuevoStock = Math.max(0, producto.stock - item.cantidad_empacada);
-      updateStock.run(nuevoStock, producto.id);
-      insertMov.run(producto.id, item.cantidad_empacada, nuevoStock, `Empaque pedido ${pedido.codigo_pedido}`, id);
-    });
-    db.prepare("UPDATE pedidos SET estado = 'EMPACADO', fecha_cierre = datetime('now') WHERE id = ?").run(id);
+    db.descontarStockDePedido(id, `Empaque pedido ${pedido.codigo_pedido}`);
+    const totalCalc = db.totalPedidoDesdeItems(id);
+    db.prepare(`
+      UPDATE pedidos SET
+        estado = 'EMPACADO',
+        fecha_cierre = datetime('now'),
+        total = CASE WHEN COALESCE(total, 0) = 0 THEN ? ELSE total END
+      WHERE id = ?
+    `).run(totalCalc, id);
   });
   tx();
 
@@ -251,7 +387,6 @@ router.post('/:id/cerrar', (req, res) => {
 
 // ------------------------------------------------------------------
 // GET /api/pedidos/:id/exportar?formato=json|csv
-// Vista lista para facturacion
 // ------------------------------------------------------------------
 router.get('/:id/exportar', (req, res) => {
   const { id } = req.params;
