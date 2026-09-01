@@ -847,39 +847,51 @@ const ModuloDomicilios = {
                 <div class="p-2 space-y-2 bg-white">
                                       ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
-                     const totalPedido = Number(p.total) || 0;
-                    // Precio con el que SALIÓ el domiciliario (no se recalcula con ajustes)
-                    const totalOriginal = Number(p.total_original) > 0
-                      ? Number(p.total_original)
-                      : totalPedido;
+                    const totalPedido = Number(p.total) || 0;
+
+                    // Original SOLO si vino de BD. Si no hay, no inventamos con el total actual
+                    // (si no, al editar “Despachado” y la devuelta se mueven).
+                    const tieneOriginal = Number(p.total_original) > 0;
+                    const totalOriginal = tieneOriginal ? Number(p.total_original) : totalPedido;
+
                     const metodoActual = p.metodo_pago_final || 'EFECTIVO';
                     const motivoAjuste = (p.observacion || '').trim();
 
-                    // Devuelta FIJA: prioriza la guardada al despachar;
-                    // si no hay, se calcula solo con el precio ORIGINAL (nunca con el ajustado)
+                    // Devuelta FIJA: solo la guardada al despachar.
+                    // Si no hay, calcula UNA vez con total_original (no con total actual).
                     const BILLETE = 50000;
-                    const pagaConOriginal = totalOriginal > 0
-                      ? Math.ceil(totalOriginal / BILLETE) * BILLETE
-                      : 0;
-                    const devueltaDesdeOriginal = Math.max(0, pagaConOriginal - totalOriginal);
                     const storedDev = Number(p.devuelta_calculada);
-                    const devueltaEntregada =
-                      (!isNaN(storedDev) && storedDev > 0) ? storedDev : devueltaDesdeOriginal;
+                    let devueltaEntregada;
+                    if (!isNaN(storedDev) && storedDev > 0) {
+                      devueltaEntregada = storedDev;
+                    } else if (tieneOriginal) {
+                      const paga = Math.ceil(totalOriginal / BILLETE) * BILLETE;
+                      devueltaEntregada = Math.max(0, paga - totalOriginal);
+                    } else {
+                      // Pedido viejo sin datos de despacho: estimado (se fijará al primer ajuste)
+                      const paga = totalPedido > 0 ? Math.ceil(totalPedido / BILLETE) * BILLETE : 0;
+                      devueltaEntregada = Math.max(0, paga - totalPedido);
+                    }
 
                     const esTransfer = metodoActual === 'TRANSFERENCIA'
                       || metodoActual === 'TRANSFERENCIA_PENDIENTE';
-                    // Caja usa el total ACTUAL (ajustado); transferencia solo la devuelta fija
-                    const aCaja = esTransfer ? devueltaEntregada : totalPedido;
-                    const delta = totalPedido - totalOriginal;
 
-                    // Fórmula legible siempre que haya ajuste
-                    const formulaTxt = delta === 0
-                      ? `$${totalPedido.toLocaleString('es-CO')}`
-                      : `$${totalOriginal.toLocaleString('es-CO')} ${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}${motivoAjuste ? ' [' + motivoAjuste.replace(/"/g, '') + ']' : ''} = $${totalPedido.toLocaleString('es-CO')}`;
+                    // Efectivo: valor cobrado (editado) + devuelta que salió con el domiciliario
+                    // Transferencia: solo la devuelta de la base
+                    const aCaja = esTransfer
+                      ? devueltaEntregada
+                      : (totalPedido + devueltaEntregada);
+
+                    const delta = tieneOriginal ? (totalPedido - totalOriginal) : 0;
+                    const hayAjuste = tieneOriginal && delta !== 0;
+
+                    const formulaTxt = hayAjuste
+                      ? `$${totalOriginal.toLocaleString('es-CO')} ${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}${motivoAjuste ? ' [' + motivoAjuste.replace(/"/g, '') + ']' : ''} = $${totalPedido.toLocaleString('es-CO')}`
+                      : `$${totalPedido.toLocaleString('es-CO')}`;
                     return `
                     <div class="border p-2.5 rounded-md space-y-2 ${entregado ? 'bg-emerald-50 border-emerald-200' : 'bg-white'}"
                          id="item-pedido-${p.id}"
-                         data-total-original="${totalOriginal}"
+                         data-total-original="${tieneOriginal ? totalOriginal : ''}"
                          data-devuelta="${devueltaEntregada}">
 
                       <!-- Encabezado siempre visible -->
@@ -895,19 +907,24 @@ const ModuloDomicilios = {
 
                       ${entregado ? `
                       <!-- VISTA COLAPSADA (entregado) -->
-                       <div id="resumen-${p.id}" class="text-[11px] space-y-0.5">
+                      <div id="resumen-${p.id}" class="text-[11px] space-y-1">
                         <p class="text-slate-600">Despachado: <b>$${totalOriginal.toLocaleString('es-CO')}</b></p>
-                        ${delta !== 0 ? `
-                        <p class="text-slate-600">Ajuste: <b>${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}</b>${motivoAjuste ? ` <span class="text-amber-800 italic">[${motivoAjuste.replace(/"/g,'')}]</span>` : ''}</p>
-                        <p class="text-slate-800">Total a cobrar: <b class="text-emerald-700">$${totalPedido.toLocaleString('es-CO')}</b></p>
-                        ` : `
-                        <p class="text-slate-800">Total a cobrar: <b class="text-emerald-700">$${totalPedido.toLocaleString('es-CO')}</b></p>
-                        `}
-                        <p class="text-amber-800">Devuelta entregada: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b>
-                          <span class="text-[10px] text-slate-400">(fija al salir · no cambia)</span>
+                        ${hayAjuste ? `
+                        <p class="text-slate-600">
+                          Ajuste: <b>${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}</b>
+                          ${motivoAjuste ? `<span class="text-amber-800 italic"> — ${motivoAjuste.replace(/"/g,'')}</span>` : ''}
                         </p>
-                        <p class="text-emerald-800 font-semibold">A entregar en caja: <b>$${aCaja.toLocaleString('es-CO')}</b>
-                          ${esTransfer ? '<span class="text-[10px] font-normal text-slate-500">(solo devuelta · transferencia)</span>' : ''}
+                        ` : ''}
+                        <p class="text-slate-800">Total a cobrar: <b class="text-emerald-700">$${totalPedido.toLocaleString('es-CO')}</b></p>
+                        <p class="text-amber-800">
+                          Devuelta entregada: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b>
+                          <span class="text-[10px] text-slate-400">(fija al salir)</span>
+                        </p>
+                        <p class="text-emerald-800 font-semibold">
+                          A entregar en caja: <b>$${aCaja.toLocaleString('es-CO')}</b>
+                          <span class="text-[10px] font-normal text-slate-500">
+                            ${esTransfer ? '(solo devuelta · transferencia)' : '(cobrado + devuelta)'}
+                          </span>
                         </p>
                         <button type="button" onclick="ModuloDomicilios.toggleDetallePedido(${p.id})"
                                 class="text-[10px] text-indigo-600 font-semibold mt-1">▶ Ver más detalles</button>
@@ -1161,27 +1178,46 @@ async guardarAjusteTotal(pedidoId) {
     const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
     const card = document.getElementById(`item-pedido-${pedidoId}`);
     const actual = parseFloat(inpTotal?.value) || 0;
-    const totalOriginal = parseFloat(card?.dataset?.totalOriginal) || actual;
+
+    // Original: el del data attribute, o el total ACTUAL antes de ajustar
+    let totalOriginal = parseFloat(card?.dataset?.totalOriginal);
+    if (isNaN(totalOriginal) || totalOriginal <= 0) {
+      totalOriginal = actual; // primera vez: congela el precio de ahora como “despachado”
+      if (card) card.dataset.totalOriginal = String(totalOriginal);
+    }
+
+    // Devuelta: NO se toca
+    let devueltaFija = parseFloat(card?.dataset?.devuelta);
+    if (isNaN(devueltaFija) || devueltaFija < 0) {
+      const BILLETE = 50000;
+      const paga = Math.ceil(totalOriginal / BILLETE) * BILLETE;
+      devueltaFija = Math.max(0, paga - totalOriginal);
+      if (card) card.dataset.devuelta = String(devueltaFija);
+      if (sel) sel.dataset.devuelta = String(devueltaFija);
+    }
 
     const sp = document.getElementById(`signo-ajuste-${pedidoId}`);
     const signo = parseInt(sp?.dataset?.signo || '1', 10);
     const monto = parseFloat(document.getElementById(`monto-ajuste-${pedidoId}`)?.value);
     const motivo = (document.getElementById(`motivo-ajuste-${pedidoId}`)?.value || '').trim();
 
-    if (isNaN(monto) || monto <= 0) return alert('Indica el monto del ajuste (ej. 2500)');
-    if (!motivo) return alert('Escribe el motivo (ej. cliente devolvió vasos)');
+    if (isNaN(monto) || monto <= 0) return alert('Indica el monto del ajuste (ej. 20000)');
+    if (!motivo) return alert('Escribe el motivo del cambio de precio');
 
     const ajuste = signo * monto;
     const nuevoTotal = Math.max(0, Math.round(actual + ajuste));
     const signoTxt = ajuste > 0 ? '+' : '';
-    // Acumula motivos sin borrar los anteriores
+
     const prevObs = (document.getElementById(`motivo-txt-${pedidoId}`)?.textContent || '')
       .replace(/^📝\s*/, '').trim();
     const linea = `${signoTxt}${ajuste.toLocaleString('es-CO')}: ${motivo}`;
     const observacion = prevObs ? `${prevObs} | ${linea}` : linea;
 
     if (inpTotal) inpTotal.value = String(nuevoTotal);
-    if (sel) sel.dataset.total = String(nuevoTotal);
+    if (sel) {
+      sel.dataset.total = String(nuevoTotal);
+      sel.dataset.devuelta = String(devueltaFija); // se mantiene
+    }
 
     const txt = document.getElementById(`total-txt-${pedidoId}`);
     if (txt) txt.innerText = `$${nuevoTotal.toLocaleString('es-CO')}`;
@@ -1192,9 +1228,6 @@ async guardarAjusteTotal(pedidoId) {
       motivoEl.classList.remove('hidden');
     }
 
-    document.getElementById(`panel-ajuste-${pedidoId}`)?.classList.add('hidden');
-
-        // Actualiza fórmula en pantalla (original ± ajuste = nuevo)
     const formulaEl = document.getElementById(`formula-txt-${pedidoId}`);
     if (formulaEl) {
       const d = nuevoTotal - totalOriginal;
@@ -1203,24 +1236,32 @@ async guardarAjusteTotal(pedidoId) {
       formulaEl.classList.remove('hidden');
     }
 
-    // La devuelta NO se recalcula: ya viene en data-devuelta / data-devuelta del select
-    this._actualizarLineaCaja(pedidoId);
+    // Caja = cobrado + devuelta fija (efectivo)
+    const elCaja = document.getElementById(`caja-line-${pedidoId}`);
+    const metodo = sel?.value || 'EFECTIVO';
+    const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
+    const aCaja = esTransfer ? devueltaFija : (nuevoTotal + devueltaFija);
+    if (elCaja) elCaja.innerText = `$${aCaja.toLocaleString('es-CO')}`;
+
+    document.getElementById(`panel-ajuste-${pedidoId}`)?.classList.add('hidden');
 
     try {
-      const metodoPago = sel?.value || 'EFECTIVO';
-      // No tocar comprobante ni borrar observación previa en servidor
       await apiFetch(`/rutas/pedido/${pedidoId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           total: nuevoTotal,
-          metodoPago,
+          metodoPago: metodo,
           observacion,
-          total_original: totalOriginal
+          total_original: totalOriginal,
+          // opcional: reforzar devuelta si el server la acepta
+          // devuelta_calculada: devueltaFija
         })
       });
       this.recalcularArqueo();
       showToast(`Total: $${nuevoTotal.toLocaleString('es-CO')}`);
+      // Refresca resumen colapsado con Despachado / Ajuste / observación
+      await this.renderTabCuadre();
     } catch (e) {
       alert('No se pudo guardar el ajuste');
     }
@@ -1235,15 +1276,15 @@ async guardarAjusteTotal(pedidoId) {
       || parseFloat(card?.dataset?.devuelta) || 0;
     const metodo = sel?.value || 'EFECTIVO';
     const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
-    const aCaja = esTransfer ? devuelta : total;
+    const aCaja = esTransfer ? devuelta : (total + devuelta);
 
     const elCaja = document.getElementById(`caja-line-${pedidoId}`);
     const elHint = document.getElementById(`caja-hint-${pedidoId}`);
     if (elCaja) elCaja.innerText = `$${aCaja.toLocaleString('es-CO')}`;
     if (elHint) {
       elHint.textContent = esTransfer
-        ? 'Transferencia: en caja solo regresa la devuelta de la base.'
-        : 'Efectivo: en caja el valor cobrado del pedido.';
+        ? 'Transferencia: en caja solo la devuelta de la base.'
+        : 'Efectivo: valor cobrado + devuelta que salió con el domiciliario.';
     }
   },
 
