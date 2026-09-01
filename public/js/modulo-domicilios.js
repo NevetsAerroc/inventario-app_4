@@ -847,35 +847,35 @@ const ModuloDomicilios = {
                 <div class="p-2 space-y-2 bg-white">
                                       ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
-                                        const totalPedido = Number(p.total) || 0;
+                     const totalPedido = Number(p.total) || 0;
+                    // Precio con el que SALIÓ el domiciliario (no se recalcula con ajustes)
                     const totalOriginal = Number(p.total_original) > 0
                       ? Number(p.total_original)
                       : totalPedido;
                     const metodoActual = p.metodo_pago_final || 'EFECTIVO';
                     const motivoAjuste = (p.observacion || '').trim();
 
+                    // Devuelta FIJA: prioriza la guardada al despachar;
+                    // si no hay, se calcula solo con el precio ORIGINAL (nunca con el ajustado)
                     const BILLETE = 50000;
-                    const pagaCon = totalOriginal > 0
+                    const pagaConOriginal = totalOriginal > 0
                       ? Math.ceil(totalOriginal / BILLETE) * BILLETE
                       : 0;
-                    const devueltaCalculada = Math.max(0, pagaCon - totalOriginal);
-
-                    // Solo usa el valor guardado si es > 0.
-                    // Si en BD quedó 0 (default), calcula con múltiplos de 50.000.
+                    const devueltaDesdeOriginal = Math.max(0, pagaConOriginal - totalOriginal);
                     const storedDev = Number(p.devuelta_calculada);
                     const devueltaEntregada =
-                      (!isNaN(storedDev) && storedDev > 0)
-                        ? storedDev
-                        : devueltaCalculada;
+                      (!isNaN(storedDev) && storedDev > 0) ? storedDev : devueltaDesdeOriginal;
 
                     const esTransfer = metodoActual === 'TRANSFERENCIA'
                       || metodoActual === 'TRANSFERENCIA_PENDIENTE';
+                    // Caja usa el total ACTUAL (ajustado); transferencia solo la devuelta fija
                     const aCaja = esTransfer ? devueltaEntregada : totalPedido;
                     const delta = totalPedido - totalOriginal;
+
+                    // Fórmula legible siempre que haya ajuste
                     const formulaTxt = delta === 0
                       ? `$${totalPedido.toLocaleString('es-CO')}`
                       : `$${totalOriginal.toLocaleString('es-CO')} ${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}${motivoAjuste ? ' [' + motivoAjuste.replace(/"/g, '') + ']' : ''} = $${totalPedido.toLocaleString('es-CO')}`;
-
                     return `
                     <div class="border p-2.5 rounded-md space-y-2 ${entregado ? 'bg-emerald-50 border-emerald-200' : 'bg-white'}"
                          id="item-pedido-${p.id}"
@@ -895,9 +895,17 @@ const ModuloDomicilios = {
 
                       ${entregado ? `
                       <!-- VISTA COLAPSADA (entregado) -->
-                      <div id="resumen-${p.id}" class="text-[11px] space-y-0.5">
-                        <p class="text-slate-700"><span class="text-slate-500">Valor:</span> <b>${formulaTxt}</b></p>
-                        <p class="text-amber-800">Devuelta entregada: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b></p>
+                       <div id="resumen-${p.id}" class="text-[11px] space-y-0.5">
+                        <p class="text-slate-600">Despachado: <b>$${totalOriginal.toLocaleString('es-CO')}</b></p>
+                        ${delta !== 0 ? `
+                        <p class="text-slate-600">Ajuste: <b>${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}</b>${motivoAjuste ? ` <span class="text-amber-800 italic">[${motivoAjuste.replace(/"/g,'')}]</span>` : ''}</p>
+                        <p class="text-slate-800">Total a cobrar: <b class="text-emerald-700">$${totalPedido.toLocaleString('es-CO')}</b></p>
+                        ` : `
+                        <p class="text-slate-800">Total a cobrar: <b class="text-emerald-700">$${totalPedido.toLocaleString('es-CO')}</b></p>
+                        `}
+                        <p class="text-amber-800">Devuelta entregada: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b>
+                          <span class="text-[10px] text-slate-400">(fija al salir · no cambia)</span>
+                        </p>
                         <p class="text-emerald-800 font-semibold">A entregar en caja: <b>$${aCaja.toLocaleString('es-CO')}</b>
                           ${esTransfer ? '<span class="text-[10px] font-normal text-slate-500">(solo devuelta · transferencia)</span>' : ''}
                         </p>
@@ -922,7 +930,12 @@ const ModuloDomicilios = {
                                     class="w-8 h-8 rounded-md bg-rose-500 text-white font-bold text-sm">−</button>
                             ` : ''}
                           </div>
-                          ${delta !== 0 ? `<p class="text-[10px] text-slate-600 mt-0.5">${formulaTxt}</p>` : ''}
+                                                   <p id="formula-txt-${p.id}" class="text-[10px] text-slate-600 mt-0.5 ${delta === 0 ? 'hidden' : ''}">
+                            ${formulaTxt}
+                          </p>
+                          <p class="text-[10px] text-amber-800 mt-0.5">
+                            Devuelta al salir: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b> (no cambia si ajustas el precio)
+                          </p>
                           ${motivoAjuste ? `<p class="text-[10px] text-amber-800 italic mt-0.5" id="motivo-txt-${p.id}">📝 ${motivoAjuste.replace(/</g,'')}</p>` : `<p class="hidden text-[10px] text-amber-800 italic mt-0.5" id="motivo-txt-${p.id}"></p>`}
 
                           <!-- Panel ajuste -->
@@ -1181,7 +1194,16 @@ async guardarAjusteTotal(pedidoId) {
 
     document.getElementById(`panel-ajuste-${pedidoId}`)?.classList.add('hidden');
 
-    // Actualiza línea "a caja" en pantalla
+        // Actualiza fórmula en pantalla (original ± ajuste = nuevo)
+    const formulaEl = document.getElementById(`formula-txt-${pedidoId}`);
+    if (formulaEl) {
+      const d = nuevoTotal - totalOriginal;
+      formulaEl.textContent =
+        `$${totalOriginal.toLocaleString('es-CO')} ${d > 0 ? '+' : ''}${d.toLocaleString('es-CO')} [${motivo}] = $${nuevoTotal.toLocaleString('es-CO')}`;
+      formulaEl.classList.remove('hidden');
+    }
+
+    // La devuelta NO se recalcula: ya viene en data-devuelta / data-devuelta del select
     this._actualizarLineaCaja(pedidoId);
 
     try {
