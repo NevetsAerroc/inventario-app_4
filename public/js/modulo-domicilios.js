@@ -456,7 +456,7 @@ const ModuloDomicilios = {
               ${this.pedidosPendientes.length === 0 ? `<p class="text-xs text-slate-400 text-center py-3">No hay pedidos pendientes${this.fechaFiltro ? ' para la fecha seleccionada' : ''}</p>` : ''}
               ${this.pedidosPendientes.map(p => {
                 const total = Number(p.total) || 0;
-                const devuelta = this.calcularDevueltaPedido(total);
+                const devuelta = this.devueltaPorPedido(total);
                 return `
                 <div class="bg-white p-2.5 rounded border space-y-1.5">
                   <label class="flex items-start gap-2 text-xs cursor-pointer">
