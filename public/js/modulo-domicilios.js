@@ -866,7 +866,7 @@ const ModuloDomicilios = {
       });
 
       const entregados = (pedidos || []).filter(p => p.estado_entrega === 'ENTREGADO').length;
-      
+      const totalPedidos = (pedidos || []).length;
 
       cont.innerHTML = `
         <div class="space-y-4">
