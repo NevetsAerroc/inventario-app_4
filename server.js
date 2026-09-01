@@ -108,19 +108,28 @@ app.post('/api/rutas/despachar', (req, res) => {
         "INSERT INTO rutas_domicilio (domiciliario_id, base_efectivo, estado) VALUES (?, ?, 'EN_RUTA')"
       ).run(domiciliarioId, baseEfectivo || 0);
 
-      const updatePedido = db.prepare(`
-        UPDATE pedidos 
-        SET ruta_id = ?, 
-            tipo_entrega = 'DOMICILIO', 
+            const updatePedido = db.prepare(`
+        UPDATE pedidos
+        SET ruta_id = ?,
+            tipo_entrega = 'DOMICILIO',
             estado_liquidacion = 'EN_RUTA',
-            metodo_pago_final = ?
+            metodo_pago_final = ?,
+            total_original = COALESCE(NULLIF(total_original, 0), total),
+            devuelta_calculada = ?
         WHERE id = ?
       `);
 
       for (const item of lista) {
+        const pedido = getPedido.get(item.id);
+        const total = Number(pedido.total) || 0;
+        const BILLETE = 50000;
+        const pagaCon = total > 0 ? Math.ceil(total / BILLETE) * BILLETE : 0;
+        const devuelta = Math.max(0, pagaCon - total);
+
         updatePedido.run(
           infoRuta.lastInsertRowid,
           item.metodoPago || 'EFECTIVO',
+          devuelta,
           item.id
         );
       }

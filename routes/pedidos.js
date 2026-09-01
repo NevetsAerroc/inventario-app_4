@@ -70,7 +70,7 @@ router.post('/manual', (req, res) => {
       cliente_id,
       telefono,
       direccion,
-      municipio,
+      municipioFinal,   // en lugar de municipio || ''
       total,
       observacion,
       items,
@@ -84,16 +84,40 @@ router.post('/manual', (req, res) => {
     const tx = db.transaction(() => {
       let finalClienteId = cliente_id || null;
 
+            const municipioFinal = (municipio && String(municipio).trim()) || '';
+
       if (!finalClienteId && telefono) {
         const clienteExistente = db.prepare('SELECT id FROM clientes WHERE telefono = ?').get(telefono);
         if (clienteExistente) {
           finalClienteId = clienteExistente.id;
         } else {
           const resCliente = db.prepare(
-            'INSERT INTO clientes (nombre, telefono) VALUES (?, ?)'
-          ).run(cliente_nombre || 'Cliente General', telefono);
+            'INSERT INTO clientes (nombre, telefono, ciudad, direccion) VALUES (?, ?, ?, ?)'
+          ).run(
+            cliente_nombre || 'Cliente General',
+            telefono,
+            municipioFinal,
+            direccion || ''
+          );
           finalClienteId = resCliente.lastInsertRowid;
         }
+      }
+
+      // Si hay cliente y escribieron municipio, guardarlo en la ficha
+      // (actualiza si estaba vacío O si trajeron uno nuevo)
+      if (finalClienteId && municipioFinal) {
+        db.prepare(`
+          UPDATE clientes
+          SET ciudad = ?,
+              direccion = CASE WHEN ? != '' THEN ? ELSE direccion END,
+              telefono = CASE WHEN ? != '' THEN ? ELSE telefono END
+          WHERE id = ?
+        `).run(
+          municipioFinal,
+          direccion || '', direccion || '',
+          telefono || '', telefono || '',
+          finalClienteId
+        );
       }
 
       const stmtPedido = db.prepare(`

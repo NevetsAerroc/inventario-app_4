@@ -53,6 +53,8 @@ agregarColumnaSiNoExiste('pedidos', 'municipio', "TEXT DEFAULT ''");
 agregarColumnaSiNoExiste('pedidos', 'tipo_entrega', "TEXT DEFAULT 'TIENDA'");
 agregarColumnaSiNoExiste('pedidos', 'estado_liquidacion', "TEXT DEFAULT 'PENDIENTE'");
 agregarColumnaSiNoExiste('pedidos', 'estado_entrega', "TEXT DEFAULT 'PENDIENTE'");
+agregarColumnaSiNoExiste('pedidos', 'total_original', 'REAL');
+agregarColumnaSiNoExiste('pedidos', 'devuelta_calculada', 'REAL DEFAULT 0');
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pedidos_telefono ON pedidos(telefono);
   CREATE INDEX IF NOT EXISTS idx_pedidos_cliente ON pedidos(cliente);

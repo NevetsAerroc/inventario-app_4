@@ -195,6 +195,7 @@ const ModuloDomicilios = {
           document.getElementById('dom-cliente').value = cliente.nombre || cliente.cliente || '';
           if (cliente.telefono) document.getElementById('dom-telefono').value = cliente.telefono;
           if (cliente.direccion) document.getElementById('dom-direccion').value = cliente.direccion;
+          if (cliente.ciudad) document.getElementById('dom-municipio').value = cliente.ciudad;
         },
         (clienteNuevo) => {
           this.clienteSeleccionadoId = clienteNuevo.id;
@@ -846,24 +847,29 @@ const ModuloDomicilios = {
                 <div class="p-2 space-y-2 bg-white">
                                       ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
-                    const totalPedido = Number(p.total) || 0;
-                    // Total original (antes de ajustes). Si no existe, usa el actual.
+                                        const totalPedido = Number(p.total) || 0;
                     const totalOriginal = Number(p.total_original) > 0
                       ? Number(p.total_original)
                       : totalPedido;
                     const metodoActual = p.metodo_pago_final || 'EFECTIVO';
                     const motivoAjuste = (p.observacion || '').trim();
-                    // Devuelta que salió con la ruta (billetes de 50k sobre el original)
+
                     const BILLETE = 50000;
                     const pagaCon = totalOriginal > 0
                       ? Math.ceil(totalOriginal / BILLETE) * BILLETE
                       : 0;
-                    const devueltaEntregada = Number(p.devuelta_calculada) >= 0 && p.devuelta_calculada !== null && p.devuelta_calculada !== ''
-                      ? Number(p.devuelta_calculada)
-                      : Math.max(0, pagaCon - totalOriginal);
+                    const devueltaCalculada = Math.max(0, pagaCon - totalOriginal);
+
+                    // Solo usa el valor guardado si es > 0.
+                    // Si en BD quedó 0 (default), calcula con múltiplos de 50.000.
+                    const storedDev = Number(p.devuelta_calculada);
+                    const devueltaEntregada =
+                      (!isNaN(storedDev) && storedDev > 0)
+                        ? storedDev
+                        : devueltaCalculada;
+
                     const esTransfer = metodoActual === 'TRANSFERENCIA'
                       || metodoActual === 'TRANSFERENCIA_PENDIENTE';
-                    // Caja: efectivo = total cobrado; transferencia = solo la devuelta de la base
                     const aCaja = esTransfer ? devueltaEntregada : totalPedido;
                     const delta = totalPedido - totalOriginal;
                     const formulaTxt = delta === 0
