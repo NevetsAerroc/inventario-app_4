@@ -209,63 +209,42 @@ app.put('/api/rutas/pedido/:id', (req, res) => {
 app.post('/api/rutas/liquidar', (req, res) => {
   try {
     const { rutaId, pedidosLiquidacion, totalEfectivoEntregado } = req.body;
-    if (!rutaId) return res.status(400).json({ ok: false, error: 'rutaId es requerido' });
-
     const tx = db.transaction(() => {
-      const ruta = db.prepare('SELECT * FROM rutas_domicilio WHERE id = ?').get(rutaId);
-      if (!ruta) throw new Error('Ruta no encontrada');
-      if (ruta.estado === 'LIQUIDADA') throw new Error('Esta ruta ya está liquidada');
-
-      const pedidosRuta = db.prepare('SELECT * FROM pedidos WHERE ruta_id = ?').all(rutaId);
-      if (!pedidosRuta.length) throw new Error('La ruta no tiene pedidos');
-
-      const porId = new Map((pedidosLiquidacion || []).map((p) => [Number(p.id), p]));
       const updatePedido = db.prepare(`
-        UPDATE pedidos SET
-          metodo_pago_final = COALESCE(?, metodo_pago_final),
-          comprobante_transf = COALESCE(?, comprobante_transf),
-          estado_liquidacion = 'LIQUIDADO',
-          estado_entrega = CASE WHEN COALESCE(estado_entrega, '') = '' OR estado_entrega = 'PENDIENTE' THEN 'ENTREGADO' ELSE estado_entrega END
-        WHERE id = ? AND ruta_id = ?
+        UPDATE pedidos
+        SET metodo_pago_final = ?,
+            comprobante_transf = ?,
+            estado_liquidacion = ?
+        WHERE id = ?
       `);
 
-      for (const pedido of pedidosRuta) {
-        const extra = porId.get(Number(pedido.id)) || {};
-        const metodo = extra.metodoPago || pedido.metodo_pago_final || 'EFECTIVO';
-        const comprobante = extra.comprobante != null ? extra.comprobante : pedido.comprobante_transf;
-        if (metodo === 'TRANSFERENCIA' && !String(comprobante || '').trim()) {
-          throw new Error(`Falta el comprobante del pedido ${pedido.codigo_pedido}`);
-        }
-        updatePedido.run(metodo, comprobante || null, pedido.id, rutaId);
+      for (const item of pedidosLiquidacion) {
+        // Si quedó transferencia pendiente, no lo marca como liquidado total
+        const estado =
+          item.metodoPago === 'TRANSFERENCIA_PENDIENTE'
+            ? 'PAGO_PENDIENTE'
+            : 'LIQUIDADO';
+
+        updatePedido.run(
+          item.metodoPago,
+          item.comprobante || '',
+          estado,
+          item.id
+        );
       }
 
-      const sumaEfectivo = db.prepare(`
-        SELECT COALESCE(SUM(total), 0) AS total
-        FROM pedidos
-        WHERE ruta_id = ? AND COALESCE(metodo_pago_final, 'EFECTIVO') = 'EFECTIVO'
-      `).get(rutaId);
-
-      const recolectado = totalEfectivoEntregado != null && totalEfectivoEntregado !== ''
-        ? Number(totalEfectivoEntregado) || 0
-        : Number(sumaEfectivo.total || 0) + Number(ruta.base_efectivo || 0);
-
       db.prepare(`
-        UPDATE rutas_domicilio SET
-          estado = 'LIQUIDADA',
-          total_recolectado = ?,
-          fecha_liquidacion = datetime('now')
+        UPDATE rutas_domicilio
+        SET estado = 'LIQUIDADA',
+            total_recolectado = ?,
+            fecha_liquidacion = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(recolectado, rutaId);
-
-      return { recolectado };
+      `).run(totalEfectivoEntregado, rutaId);
     });
-
-    const resultado = tx();
-    res.json({ ok: true, rutaId, totalRecolectado: resultado.recolectado });
+    tx();
+    res.json({ ok: true, mensaje: 'Ruta liquidada' });
   } catch (err) {
-    const msg = err.message || 'Error al liquidar';
-    const status = /no encontrada|ya está liquidada|no tiene pedidos|Falta el comprobante/i.test(msg) ? 400 : 500;
-    res.status(status).json({ ok: false, error: msg });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

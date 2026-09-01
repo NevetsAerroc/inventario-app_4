@@ -9,6 +9,7 @@ const ModuloDomicilios = {
   itemsManual: [],
   productoSeleccionado: null,
   clienteSeleccionadoId: null,
+    _baseManual: false,
 
   onEnterTab() {
     if (!document.getElementById('contenedor-subtab')) return;
@@ -484,18 +485,45 @@ const ModuloDomicilios = {
             </div>
           </div>
 
-          <div class="bg-amber-50 p-3 rounded-md border border-amber-200 text-xs space-y-1">
-            <div class="flex justify-between font-semibold text-amber-900">
-              <span>Base de devueltas (solo efectivo):</span>
+                    <div class="bg-amber-50 p-3 rounded-md border border-amber-200 text-xs space-y-2">
+            <div class="flex justify-between items-center font-semibold text-amber-900">
+              <span>Base de devueltas (sugerida):</span>
               <span id="txt-base-efectivo">$0</span>
             </div>
-            <p class="text-[10px] text-amber-700">Solo suma la devuelta de los pedidos marcados como Efectivo.</p>
-          </div>
+            <p class="text-[10px] text-amber-700">
+              Por defecto: billetes de $50.000 (devuelta = redondeo hacia arriba − total del pedido).
+            </p>
 
-          <button onclick="ModuloDomicilios.despacharRuta()" class="w-full py-2 bg-slate-900 text-white font-bold text-xs rounded-md hover:bg-slate-800">
-            🚚 Despachar Ruta
-          </button>
-        </div>
+            <!-- Vista normal (solo lectura) -->
+            <div id="box-base-readonly" class="flex items-center gap-2">
+              <span class="text-[10px] text-amber-800">Base a entregar:</span>
+              <span id="txt-base-readonly" class="flex-1 font-bold text-amber-950">$0</span>
+              <button type="button" onclick="ModuloDomicilios.activarEdicionBase()"
+                      class="px-2 py-1 rounded-md bg-white border border-amber-300 text-[10px] font-bold text-amber-900 hover:bg-amber-100">
+                ✏️ Editar
+              </button>
+            </div>
+
+            <!-- Vista edición (oculta al inicio) -->
+            <div id="box-base-edit" class="hidden space-y-1.5">
+              <div class="flex items-center gap-2">
+                <label class="text-[10px] text-amber-800 whitespace-nowrap">Base manual:</label>
+                <input type="number" id="input-base-efectivo" step="1000" min="0" value="0"
+                       class="flex-1 border border-amber-300 rounded-md px-2 py-1 text-xs font-bold text-amber-950 bg-white" />
+              </div>
+              <div class="flex gap-2">
+                <button type="button" onclick="ModuloDomicilios.guardarBaseManual()"
+                        class="flex-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-bold">
+                  Guardar
+                </button>
+                <button type="button" onclick="ModuloDomicilios.recalcularBaseSugerida()"
+                        class="flex-1 px-2 py-1 rounded-md bg-white border border-amber-300 text-[10px] font-bold text-amber-900">
+                  Volver a sugerida
+                </button>
+              </div>
+            </div>
+            <p class="text-[10px] text-slate-500">Si darás otra devuelta, pulsa Editar y cambia el valor antes de despachar.</p>
+          </div>
       `;
     } catch (err) {
       cont.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error: ${err.message}</p>`;
@@ -530,13 +558,17 @@ const ModuloDomicilios = {
     this.cargarTabActual(); // refresca la pestaña que este activa (Despachar, En Curso o Cuadre)
   },
 
-    calcularDevueltaPedido(totalPedido) {
-    totalPedido = Number(totalPedido) || 0;
-    if (totalPedido <= 0) return 0;
-    let billeteEstimado = Math.ceil(totalPedido / 10000) * 10000;
-    if (billeteEstimado <= totalPedido) billeteEstimado += 10000;
-    let devuelta = billeteEstimado - totalPedido;
-    return Math.ceil(devuelta / 50) * 50;
+  /**
+   * Devuelta por pedido con billetes de $50.000 hacia arriba.
+   * Ej: $35.000 → paga $50.000 → devuelta $15.000
+   * Múltiplo exacto de 50.000 → devuelta $0
+   */
+  devueltaPorPedido(totalPedido) {
+    const BILLETE = 50000;
+    const t = Number(totalPedido) || 0;
+    if (t <= 0) return 0;
+    const pagado = Math.ceil(t / BILLETE) * BILLETE;
+    return Math.max(0, pagado - t);
   },
 
   calcularBaseEfectivo() {
@@ -544,38 +576,85 @@ const ModuloDomicilios = {
     let totalBaseDevueltas = 0;
 
     checkboxes.forEach(chk => {
-      const pid = chk.value;
-      const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pid}"]`);
-      const metodo = sel ? sel.value : 'EFECTIVO';
-
-      // Solo se lleva base de devueltas si el pedido va en efectivo
-      if (metodo === 'EFECTIVO') {
-        const devuelta = parseFloat(chk.dataset.devuelta) || 0;
-        totalBaseDevueltas += devuelta;
-      }
+      const totalPedido = parseFloat(chk.dataset.total) || 0;
+      totalBaseDevueltas += this.devueltaPorPedido(totalPedido);
     });
 
     const el = document.getElementById('txt-base-efectivo');
-    if (el) el.innerText = `$${totalBaseDevueltas.toLocaleString()}`;
+    if (el) el.innerText = `$${totalBaseDevueltas.toLocaleString('es-CO')}`;
+
+    // Si no hay edición manual, sincroniza textos e input
+    if (!this._baseManual) {
+      const txtRO = document.getElementById('txt-base-readonly');
+      if (txtRO) txtRO.innerText = `$${totalBaseDevueltas.toLocaleString('es-CO')}`;
+      const inp = document.getElementById('input-base-efectivo');
+      if (inp) inp.value = String(totalBaseDevueltas);
+    }
     return totalBaseDevueltas;
   },
 
-    async despacharRuta() {
+  activarEdicionBase() {
+    const boxRO = document.getElementById('box-base-readonly');
+    const boxEd = document.getElementById('box-base-edit');
+    if (boxRO) boxRO.classList.add('hidden');
+    if (boxEd) boxEd.classList.remove('hidden');
+    const inp = document.getElementById('input-base-efectivo');
+    if (inp) {
+      // precarga la sugerida si está vacío
+      if (!inp.value || inp.value === '0') {
+        inp.value = String(this.calcularBaseEfectivo());
+      }
+      inp.focus();
+      inp.select();
+    }
+  },
+
+  guardarBaseManual() {
+    const inp = document.getElementById('input-base-efectivo');
+    const val = parseFloat(inp?.value);
+    if (isNaN(val) || val < 0) {
+      return alert('Ingresa un valor de base válido (≥ 0)');
+    }
+    this._baseManual = true;
+    const txtRO = document.getElementById('txt-base-readonly');
+    if (txtRO) txtRO.innerText = `$${val.toLocaleString('es-CO')}`;
+    const el = document.getElementById('txt-base-efectivo');
+    if (el) el.innerText = `$${val.toLocaleString('es-CO')} (editada)`;
+
+    document.getElementById('box-base-edit')?.classList.add('hidden');
+    document.getElementById('box-base-readonly')?.classList.remove('hidden');
+  },
+
+  recalcularBaseSugerida() {
+    this._baseManual = false;
+    const sugerida = this.calcularBaseEfectivo();
+    const inp = document.getElementById('input-base-efectivo');
+    if (inp) inp.value = String(sugerida);
+    const txtRO = document.getElementById('txt-base-readonly');
+    if (txtRO) txtRO.innerText = `$${sugerida.toLocaleString('es-CO')}`;
+    const el = document.getElementById('txt-base-efectivo');
+    if (el) el.innerText = `$${sugerida.toLocaleString('es-CO')}`;
+
+    document.getElementById('box-base-edit')?.classList.add('hidden');
+    document.getElementById('box-base-readonly')?.classList.remove('hidden');
+  },
+
+  async despacharRuta() {
     const domId = document.getElementById('select-domiciliario')?.value;
-    const chks = Array.from(document.querySelectorAll('.chk-pedido:checked'));
+    const chks = Array.from(document.querySelectorAll('.chk-pedido:checked'))
+      .map(c => parseInt(c.value, 10));
 
     if (!chks.length) return alert('Selecciona al menos un pedido');
 
-    const pedidos = chks.map(chk => {
-      const id = parseInt(chk.value);
-      const sel = document.querySelector(`.sel-metodo-despacho[data-id="${id}"]`);
-      return {
-        id,
-        metodoPago: sel ? sel.value : 'EFECTIVO'
-      };
-    });
+    const sugerida = this.calcularBaseEfectivo();
+    let base = sugerida;
 
-    const base = this.calcularBaseEfectivo();
+    // Si el usuario guardó una base manual, úsala
+    if (this._baseManual) {
+      const inp = document.getElementById('input-base-efectivo');
+      const editado = parseFloat(inp?.value);
+      if (!isNaN(editado) && editado >= 0) base = editado;
+    }
 
     try {
       const res = await apiFetch('/rutas/despachar', {
@@ -583,16 +662,17 @@ const ModuloDomicilios = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           domiciliarioId: domId,
-          pedidos,                 // ahora enviamos id + método
+          pedidoIds: chks,
           baseEfectivo: base
         })
       });
 
       if (res && res.ok) {
         showToast('Ruta despachada exitosamente');
+        this._baseManual = false;
         this.cambiarSubTab('rutas');
       } else {
-        alert(res.error || 'Error al despachar');
+        alert((res && res.error) || 'No se pudo despachar');
       }
     } catch (e) {
       alert('Error al despachar ruta');
@@ -751,15 +831,21 @@ const ModuloDomicilios = {
                         </div>
                         <div>
                           <label class="block text-[10px] text-slate-500">Método de pago</label>
-                          <select class="sel-metodo w-full p-1 border rounded bg-slate-50"
-                            data-id="${p.id}" data-total="${p.total}"
-                            ${yaLiquidada ? 'disabled' : ''}
-                            onchange="ModuloDomicilios.guardarCambioPedido(${p.id}); ModuloDomicilios.recalcularArqueo();">
-                            <option value="EFECTIVO" ${p.metodo_pago_final === 'EFECTIVO' ? 'selected' : ''}>Efectivo</option>
-                            <option value="TRANSFERENCIA" ${p.metodo_pago_final === 'TRANSFERENCIA' ? 'selected' : ''}>Transferencia</option>
-                          </select>
+                                              <select class="sel-metodo w-full p-1 border rounded bg-slate-50"
+                            data-id="${p.id}" data-total="${totalPedido}"
+                            onchange="ModuloDomicilios.recalcularArqueo()">
+                      <option value="EFECTIVO">Efectivo</option>
+                      <option value="TRANSFERENCIA">Transferencia (ya hecha)</option>
+                      <option value="TRANSFERENCIA_PENDIENTE">Transferencia pendiente</option>
+                    </select>
                         </div>
                       </div>
+                      <div class="box-comprobante hidden" id="box-comp-${p.id}">
+                    <label class="block text-[10px] text-slate-500"># Comprobante (opcional si está pendiente)</label>
+                    <input type="text" class="inp-comp w-full p-1 border rounded"
+                           placeholder="Ej: 981231 o vacío si pendiente" data-id="${p.id}">
+                  </div>
+
 
                       <div class="box-comprobante ${p.metodo_pago_final === 'TRANSFERENCIA' ? '' : 'hidden'}" id="box-comp-${p.id}">
                         <label class="block text-[10px] text-slate-500"># Comprobante</label>
@@ -873,51 +959,55 @@ const ModuloDomicilios = {
     }
   },
 
-  recalcularArqueo() {
+    recalcularArqueo() {
     let totalEfectivoRecolectado = 0;
     const selects = document.querySelectorAll('.sel-metodo');
 
     selects.forEach(sel => {
       const pid = sel.dataset.id;
-      const inpTotal = document.querySelector(`.inp-total[data-id="${pid}"]`);
-      const total = parseFloat(inpTotal?.value ?? sel.dataset.total) || 0;
+      const total = parseFloat(sel.dataset.total) || 0;
       const boxComp = document.getElementById(`box-comp-${pid}`);
+      const esTransfer = sel.value === 'TRANSFERENCIA' || sel.value === 'TRANSFERENCIA_PENDIENTE';
 
-      if (sel.value === 'TRANSFERENCIA') {
+      if (esTransfer) {
         if (boxComp) boxComp.classList.remove('hidden');
+        // No suma a efectivo recolectado
       } else {
         if (boxComp) boxComp.classList.add('hidden');
         totalEfectivoRecolectado += total;
       }
     });
 
-    const elEfectivo = document.getElementById('arq-efectivo');
-    const elTotal = document.getElementById('arq-total');
-    const baseRuta = parseFloat(document.getElementById('arq-base')?.dataset.valor) || 0;
+    const elBase = document.getElementById('arq-base');
+    const baseRuta = parseFloat(elBase?.dataset?.valor) ||
+      parseFloat(document.getElementById('arq-resumen')?.dataset?.base) || 0;
     const totalEntregar = totalEfectivoRecolectado + baseRuta;
 
-    if (elEfectivo) elEfectivo.innerText = `$${totalEfectivoRecolectado.toLocaleString()}`;
+    const elEfectivo = document.getElementById('arq-efectivo');
+    const elTotal = document.getElementById('arq-total');
+
+    if (elEfectivo) elEfectivo.innerText = `$${totalEfectivoRecolectado.toLocaleString('es-CO')}`;
     if (elTotal) {
+      elTotal.innerText = `$${totalEntregar.toLocaleString('es-CO')}`;
       elTotal.dataset.valor = String(totalEntregar);
-      elTotal.innerText = `$${totalEntregar.toLocaleString()}`;
     }
-    return totalEntregar;
   },
 
   async cerrarYLiquidarRuta(rutaId) {
     const selects = document.querySelectorAll('.sel-metodo');
     const pedidosLiquidacion = [];
 
-    for (const sel of selects) {
+        for (const sel of selects) {
       const pid = parseInt(sel.dataset.id, 10);
       const metodo = sel.value;
       const inpComp = document.querySelector(`.inp-comp[data-id="${pid}"]`);
       const comp = inpComp ? inpComp.value.trim() : '';
 
+      // Solo obliga comprobante si la transferencia YA se hizo
       if (metodo === 'TRANSFERENCIA' && !comp) {
-        showToast(`Ingresa el comprobante del pedido #${pid}`, 'error');
-        return;
+        return alert(`Debes ingresar el número de comprobante para el pedido #${pid}, o elige "Transferencia pendiente".`);
       }
+      // TRANSFERENCIA_PENDIENTE: se permite sin comprobante
 
       pedidosLiquidacion.push({ id: pid, metodoPago: metodo, comprobante: comp });
     }
