@@ -456,74 +456,89 @@ const ModuloDomicilios = {
               ${this.pedidosPendientes.length === 0 ? `<p class="text-xs text-slate-400 text-center py-3">No hay pedidos pendientes${this.fechaFiltro ? ' para la fecha seleccionada' : ''}</p>` : ''}
               ${this.pedidosPendientes.map(p => {
                 const total = Number(p.total) || 0;
-                const devuelta = this.devueltaPorPedido(total);
+                const pagaCon = this.pagaConSugerido(total);      // ej. 37400 → 50000
+                const devuelta = Math.max(0, pagaCon - total);    // 12600
                 return `
-                <div class="bg-white p-2.5 rounded border space-y-1.5">
+                <div class="bg-white p-2.5 rounded border space-y-1.5" data-pedido-card="${p.id}">
                   <label class="flex items-start gap-2 text-xs cursor-pointer">
-                    <input type="checkbox" value="${p.id}" data-total="${total}" data-devuelta="${devuelta}"
-                           class="chk-pedido mt-0.5" onchange="ModuloDomicilios.calcularBaseEfectivo()">
+                    <input type="checkbox" value="${p.id}"
+                           data-total="${total}"
+                           data-paga-con="${pagaCon}"
+                           data-devuelta="${devuelta}"
+                           class="chk-pedido mt-0.5"
+                           onchange="ModuloDomicilios.calcularBaseEfectivo()">
                     <div class="flex-1 min-w-0">
                       <div class="flex justify-between gap-2">
                         <span class="font-bold text-slate-900">${p.codigo_pedido ? p.codigo_pedido : 'Pedido #' + p.id}</span>
-                        <span class="font-semibold text-emerald-600 whitespace-nowrap">$${total.toLocaleString()}</span>
+                        <span class="font-semibold text-emerald-600 whitespace-nowrap">$${total.toLocaleString('es-CO')}</span>
                       </div>
-                                          <p class="text-slate-500">${p.cliente || p.cliente_nombre || 'Cliente General'} | ${p.direccion || 'Sin Dirección'}</p>
+                      <p class="text-slate-500">${p.cliente || p.cliente_nombre || 'Cliente General'} | ${p.direccion || 'Sin Dirección'}</p>
                       ${p.observacion || p.observacion_liquidacion ? `<p class="text-[10px] text-amber-700 font-medium italic">Nota: ${p.observacion || p.observacion_liquidacion}</p>` : ''}
                     </div>
                   </label>
 
-                  <div class="flex items-center justify-between gap-2 pl-5 text-[11px]">
-                    <span class="text-amber-800 font-medium">Devuelta sugerida: <b>$${devuelta.toLocaleString()}</b></span>
-                    <select class="sel-metodo-despacho border rounded px-1.5 py-0.5 bg-slate-50 text-[11px]"
-                            data-id="${p.id}" onchange="ModuloDomicilios.calcularBaseEfectivo()">
-                      <option value="EFECTIVO">Efectivo</option>
-                      <option value="TRANSFERENCIA">Transferencia</option>
-                    </select>
+                  <div class="pl-5 space-y-1 text-[11px]">
+                    <!-- Lectura -->
+                    <div id="pago-view-${p.id}" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span class="text-slate-600">
+                        Paga con:
+                        <b id="paga-txt-${p.id}" class="text-slate-900">$${pagaCon.toLocaleString('es-CO')}</b>
+                      </span>
+                      <button type="button" onclick="ModuloDomicilios.editarPagaCon(${p.id})"
+                              class="px-1.5 py-0.5 rounded border border-amber-300 bg-white text-amber-900 hover:bg-amber-50"
+                              title="Cambiar con cuánto paga">✏️</button>
+                      <span class="text-amber-800">
+                        Devuelta:
+                        <b id="dev-txt-${p.id}">$${devuelta.toLocaleString('es-CO')}</b>
+                      </span>
+                      <span class="text-emerald-800 font-semibold">
+                        A entregar:
+                        <b id="ent-txt-${p.id}">$${pagaCon.toLocaleString('es-CO')}</b>
+                      </span>
+                      <select class="sel-metodo-despacho border rounded px-1.5 py-0.5 bg-slate-50 text-[11px] ml-auto"
+                              data-id="${p.id}" onchange="ModuloDomicilios.calcularBaseEfectivo()">
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
+                      </select>
+                    </div>
+
+                    <!-- Edición: solo "paga con" -->
+                    <div id="pago-edit-${p.id}" class="hidden flex flex-wrap items-center gap-1.5">
+                      <span class="text-slate-600 font-medium">Cliente paga con $</span>
+                      <input type="number" id="paga-input-${p.id}" min="0" step="1000" value="${pagaCon}"
+                             class="w-28 border border-amber-300 rounded px-1.5 py-0.5 text-[11px] font-bold" />
+                      <button type="button" onclick="ModuloDomicilios.guardarPagaCon(${p.id})"
+                              class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold">OK</button>
+                      <button type="button" onclick="ModuloDomicilios.cancelarPagaCon(${p.id})"
+                              class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
+                      <button type="button" onclick="ModuloDomicilios.restaurarPagaConSugerido(${p.id})"
+                              class="px-2 py-0.5 rounded border border-amber-300 text-amber-900 text-[10px] font-bold">$50.000</button>
+                    </div>
                   </div>
                 </div>
               `}).join('')}
             </div>
           </div>
 
-                    <div class="bg-amber-50 p-3 rounded-md border border-amber-200 text-xs space-y-2">
-            <div class="flex justify-between items-center font-semibold text-amber-900">
-              <span>Base de devueltas (sugerida):</span>
-              <span id="txt-base-efectivo">$0</span>
+          <!-- Resumen simple (sin editar la base a mano) -->
+          <div class="bg-slate-50 border border-slate-200 rounded-md p-3 text-xs space-y-1.5">
+            <div class="flex justify-between text-slate-600">
+              <span>Base de cambio (suma de devueltas):</span>
+              <b id="txt-base-cambio" class="text-amber-900">$0</b>
             </div>
-            <p class="text-[10px] text-amber-700">
-              Por defecto: billetes de $50.000 (devuelta = redondeo hacia arriba − total del pedido).
+            <div class="flex justify-between text-slate-600">
+              <span>Total a entregar (lo que pagan):</span>
+              <b id="txt-total-entregar" class="text-emerald-800">$0</b>
+            </div>
+            <p class="text-[10px] text-slate-400">
+              Por defecto paga con múltiplos de $50.000. Con el ✏️ cambias “paga con”; la devuelta se calcula sola.
             </p>
-
-            <!-- Vista normal (solo lectura) -->
-            <div id="box-base-readonly" class="flex items-center gap-2">
-              <span class="text-[10px] text-amber-800">Base a entregar:</span>
-              <span id="txt-base-readonly" class="flex-1 font-bold text-amber-950">$0</span>
-              <button type="button" onclick="ModuloDomicilios.activarEdicionBase()"
-                      class="px-2 py-1 rounded-md bg-white border border-amber-300 text-[10px] font-bold text-amber-900 hover:bg-amber-100">
-                ✏️ Editar
-              </button>
-            </div>
-
-            <!-- Vista edición (oculta al inicio) -->
-            <div id="box-base-edit" class="hidden space-y-1.5">
-              <div class="flex items-center gap-2">
-                <label class="text-[10px] text-amber-800 whitespace-nowrap">Base manual:</label>
-                <input type="number" id="input-base-efectivo" step="1000" min="0" value="0"
-                       class="flex-1 border border-amber-300 rounded-md px-2 py-1 text-xs font-bold text-amber-950 bg-white" />
-              </div>
-              <div class="flex gap-2">
-                <button type="button" onclick="ModuloDomicilios.guardarBaseManual()"
-                        class="flex-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-bold">
-                  Guardar
-                </button>
-                <button type="button" onclick="ModuloDomicilios.recalcularBaseSugerida()"
-                        class="flex-1 px-2 py-1 rounded-md bg-white border border-amber-300 text-[10px] font-bold text-amber-900">
-                  Volver a sugerida
-                </button>
-              </div>
-            </div>
-            <p class="text-[10px] text-slate-500">Si darás otra devuelta, pulsa Editar y cambia el valor antes de despachar.</p>
           </div>
+
+          <button onclick="ModuloDomicilios.despacharRuta()" class="w-full py-2 bg-slate-900 text-white font-bold text-xs rounded-md hover:bg-slate-800">
+            🚚 Despachar Ruta
+          </button>
+        </div>
       `;
     } catch (err) {
       cont.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error: ${err.message}</p>`;
@@ -558,85 +573,117 @@ const ModuloDomicilios = {
     this.cargarTabActual(); // refresca la pestaña que este activa (Despachar, En Curso o Cuadre)
   },
 
-  /**
-   * Devuelta por pedido con billetes de $50.000 hacia arriba.
-   * Ej: $35.000 → paga $50.000 → devuelta $15.000
-   * Múltiplo exacto de 50.000 → devuelta $0
-   */
-  devueltaPorPedido(totalPedido) {
+    /** Múltiplo de $50.000 hacia arriba (si es exacto, paga igual al total). */
+  pagaConSugerido(totalPedido) {
     const BILLETE = 50000;
     const t = Number(totalPedido) || 0;
     if (t <= 0) return 0;
-    const pagado = Math.ceil(t / BILLETE) * BILLETE;
-    return Math.max(0, pagado - t);
+    return Math.ceil(t / BILLETE) * BILLETE;
   },
 
+  devueltaPorPedido(totalPedido) {
+    const t = Number(totalPedido) || 0;
+    return Math.max(0, this.pagaConSugerido(t) - t);
+  },
+
+  editarPagaCon(pedidoId) {
+    document.getElementById(`pago-view-${pedidoId}`)?.classList.add('hidden');
+    const box = document.getElementById(`pago-edit-${pedidoId}`);
+    if (box) {
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+    }
+    const inp = document.getElementById(`paga-input-${pedidoId}`);
+    if (inp) { inp.focus(); inp.select(); }
+  },
+
+  guardarPagaCon(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    if (!chk) return;
+
+    const total = parseFloat(chk.dataset.total) || 0;
+    let pagaCon = parseFloat(document.getElementById(`paga-input-${pedidoId}`)?.value);
+
+    if (isNaN(pagaCon) || pagaCon < 0) {
+      return alert('Ingresa con cuánto paga el cliente (ej. 40000 o 100000)');
+    }
+    if (pagaCon < total) {
+      return alert(`"Paga con" no puede ser menor al total del pedido ($${total.toLocaleString('es-CO')})`);
+    }
+    pagaCon = Math.round(pagaCon);
+    const devuelta = Math.max(0, pagaCon - total);
+
+    chk.dataset.pagaCon = String(pagaCon);
+    chk.dataset.devuelta = String(devuelta);
+
+    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
+    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
+    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
+    if (elPaga) elPaga.innerText = fmt(pagaCon);
+    if (elDev) elDev.innerText = fmt(devuelta);
+    if (elEnt) elEnt.innerText = fmt(pagaCon);
+
+    document.getElementById(`pago-edit-${pedidoId}`)?.classList.add('hidden');
+    document.getElementById(`pago-edit-${pedidoId}`)?.classList.remove('flex');
+    document.getElementById(`pago-view-${pedidoId}`)?.classList.remove('hidden');
+
+    this.calcularBaseEfectivo();
+  },
+
+  cancelarPagaCon(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    const actual = parseFloat(chk?.dataset?.pagaCon) || 0;
+    const inp = document.getElementById(`paga-input-${pedidoId}`);
+    if (inp) inp.value = String(actual);
+
+    document.getElementById(`pago-edit-${pedidoId}`)?.classList.add('hidden');
+    document.getElementById(`pago-edit-${pedidoId}`)?.classList.remove('flex');
+    document.getElementById(`pago-view-${pedidoId}`)?.classList.remove('hidden');
+  },
+
+  restaurarPagaConSugerido(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    if (!chk) return;
+    const total = parseFloat(chk.dataset.total) || 0;
+    const pagaCon = this.pagaConSugerido(total);
+    const inp = document.getElementById(`paga-input-${pedidoId}`);
+    if (inp) inp.value = String(pagaCon);
+    this.guardarPagaCon(pedidoId);
+  },
+
+  /**
+   * Solo pedidos marcados en Efectivo.
+   * Base de cambio = suma de devueltas.
+   * Total a entregar = suma de "paga con".
+   */
   calcularBaseEfectivo() {
     const checkboxes = document.querySelectorAll('.chk-pedido:checked');
-    let totalBaseDevueltas = 0;
+    let baseCambio = 0;
+    let totalEntregar = 0;
 
     checkboxes.forEach(chk => {
-      const totalPedido = parseFloat(chk.dataset.total) || 0;
-      totalBaseDevueltas += this.devueltaPorPedido(totalPedido);
+      const pid = chk.value;
+      const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pid}"]`);
+      const metodo = sel ? sel.value : 'EFECTIVO';
+      if (metodo !== 'EFECTIVO') return;
+
+      const total = parseFloat(chk.dataset.total) || 0;
+      let pagaCon = parseFloat(chk.dataset.pagaCon);
+      if (isNaN(pagaCon)) pagaCon = this.pagaConSugerido(total);
+      let devuelta = parseFloat(chk.dataset.devuelta);
+      if (isNaN(devuelta)) devuelta = Math.max(0, pagaCon - total);
+
+      baseCambio += devuelta;
+      totalEntregar += pagaCon;
     });
 
-    const el = document.getElementById('txt-base-efectivo');
-    if (el) el.innerText = `$${totalBaseDevueltas.toLocaleString('es-CO')}`;
+    const elBase = document.getElementById('txt-base-cambio');
+    const elEnt = document.getElementById('txt-total-entregar');
+    if (elBase) elBase.innerText = `$${baseCambio.toLocaleString('es-CO')}`;
+    if (elEnt) elEnt.innerText = `$${totalEntregar.toLocaleString('es-CO')}`;
 
-    // Si no hay edición manual, sincroniza textos e input
-    if (!this._baseManual) {
-      const txtRO = document.getElementById('txt-base-readonly');
-      if (txtRO) txtRO.innerText = `$${totalBaseDevueltas.toLocaleString('es-CO')}`;
-      const inp = document.getElementById('input-base-efectivo');
-      if (inp) inp.value = String(totalBaseDevueltas);
-    }
-    return totalBaseDevueltas;
-  },
-
-  activarEdicionBase() {
-    const boxRO = document.getElementById('box-base-readonly');
-    const boxEd = document.getElementById('box-base-edit');
-    if (boxRO) boxRO.classList.add('hidden');
-    if (boxEd) boxEd.classList.remove('hidden');
-    const inp = document.getElementById('input-base-efectivo');
-    if (inp) {
-      // precarga la sugerida si está vacío
-      if (!inp.value || inp.value === '0') {
-        inp.value = String(this.calcularBaseEfectivo());
-      }
-      inp.focus();
-      inp.select();
-    }
-  },
-
-  guardarBaseManual() {
-    const inp = document.getElementById('input-base-efectivo');
-    const val = parseFloat(inp?.value);
-    if (isNaN(val) || val < 0) {
-      return alert('Ingresa un valor de base válido (≥ 0)');
-    }
-    this._baseManual = true;
-    const txtRO = document.getElementById('txt-base-readonly');
-    if (txtRO) txtRO.innerText = `$${val.toLocaleString('es-CO')}`;
-    const el = document.getElementById('txt-base-efectivo');
-    if (el) el.innerText = `$${val.toLocaleString('es-CO')} (editada)`;
-
-    document.getElementById('box-base-edit')?.classList.add('hidden');
-    document.getElementById('box-base-readonly')?.classList.remove('hidden');
-  },
-
-  recalcularBaseSugerida() {
-    this._baseManual = false;
-    const sugerida = this.calcularBaseEfectivo();
-    const inp = document.getElementById('input-base-efectivo');
-    if (inp) inp.value = String(sugerida);
-    const txtRO = document.getElementById('txt-base-readonly');
-    if (txtRO) txtRO.innerText = `$${sugerida.toLocaleString('es-CO')}`;
-    const el = document.getElementById('txt-base-efectivo');
-    if (el) el.innerText = `$${sugerida.toLocaleString('es-CO')}`;
-
-    document.getElementById('box-base-edit')?.classList.add('hidden');
-    document.getElementById('box-base-readonly')?.classList.remove('hidden');
+    return baseCambio; // se usa como baseEfectivo al despachar
   },
 
   async despacharRuta() {
@@ -646,15 +693,7 @@ const ModuloDomicilios = {
 
     if (!chks.length) return alert('Selecciona al menos un pedido');
 
-    const sugerida = this.calcularBaseEfectivo();
-    let base = sugerida;
-
-    // Si el usuario guardó una base manual, úsala
-    if (this._baseManual) {
-      const inp = document.getElementById('input-base-efectivo');
-      const editado = parseFloat(inp?.value);
-      if (!isNaN(editado) && editado >= 0) base = editado;
-    }
+    const base = this.calcularBaseEfectivo(); // suma de devueltas (cambio a llevar)
 
     try {
       const res = await apiFetch('/rutas/despachar', {
@@ -669,7 +708,6 @@ const ModuloDomicilios = {
 
       if (res && res.ok) {
         showToast('Ruta despachada exitosamente');
-        this._baseManual = false;
         this.cambiarSubTab('rutas');
       } else {
         alert((res && res.error) || 'No se pudo despachar');
