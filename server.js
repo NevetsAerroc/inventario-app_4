@@ -175,7 +175,7 @@ app.get('/api/rutas/:id', (req, res) => {
 // Actualizar un pedido mientras la ruta está en curso (precio, método, entrega)
 app.put('/api/rutas/pedido/:id', (req, res) => {
   try {
-    const { total, metodoPago, estadoEntrega, comprobante } = req.body;
+    const { total, metodoPago, estadoEntrega, comprobante, observacion } = req.body;
     const id = req.params.id;
 
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(id);
@@ -189,13 +189,15 @@ app.put('/api/rutas/pedido/:id', (req, res) => {
         total = COALESCE(?, total),
         metodo_pago_final = COALESCE(?, metodo_pago_final),
         estado_entrega = COALESCE(?, estado_entrega),
-        comprobante_transf = COALESCE(?, comprobante_transf)
+        comprobante_transf = COALESCE(?, comprobante_transf),
+        observacion = COALESCE(?, observacion)
       WHERE id = ?
     `).run(
       total != null ? total : null,
       metodoPago || null,
       estadoEntrega || null,
       comprobante != null ? comprobante : null,
+      observacion != null ? observacion : null,
       id
     );
 

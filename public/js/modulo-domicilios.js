@@ -844,9 +844,12 @@ const ModuloDomicilios = {
                   <p class="text-[10px] text-indigo-700">${lista.length} pedido(s)</p>
                 </div>
                 <div class="p-2 space-y-2 bg-white">
-                  ${lista.map(p => {
+                    ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
-                    return `
+                    const totalPedido = Number(p.total) || 0;
+                   const metodoActual = p.metodo_pago_final || 'EFECTIVO';
+                    const motivoAjuste = (p.observacion || '').trim();
+                   return `
                     <div class="border p-2.5 rounded-md space-y-2 ${entregado ? 'bg-emerald-50 border-emerald-200' : 'bg-white'}" id="item-pedido-${p.id}">
                       <div class="flex justify-between items-start gap-2">
                         <div class="min-w-0">
@@ -860,29 +863,51 @@ const ModuloDomicilios = {
 
                       <div class="grid grid-cols-2 gap-2 text-xs">
                         <div>
-                          <label class="block text-[10px] text-slate-500">Valor a cobrar ($)</label>
-                          <input type="number" step="50" min="0"
-                            class="inp-total w-full p-1 border rounded font-bold text-emerald-700"
-                            data-id="${p.id}" value="${p.total || 0}"
-                            ${yaLiquidada ? 'readonly' : ''}
-                            onchange="ModuloDomicilios.guardarCambioPedido(${p.id})">
+                        <label class="block text-[10px] text-slate-500">Valor a cobrar ($)</label>
+                        <div class="flex items-center gap-1">
+                          <span id="total-txt-${p.id}" class="flex-1 p-1 border rounded font-bold text-emerald-700 bg-slate-50">
+                            $${totalPedido.toLocaleString('es-CO')}
+                          </span>
+                          <!-- input oculto para arqueo / guardar -->
+                          <input type="hidden" class="inp-total" data-id="${p.id}" value="${totalPedido}">
+                          ${!yaLiquidada ? `
+                          <button type="button" onclick="ModuloDomicilios.abrirEdicionTotal(${p.id})"
+                                  class="px-1.5 py-1 rounded border border-amber-300 bg-white text-amber-900 text-xs"
+                                  title="Ajustar valor">✏️</button>
+                          ` : ''}
                         </div>
+
+                        <!-- Panel de edición (oculto) -->
+                        <div id="edit-total-${p.id}" class="hidden mt-1.5 p-2 rounded border border-amber-200 bg-amber-50 space-y-1.5">
+                          <p class="text-[10px] text-amber-900 font-medium">Ajuste (+ suma / − resta). Ej: -2300</p>
+                          <div class="flex gap-1">
+                            <input type="number" id="ajuste-input-${p.id}" step="100" placeholder="-2300 o 1500"
+                                  class="flex-1 border border-amber-300 rounded px-2 py-1 text-xs font-bold" />
+                          </div>
+                          <textarea id="motivo-input-${p.id}" rows="2" placeholder="Motivo: cliente devolvió vasos / faltó un producto..."
+                                    class="w-full border border-amber-300 rounded px-2 py-1 text-[11px]"></textarea>
+                          <div class="flex gap-1">
+                            <button type="button" onclick="ModuloDomicilios.guardarAjusteTotal(${p.id})"
+                                    class="flex-1 py-1 rounded bg-emerald-600 text-white text-[10px] font-bold">Guardar</button>
+                            <button type="button" onclick="ModuloDomicilios.cancelarEdicionTotal(${p.id})"
+                                    class="px-2 py-1 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
+                          </div>
+                        </div>
+
+                        ${motivoAjuste ? `<p class="text-[10px] text-amber-800 mt-0.5 italic" id="motivo-txt-${p.id}">📝 ${motivoAjuste.replace(/`/g, '')}</p>` : `<p class="text-[10px] text-slate-400 mt-0.5 hidden" id="motivo-txt-${p.id}"></p>`}
+                      </div>
                         <div>
                           <label class="block text-[10px] text-slate-500">Método de pago</label>
-                                              <select class="sel-metodo w-full p-1 border rounded bg-slate-50"
-                            data-id="${p.id}" data-total="${totalPedido}"
-                            onchange="ModuloDomicilios.recalcularArqueo()">
-                      <option value="EFECTIVO">Efectivo</option>
-                      <option value="TRANSFERENCIA">Transferencia (ya hecha)</option>
-                      <option value="TRANSFERENCIA_PENDIENTE">Transferencia pendiente</option>
-                    </select>
+                           <select class="sel-metodo w-full p-1 border rounded bg-slate-50"
+                           data-id="${p.id}" data-total="${totalPedido}"
+                          ${yaLiquidada ? 'disabled' : ''}
+                           onchange="ModuloDomicilios.guardarCambioPedido(${p.id})">
+                           <option value="EFECTIVO" ${metodoActual === 'EFECTIVO' ? 'selected' : ''}>Efectivo</option>
+                           <option value="TRANSFERENCIA" ${metodoActual === 'TRANSFERENCIA' ? 'selected' : ''}>Transferencia (ya hecha)</option>
+                           <option value="TRANSFERENCIA_PENDIENTE" ${metodoActual === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>Transferencia pendiente</option>
+                          </select>
                         </div>
                       </div>
-                      <div class="box-comprobante hidden" id="box-comp-${p.id}">
-                    <label class="block text-[10px] text-slate-500"># Comprobante (opcional si está pendiente)</label>
-                    <input type="text" class="inp-comp w-full p-1 border rounded"
-                           placeholder="Ej: 981231 o vacío si pendiente" data-id="${p.id}">
-                  </div>
 
 
                       <div class="box-comprobante ${p.metodo_pago_final === 'TRANSFERENCIA' ? '' : 'hidden'}" id="box-comp-${p.id}">
@@ -948,35 +973,104 @@ const ModuloDomicilios = {
     }
   },
 
-    async guardarCambioPedido(pedidoId) {
-    const inpTotal = document.querySelector(`.inp-total[data-id="${pedidoId}"]`);
-    const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
-    const inpComp = document.querySelector(`.inp-comp[data-id="${pedidoId}"]`);
-    const boxComp = document.getElementById(`box-comp-${pedidoId}`);
+  abrirEdicionTotal(pedidoId) {
+  const box = document.getElementById(`edit-total-${pedidoId}`);
+  if (box) box.classList.remove('hidden');
+  const inp = document.getElementById(`ajuste-input-${pedidoId}`);
+  if (inp) { inp.value = ''; inp.focus(); }
+},
 
-    const total = parseFloat(inpTotal?.value) || 0;
+cancelarEdicionTotal(pedidoId) {
+  document.getElementById(`edit-total-${pedidoId}`)?.classList.add('hidden');
+},
+
+async guardarAjusteTotal(pedidoId) {
+  const inpTotal = document.querySelector(`.inp-total[data-id="${pedidoId}"]`);
+  const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
+  const actual = parseFloat(inpTotal?.value) || 0;
+
+  const rawAjuste = (document.getElementById(`ajuste-input-${pedidoId}`)?.value || '').trim();
+  const motivo = (document.getElementById(`motivo-input-${pedidoId}`)?.value || '').trim();
+
+  if (!rawAjuste) return alert('Indica el ajuste. Ej: -2300 o 1500');
+  const ajuste = parseFloat(rawAjuste);
+  if (isNaN(ajuste) || ajuste === 0) return alert('Ajuste inválido. Usa + o − (ej. -2300)');
+
+  if (!motivo) return alert('Escribe el motivo del cambio (ej. cliente devolvió vasos)');
+
+  const nuevoTotal = Math.max(0, Math.round(actual + ajuste));
+  const signo = ajuste > 0 ? '+' : '';
+  const textoMotivo = `Ajuste ${signo}${ajuste.toLocaleString('es-CO')}: ${motivo}`;
+
+  if (inpTotal) inpTotal.value = String(nuevoTotal);
+  if (sel) sel.dataset.total = String(nuevoTotal);
+
+  const txt = document.getElementById(`total-txt-${pedidoId}`);
+  if (txt) txt.innerText = `$${nuevoTotal.toLocaleString('es-CO')}`;
+
+  const motivoEl = document.getElementById(`motivo-txt-${pedidoId}`);
+  if (motivoEl) {
+    motivoEl.textContent = '📝 ' + textoMotivo;
+    motivoEl.classList.remove('hidden');
+    motivoEl.className = 'text-[10px] text-amber-800 mt-0.5 italic';
+  }
+
+  document.getElementById(`edit-total-${pedidoId}`)?.classList.add('hidden');
+
+  try {
     const metodoPago = sel?.value || 'EFECTIVO';
+    const inpComp = document.querySelector(`.inp-comp[data-id="${pedidoId}"]`);
     const comprobante = inpComp?.value?.trim() || '';
 
-    if (boxComp) {
-      if (metodoPago === 'TRANSFERENCIA') boxComp.classList.remove('hidden');
-      else boxComp.classList.add('hidden');
-    }
+    await apiFetch(`/rutas/pedido/${pedidoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        total: nuevoTotal,
+        metodoPago,
+        comprobante,
+        observacion: textoMotivo
+      })
+    });
+    this.recalcularArqueo();
+    showToast(`Total actualizado: $${nuevoTotal.toLocaleString('es-CO')}`);
+  } catch (e) {
+    alert('No se pudo guardar el ajuste');
+  }
+},
 
-    // Actualizar data-total del select para el arqueo
-    if (sel) sel.dataset.total = total;
+    async guardarCambioPedido(pedidoId) {
+  const inpTotal = document.querySelector(`.inp-total[data-id="${pedidoId}"]`);
+  const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
+  const inpComp = document.querySelector(`.inp-comp[data-id="${pedidoId}"]`);
+  const boxComp = document.getElementById(`box-comp-${pedidoId}`);
 
-    try {
-      await apiFetch(`/rutas/pedido/${pedidoId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ total, metodoPago, comprobante })
-      });
-      this.recalcularArqueo();
-    } catch (e) {
-      console.error(e);
-    }
-  },
+  // total: input oculto/readonly o data del select
+  let total = parseFloat(inpTotal?.value);
+  if (isNaN(total)) total = parseFloat(sel?.dataset?.total) || 0;
+
+  const metodoPago = sel?.value || 'EFECTIVO';
+  const comprobante = inpComp?.value?.trim() || '';
+
+  if (boxComp) {
+    const esTransfer = metodoPago === 'TRANSFERENCIA' || metodoPago === 'TRANSFERENCIA_PENDIENTE';
+    if (esTransfer) boxComp.classList.remove('hidden');
+    else boxComp.classList.add('hidden');
+  }
+
+  if (sel) sel.dataset.total = String(total);
+
+  try {
+    await apiFetch(`/rutas/pedido/${pedidoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ total, metodoPago, comprobante })
+    });
+    this.recalcularArqueo();
+  } catch (e) {
+    console.error(e);
+  }
+},
 
   async confirmarEntrega(pedidoId, entregado) {
     const estadoEntrega = entregado ? 'ENTREGADO' : 'PENDIENTE';
