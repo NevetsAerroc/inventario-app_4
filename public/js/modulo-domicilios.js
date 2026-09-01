@@ -817,8 +817,56 @@ const ModuloDomicilios = {
       });
       const municipios = Object.keys(porMunicipio);
 
+      // ---- Totales por municipio ----
+      const BILLETE_MUN = 50000;
+
+      function calcDevueltaPedido(p) {
+        const totalPedido = Number(p.total) || 0;
+        const tieneOriginal = Number(p.total_original) > 0;
+        const totalOriginal = tieneOriginal ? Number(p.total_original) : totalPedido;
+        const storedDev = Number(p.devuelta_calculada);
+        if (!isNaN(storedDev) && storedDev > 0) return storedDev;
+        if (tieneOriginal) {
+          const paga = Math.ceil(totalOriginal / BILLETE_MUN) * BILLETE_MUN;
+          return Math.max(0, paga - totalOriginal);
+        }
+        const paga = totalPedido > 0 ? Math.ceil(totalPedido / BILLETE_MUN) * BILLETE_MUN : 0;
+        return Math.max(0, paga - totalPedido);
+      }
+
+      const statsPorMun = {};
+      municipios.forEach(mun => {
+        const lista = porMunicipio[mun];
+        const todosEntregados = lista.every(p => p.estado_entrega === 'ENTREGADO');
+        let devueltas = 0;
+        let cobradoEfectivo = 0;
+
+        lista.forEach(p => {
+          const totalPedido = Number(p.total) || 0;
+          const metodo = p.metodo_pago_final || 'EFECTIVO';
+          const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
+          const dev = calcDevueltaPedido(p);
+          devueltas += dev;
+          if (p.estado_entrega === 'ENTREGADO' && !esTransfer) {
+            cobradoEfectivo += totalPedido;
+          }
+        });
+
+        // Completo → cobrado + devueltas; en curso → solo devueltas
+        const subtotal = todosEntregados ? (cobradoEfectivo + devueltas) : devueltas;
+
+        statsPorMun[mun] = {
+          todosEntregados,
+          devueltas,
+          cobradoEfectivo,
+          subtotal,
+          numPedidos: lista.length,
+          numEntregados: lista.filter(p => p.estado_entrega === 'ENTREGADO').length
+        };
+      });
+
       const entregados = (pedidos || []).filter(p => p.estado_entrega === 'ENTREGADO').length;
-      const totalPedidos = (pedidos || []).length;
+      
 
       cont.innerHTML = `
         <div class="space-y-4">
@@ -838,11 +886,33 @@ const ModuloDomicilios = {
           <div class="space-y-3" id="lista-municipios-cuadre">
             ${municipios.map(mun => {
               const lista = porMunicipio[mun];
+              const st = statsPorMun[mun];
+              const devueltasPendientesOtros = municipios.reduce((acc, m2) => {
+                if (m2 === mun) return acc;
+                const s2 = statsPorMun[m2];
+                return acc + (s2.todosEntregados ? 0 : s2.devueltas);
+              }, 0);
+
               return `
               <div class="border rounded-lg overflow-hidden" data-municipio="${mun}">
                 <div class="bg-indigo-50 px-3 py-2 border-b">
-                  <p class="text-xs font-bold text-indigo-900">📍 ${mun}</p>
-                  <p class="text-[10px] text-indigo-700">${lista.length} pedido(s)</p>
+                  <div class="flex justify-between items-start gap-2">
+                    <div>
+                      <p class="text-xs font-bold text-indigo-900">📍 ${mun}</p>
+                      <p class="text-[10px] text-indigo-700">
+                        ${st.numEntregados}/${st.numPedidos} entregado(s)
+                        ${st.todosEntregados
+                          ? ' · <span class="text-emerald-700 font-semibold">Completo</span>'
+                          : ' · <span class="text-amber-700 font-semibold">En curso</span>'}
+                      </p>
+                    </div>
+                    <div class="text-right text-[10px]">
+                      <p class="text-indigo-900 font-bold">
+                        ${st.todosEntregados ? 'Subtotal' : 'Devueltas'}:
+                        $${st.subtotal.toLocaleString('es-CO')}
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 <div class="p-2 space-y-2 bg-white">
                                       ${lista.map(p => {
@@ -1034,7 +1104,40 @@ const ModuloDomicilios = {
                                 class="text-[10px] text-indigo-600 font-semibold">▼ Ocultar detalles</button>
                       </div>` : `</div>`}
                     </div>
-                  `}).join('')}
+                                    `}).join('')}
+                </div>
+
+                <div class="bg-slate-50 border-t px-3 py-2 text-[11px] space-y-1">
+                  ${st.todosEntregados ? `
+                  <div class="flex justify-between text-slate-700">
+                    <span>Cobrado en efectivo (${mun}):</span>
+                    <b>$${st.cobradoEfectivo.toLocaleString('es-CO')}</b>
+                  </div>
+                  <div class="flex justify-between text-amber-900">
+                    <span>Devueltas de ${mun}:</span>
+                    <b>$${st.devueltas.toLocaleString('es-CO')}</b>
+                  </div>
+                  <div class="flex justify-between text-emerald-800 font-bold border-t border-slate-200 pt-1">
+                    <span>A entregar / guardar (${mun}):</span>
+                    <b>$${st.subtotal.toLocaleString('es-CO')}</b>
+                  </div>
+                  ` : `
+                  <div class="flex justify-between text-amber-900 font-semibold">
+                    <span>Devueltas a llevar en ${mun}:</span>
+                    <b>$${st.devueltas.toLocaleString('es-CO')}</b>
+                  </div>
+                  <p class="text-[10px] text-slate-400">Municipio en curso: solo devueltas (aún no se suma el cobro).</p>
+                  `}
+                  <div class="flex justify-between text-indigo-900 font-semibold border-t border-slate-200 pt-1">
+                    <span>Devueltas pendientes (otros municipios):</span>
+                    <b>$${devueltasPendientesOtros.toLocaleString('es-CO')}</b>
+                  </div>
+                  <p class="text-[10px] text-slate-400">
+                    ${st.todosEntregados
+                      ? `Terminaste ${mun}. Aparta $${st.subtotal.toLocaleString('es-CO')} y conserva $${devueltasPendientesOtros.toLocaleString('es-CO')} de cambio para el resto.`
+                      : `Aún hay entregas en ${mun}. Cambio para otros municipios: $${devueltasPendientesOtros.toLocaleString('es-CO')}.`
+                    }
+                  </p>
                 </div>
               </div>
             `}).join('')}
