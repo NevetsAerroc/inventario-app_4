@@ -844,13 +844,39 @@ const ModuloDomicilios = {
                   <p class="text-[10px] text-indigo-700">${lista.length} pedido(s)</p>
                 </div>
                 <div class="p-2 space-y-2 bg-white">
-                    ${lista.map(p => {
+                                      ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
                     const totalPedido = Number(p.total) || 0;
-                   const metodoActual = p.metodo_pago_final || 'EFECTIVO';
+                    // Total original (antes de ajustes). Si no existe, usa el actual.
+                    const totalOriginal = Number(p.total_original) > 0
+                      ? Number(p.total_original)
+                      : totalPedido;
+                    const metodoActual = p.metodo_pago_final || 'EFECTIVO';
                     const motivoAjuste = (p.observacion || '').trim();
-                   return `
-                    <div class="border p-2.5 rounded-md space-y-2 ${entregado ? 'bg-emerald-50 border-emerald-200' : 'bg-white'}" id="item-pedido-${p.id}">
+                    // Devuelta que salió con la ruta (billetes de 50k sobre el original)
+                    const BILLETE = 50000;
+                    const pagaCon = totalOriginal > 0
+                      ? Math.ceil(totalOriginal / BILLETE) * BILLETE
+                      : 0;
+                    const devueltaEntregada = Number(p.devuelta_calculada) >= 0 && p.devuelta_calculada !== null && p.devuelta_calculada !== ''
+                      ? Number(p.devuelta_calculada)
+                      : Math.max(0, pagaCon - totalOriginal);
+                    const esTransfer = metodoActual === 'TRANSFERENCIA'
+                      || metodoActual === 'TRANSFERENCIA_PENDIENTE';
+                    // Caja: efectivo = total cobrado; transferencia = solo la devuelta de la base
+                    const aCaja = esTransfer ? devueltaEntregada : totalPedido;
+                    const delta = totalPedido - totalOriginal;
+                    const formulaTxt = delta === 0
+                      ? `$${totalPedido.toLocaleString('es-CO')}`
+                      : `$${totalOriginal.toLocaleString('es-CO')} ${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}${motivoAjuste ? ' [' + motivoAjuste.replace(/"/g, '') + ']' : ''} = $${totalPedido.toLocaleString('es-CO')}`;
+
+                    return `
+                    <div class="border p-2.5 rounded-md space-y-2 ${entregado ? 'bg-emerald-50 border-emerald-200' : 'bg-white'}"
+                         id="item-pedido-${p.id}"
+                         data-total-original="${totalOriginal}"
+                         data-devuelta="${devueltaEntregada}">
+
+                      <!-- Encabezado siempre visible -->
                       <div class="flex justify-between items-start gap-2">
                         <div class="min-w-0">
                           <p class="font-bold text-xs text-slate-900">${p.codigo_pedido || ('Pedido #' + p.id)}</p>
@@ -861,78 +887,116 @@ const ModuloDomicilios = {
                           : `<span class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Pendiente</span>`}
                       </div>
 
-                      <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                        <label class="block text-[10px] text-slate-500">Valor a cobrar ($)</label>
-                        <div class="flex items-center gap-1">
-                          <span id="total-txt-${p.id}" class="flex-1 p-1 border rounded font-bold text-emerald-700 bg-slate-50">
-                            $${totalPedido.toLocaleString('es-CO')}
-                          </span>
-                          <!-- input oculto para arqueo / guardar -->
-                          <input type="hidden" class="inp-total" data-id="${p.id}" value="${totalPedido}">
-                          ${!yaLiquidada ? `
-                          <button type="button" onclick="ModuloDomicilios.abrirEdicionTotal(${p.id})"
-                                  class="px-1.5 py-1 rounded border border-amber-300 bg-white text-amber-900 text-xs"
-                                  title="Ajustar valor">✏️</button>
-                          ` : ''}
-                        </div>
-
-                        <!-- Panel de edición (oculto) -->
-                        <div id="edit-total-${p.id}" class="hidden mt-1.5 p-2 rounded border border-amber-200 bg-amber-50 space-y-1.5">
-                          <p class="text-[10px] text-amber-900 font-medium">Ajuste (+ suma / − resta). Ej: -2300</p>
-                          <div class="flex gap-1">
-                            <input type="number" id="ajuste-input-${p.id}" step="100" placeholder="-2300 o 1500"
-                                  class="flex-1 border border-amber-300 rounded px-2 py-1 text-xs font-bold" />
-                          </div>
-                          <textarea id="motivo-input-${p.id}" rows="2" placeholder="Motivo: cliente devolvió vasos / faltó un producto..."
-                                    class="w-full border border-amber-300 rounded px-2 py-1 text-[11px]"></textarea>
-                          <div class="flex gap-1">
-                            <button type="button" onclick="ModuloDomicilios.guardarAjusteTotal(${p.id})"
-                                    class="flex-1 py-1 rounded bg-emerald-600 text-white text-[10px] font-bold">Guardar</button>
-                            <button type="button" onclick="ModuloDomicilios.cancelarEdicionTotal(${p.id})"
-                                    class="px-2 py-1 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
-                          </div>
-                        </div>
-
-                        ${motivoAjuste ? `<p class="text-[10px] text-amber-800 mt-0.5 italic" id="motivo-txt-${p.id}">📝 ${motivoAjuste.replace(/`/g, '')}</p>` : `<p class="text-[10px] text-slate-400 mt-0.5 hidden" id="motivo-txt-${p.id}"></p>`}
+                      ${entregado ? `
+                      <!-- VISTA COLAPSADA (entregado) -->
+                      <div id="resumen-${p.id}" class="text-[11px] space-y-0.5">
+                        <p class="text-slate-700"><span class="text-slate-500">Valor:</span> <b>${formulaTxt}</b></p>
+                        <p class="text-amber-800">Devuelta entregada: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b></p>
+                        <p class="text-emerald-800 font-semibold">A entregar en caja: <b>$${aCaja.toLocaleString('es-CO')}</b>
+                          ${esTransfer ? '<span class="text-[10px] font-normal text-slate-500">(solo devuelta · transferencia)</span>' : ''}
+                        </p>
+                        <button type="button" onclick="ModuloDomicilios.toggleDetallePedido(${p.id})"
+                                class="text-[10px] text-indigo-600 font-semibold mt-1">▶ Ver más detalles</button>
                       </div>
-                        <div>
+                      <div id="detalle-${p.id}" class="hidden space-y-2">
+                      ` : `<div id="detalle-${p.id}" class="space-y-2">`}
+
+                        <!-- Valor + botones + / − -->
+                        <div class="text-xs">
+                          <label class="block text-[10px] text-slate-500 mb-0.5">Valor a cobrar ($)</label>
+                          <div class="flex items-center gap-1">
+                            <span id="total-txt-${p.id}" class="flex-1 p-1.5 border rounded font-bold text-emerald-700 bg-slate-50 text-sm">
+                              $${totalPedido.toLocaleString('es-CO')}
+                            </span>
+                            <input type="hidden" class="inp-total" data-id="${p.id}" value="${totalPedido}">
+                            ${!yaLiquidada ? `
+                            <button type="button" onclick="ModuloDomicilios.abrirAjuste(${p.id}, 1)"
+                                    class="w-8 h-8 rounded-md bg-emerald-600 text-white font-bold text-sm">+</button>
+                            <button type="button" onclick="ModuloDomicilios.abrirAjuste(${p.id}, -1)"
+                                    class="w-8 h-8 rounded-md bg-rose-500 text-white font-bold text-sm">−</button>
+                            ` : ''}
+                          </div>
+                          ${delta !== 0 ? `<p class="text-[10px] text-slate-600 mt-0.5">${formulaTxt}</p>` : ''}
+                          ${motivoAjuste ? `<p class="text-[10px] text-amber-800 italic mt-0.5" id="motivo-txt-${p.id}">📝 ${motivoAjuste.replace(/</g,'')}</p>` : `<p class="hidden text-[10px] text-amber-800 italic mt-0.5" id="motivo-txt-${p.id}"></p>`}
+
+                          <!-- Panel ajuste -->
+                          <div id="panel-ajuste-${p.id}" class="hidden mt-1.5 p-2 rounded border border-amber-200 bg-amber-50 space-y-1.5">
+                            <p class="text-[10px] font-medium text-amber-900">
+                              Ajuste: <span id="signo-ajuste-${p.id}">+</span>
+                              <input type="number" id="monto-ajuste-${p.id}" min="0" step="100" placeholder="2500"
+                                     class="w-24 border border-amber-300 rounded px-1.5 py-0.5 text-xs font-bold ml-1" />
+                            </p>
+                            <textarea id="motivo-ajuste-${p.id}" rows="2"
+                              placeholder="Motivo: faltó producto / cliente devolvió vasos..."
+                              class="w-full border border-amber-300 rounded px-2 py-1 text-[11px]"></textarea>
+                            <div class="flex gap-1">
+                              <button type="button" onclick="ModuloDomicilios.guardarAjuste(${p.id})"
+                                      class="flex-1 py-1 rounded bg-emerald-600 text-white text-[10px] font-bold">Guardar</button>
+                              <button type="button" onclick="ModuloDomicilios.cancelarAjuste(${p.id})"
+                                      class="px-2 py-1 rounded bg-slate-200 text-[10px] font-bold">✕</button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Método de pago -->
+                        <div class="text-xs">
                           <label class="block text-[10px] text-slate-500">Método de pago</label>
-                           <select class="sel-metodo w-full p-1 border rounded bg-slate-50"
-                           data-id="${p.id}" data-total="${totalPedido}"
-                          ${yaLiquidada ? 'disabled' : ''}
-                           onchange="ModuloDomicilios.guardarCambioPedido(${p.id})">
-                           <option value="EFECTIVO" ${metodoActual === 'EFECTIVO' ? 'selected' : ''}>Efectivo</option>
-                           <option value="TRANSFERENCIA" ${metodoActual === 'TRANSFERENCIA' ? 'selected' : ''}>Transferencia (ya hecha)</option>
-                           <option value="TRANSFERENCIA_PENDIENTE" ${metodoActual === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>Transferencia pendiente</option>
+                          <select class="sel-metodo w-full p-1.5 border rounded bg-slate-50"
+                            data-id="${p.id}"
+                            data-total="${totalPedido}"
+                            data-devuelta="${devueltaEntregada}"
+                            ${yaLiquidada ? 'disabled' : ''}
+                            onchange="ModuloDomicilios.guardarCambioPedido(${p.id})">
+                            <option value="EFECTIVO" ${metodoActual === 'EFECTIVO' ? 'selected' : ''}>Efectivo</option>
+                            <option value="TRANSFERENCIA" ${metodoActual === 'TRANSFERENCIA' ? 'selected' : ''}>Transferencia (ya hecha)</option>
+                            <option value="TRANSFERENCIA_PENDIENTE" ${metodoActual === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>Transferencia pendiente</option>
                           </select>
                         </div>
-                      </div>
 
+                        <!-- Comprobante SOLO si transferencia ya hecha (no pendiente) -->
+                        <div class="box-comprobante ${metodoActual === 'TRANSFERENCIA' ? '' : 'hidden'}" id="box-comp-${p.id}">
+                          <label class="block text-[10px] text-slate-500"># Comprobante</label>
+                          <input type="text" class="inp-comp w-full p-1 border rounded text-xs"
+                            data-id="${p.id}" value="${p.comprobante_transf || ''}"
+                            ${yaLiquidada ? 'readonly' : ''}
+                            onchange="ModuloDomicilios.guardarCambioPedido(${p.id})"
+                            placeholder="Número de transferencia">
+                        </div>
 
-                      <div class="box-comprobante ${p.metodo_pago_final === 'TRANSFERENCIA' ? '' : 'hidden'}" id="box-comp-${p.id}">
-                        <label class="block text-[10px] text-slate-500"># Comprobante</label>
-                        <input type="text" class="inp-comp w-full p-1 border rounded text-xs"
-                          data-id="${p.id}" value="${p.comprobante_transf || ''}"
-                          ${yaLiquidada ? 'readonly' : ''}
-                          onchange="ModuloDomicilios.guardarCambioPedido(${p.id})"
-                          placeholder="Número de transferencia">
-                      </div>
+                        <!-- Cifras de caja / devuelta -->
+                        <div class="bg-slate-50 border rounded p-2 text-[11px] space-y-0.5">
+                          <div class="flex justify-between text-amber-900">
+                            <span>Devuelta entregada (base):</span>
+                            <b id="dev-line-${p.id}">$${devueltaEntregada.toLocaleString('es-CO')}</b>
+                          </div>
+                          <div class="flex justify-between text-emerald-800">
+                            <span>A entregar en caja:</span>
+                            <b id="caja-line-${p.id}">$${aCaja.toLocaleString('es-CO')}</b>
+                          </div>
+                          <p class="text-[10px] text-slate-400" id="caja-hint-${p.id}">
+                            ${esTransfer ? 'Transferencia: en caja solo regresa la devuelta de la base.' : 'Efectivo: en caja el valor cobrado del pedido.'}
+                          </p>
+                        </div>
 
-                      ${!yaLiquidada ? `
-                      <div class="flex gap-2">
-                        <button type="button"
-                          onclick="ModuloDomicilios.confirmarEntrega(${p.id}, true)"
-                          class="flex-1 py-1.5 rounded text-[11px] font-semibold ${entregado ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white'}">
-                          ${entregado ? '✓ Entregado' : '✓ Marcar entregado'}
-                        </button>
-                        <button type="button"
-                          onclick="ModuloDomicilios.confirmarEntrega(${p.id}, false)"
-                          class="px-2 py-1.5 rounded text-[11px] font-semibold bg-slate-200 text-slate-700">
-                          ↩ Pendiente
-                        </button>
-                      </div>
-                      ` : ''}
+                        ${!yaLiquidada ? `
+                        <div class="flex gap-2">
+                          <button type="button"
+                            onclick="ModuloDomicilios.confirmarEntrega(${p.id}, true)"
+                            class="flex-1 py-1.5 rounded text-[11px] font-semibold ${entregado ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white'}">
+                            ${entregado ? '✓ Entregado' : '✓ Marcar entregado'}
+                          </button>
+                          <button type="button"
+                            onclick="ModuloDomicilios.confirmarEntrega(${p.id}, false)"
+                            class="px-2 py-1.5 rounded text-[11px] font-semibold bg-slate-200 text-slate-700">
+                            ↩ Pendiente
+                          </button>
+                        </div>
+                        ` : ''}
+
+                      ${entregado ? `
+                        <button type="button" onclick="ModuloDomicilios.toggleDetallePedido(${p.id})"
+                                class="text-[10px] text-indigo-600 font-semibold">▼ Ocultar detalles</button>
+                      </div>` : `</div>`}
                     </div>
                   `}).join('')}
                 </div>
@@ -1039,42 +1103,166 @@ async guardarAjusteTotal(pedidoId) {
   }
 },
 
-    async guardarCambioPedido(pedidoId) {
-  const inpTotal = document.querySelector(`.inp-total[data-id="${pedidoId}"]`);
-  const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
-  const inpComp = document.querySelector(`.inp-comp[data-id="${pedidoId}"]`);
-  const boxComp = document.getElementById(`box-comp-${pedidoId}`);
+      toggleDetallePedido(pedidoId) {
+    const det = document.getElementById(`detalle-${pedidoId}`);
+    const res = document.getElementById(`resumen-${pedidoId}`);
+    if (!det) return;
+    const abierto = !det.classList.contains('hidden');
+    if (abierto) {
+      det.classList.add('hidden');
+      if (res) res.classList.remove('hidden');
+    } else {
+      det.classList.remove('hidden');
+      // el resumen puede quedarse visible arriba; opcional ocultarlo:
+      // if (res) res.classList.add('hidden');
+    }
+  },
 
-  // total: input oculto/readonly o data del select
-  let total = parseFloat(inpTotal?.value);
-  if (isNaN(total)) total = parseFloat(sel?.dataset?.total) || 0;
+  abrirAjuste(pedidoId, signo) {
+    // signo: 1 = sumar, -1 = restar
+    const panel = document.getElementById(`panel-ajuste-${pedidoId}`);
+    const sp = document.getElementById(`signo-ajuste-${pedidoId}`);
+    if (panel) panel.classList.remove('hidden');
+    if (sp) {
+      sp.textContent = signo >= 0 ? '+' : '−';
+      sp.dataset.signo = String(signo >= 0 ? 1 : -1);
+    }
+    const inp = document.getElementById(`monto-ajuste-${pedidoId}`);
+    if (inp) { inp.value = ''; inp.focus(); }
+    const mot = document.getElementById(`motivo-ajuste-${pedidoId}`);
+    if (mot) mot.value = '';
+  },
 
-  const metodoPago = sel?.value || 'EFECTIVO';
-  const comprobante = inpComp?.value?.trim() || '';
+  cancelarAjuste(pedidoId) {
+    document.getElementById(`panel-ajuste-${pedidoId}`)?.classList.add('hidden');
+  },
 
-  if (boxComp) {
-    const esTransfer = metodoPago === 'TRANSFERENCIA' || metodoPago === 'TRANSFERENCIA_PENDIENTE';
-    if (esTransfer) boxComp.classList.remove('hidden');
-    else boxComp.classList.add('hidden');
-  }
+  async guardarAjuste(pedidoId) {
+    const inpTotal = document.querySelector(`.inp-total[data-id="${pedidoId}"]`);
+    const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
+    const card = document.getElementById(`item-pedido-${pedidoId}`);
+    const actual = parseFloat(inpTotal?.value) || 0;
+    const totalOriginal = parseFloat(card?.dataset?.totalOriginal) || actual;
 
-  if (sel) sel.dataset.total = String(total);
+    const sp = document.getElementById(`signo-ajuste-${pedidoId}`);
+    const signo = parseInt(sp?.dataset?.signo || '1', 10);
+    const monto = parseFloat(document.getElementById(`monto-ajuste-${pedidoId}`)?.value);
+    const motivo = (document.getElementById(`motivo-ajuste-${pedidoId}`)?.value || '').trim();
 
-  try {
-    await apiFetch(`/rutas/pedido/${pedidoId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ total, metodoPago, comprobante })
-    });
-    this.recalcularArqueo();
-  } catch (e) {
-    console.error(e);
-  }
-},
+    if (isNaN(monto) || monto <= 0) return alert('Indica el monto del ajuste (ej. 2500)');
+    if (!motivo) return alert('Escribe el motivo (ej. cliente devolvió vasos)');
+
+    const ajuste = signo * monto;
+    const nuevoTotal = Math.max(0, Math.round(actual + ajuste));
+    const signoTxt = ajuste > 0 ? '+' : '';
+    // Acumula motivos sin borrar los anteriores
+    const prevObs = (document.getElementById(`motivo-txt-${pedidoId}`)?.textContent || '')
+      .replace(/^📝\s*/, '').trim();
+    const linea = `${signoTxt}${ajuste.toLocaleString('es-CO')}: ${motivo}`;
+    const observacion = prevObs ? `${prevObs} | ${linea}` : linea;
+
+    if (inpTotal) inpTotal.value = String(nuevoTotal);
+    if (sel) sel.dataset.total = String(nuevoTotal);
+
+    const txt = document.getElementById(`total-txt-${pedidoId}`);
+    if (txt) txt.innerText = `$${nuevoTotal.toLocaleString('es-CO')}`;
+
+    const motivoEl = document.getElementById(`motivo-txt-${pedidoId}`);
+    if (motivoEl) {
+      motivoEl.textContent = '📝 ' + observacion;
+      motivoEl.classList.remove('hidden');
+    }
+
+    document.getElementById(`panel-ajuste-${pedidoId}`)?.classList.add('hidden');
+
+    // Actualiza línea "a caja" en pantalla
+    this._actualizarLineaCaja(pedidoId);
+
+    try {
+      const metodoPago = sel?.value || 'EFECTIVO';
+      // No tocar comprobante ni borrar observación previa en servidor
+      await apiFetch(`/rutas/pedido/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          total: nuevoTotal,
+          metodoPago,
+          observacion,
+          total_original: totalOriginal
+        })
+      });
+      this.recalcularArqueo();
+      showToast(`Total: $${nuevoTotal.toLocaleString('es-CO')}`);
+    } catch (e) {
+      alert('No se pudo guardar el ajuste');
+    }
+  },
+
+  _actualizarLineaCaja(pedidoId) {
+    const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
+    const card = document.getElementById(`item-pedido-${pedidoId}`);
+    const total = parseFloat(document.querySelector(`.inp-total[data-id="${pedidoId}"]`)?.value)
+      || parseFloat(sel?.dataset?.total) || 0;
+    const devuelta = parseFloat(sel?.dataset?.devuelta)
+      || parseFloat(card?.dataset?.devuelta) || 0;
+    const metodo = sel?.value || 'EFECTIVO';
+    const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
+    const aCaja = esTransfer ? devuelta : total;
+
+    const elCaja = document.getElementById(`caja-line-${pedidoId}`);
+    const elHint = document.getElementById(`caja-hint-${pedidoId}`);
+    if (elCaja) elCaja.innerText = `$${aCaja.toLocaleString('es-CO')}`;
+    if (elHint) {
+      elHint.textContent = esTransfer
+        ? 'Transferencia: en caja solo regresa la devuelta de la base.'
+        : 'Efectivo: en caja el valor cobrado del pedido.';
+    }
+  },
+
+  async guardarCambioPedido(pedidoId) {
+    const inpTotal = document.querySelector(`.inp-total[data-id="${pedidoId}"]`);
+    const sel = document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`);
+    const inpComp = document.querySelector(`.inp-comp[data-id="${pedidoId}"]`);
+    const boxComp = document.getElementById(`box-comp-${pedidoId}`);
+
+    let total = parseFloat(inpTotal?.value);
+    if (isNaN(total)) total = parseFloat(sel?.dataset?.total) || 0;
+
+    const metodoPago = sel?.value || 'EFECTIVO';
+    const comprobante = inpComp?.value?.trim() || '';
+
+    // Comprobante solo si transferencia YA hecha (no pendiente)
+    if (boxComp) {
+      if (metodoPago === 'TRANSFERENCIA') boxComp.classList.remove('hidden');
+      else boxComp.classList.add('hidden');
+    }
+
+    if (sel) sel.dataset.total = String(total);
+    this._actualizarLineaCaja(pedidoId);
+
+    try {
+      // NO enviamos observacion aquí → no se borra en el servidor
+      const body = { total, metodoPago };
+      if (metodoPago === 'TRANSFERENCIA') body.comprobante = comprobante;
+      // TRANSFERENCIA_PENDIENTE: sin exigir ni pisar comprobante
+
+      await apiFetch(`/rutas/pedido/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      this.recalcularArqueo();
+    } catch (e) {
+      console.error(e);
+    }
+  },
 
   async confirmarEntrega(pedidoId, entregado) {
     const estadoEntrega = entregado ? 'ENTREGADO' : 'PENDIENTE';
     try {
+      // Guarda método/total actuales antes de refrescar
+      await this.guardarCambioPedido(pedidoId);
+
       const res = await apiFetch(`/rutas/pedido/${pedidoId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1082,7 +1270,7 @@ async guardarAjusteTotal(pedidoId) {
       });
       if (res && res.ok) {
         showToast(entregado ? 'Pedido marcado como entregado' : 'Pedido vuelto a pendiente');
-        await this.renderTabCuadre(); // refresca la lista
+        await this.renderTabCuadre();
       } else {
         alert(res.error || 'No se pudo actualizar');
       }
@@ -1091,19 +1279,25 @@ async guardarAjusteTotal(pedidoId) {
     }
   },
 
-    recalcularArqueo() {
+  recalcularArqueo() {
     let totalEfectivoRecolectado = 0;
+    let totalDevueltasTransfer = 0;
     const selects = document.querySelectorAll('.sel-metodo');
 
     selects.forEach(sel => {
-      const pid = sel.dataset.id;
       const total = parseFloat(sel.dataset.total) || 0;
+      const devuelta = parseFloat(sel.dataset.devuelta) || 0;
+      const pid = sel.dataset.id;
       const boxComp = document.getElementById(`box-comp-${pid}`);
       const esTransfer = sel.value === 'TRANSFERENCIA' || sel.value === 'TRANSFERENCIA_PENDIENTE';
 
       if (esTransfer) {
-        if (boxComp) boxComp.classList.remove('hidden');
-        // No suma a efectivo recolectado
+        // Solo muestra comprobante si es transferencia YA hecha
+        if (boxComp) {
+          if (sel.value === 'TRANSFERENCIA') boxComp.classList.remove('hidden');
+          else boxComp.classList.add('hidden');
+        }
+        totalDevueltasTransfer += devuelta;
       } else {
         if (boxComp) boxComp.classList.add('hidden');
         totalEfectivoRecolectado += total;
@@ -1111,18 +1305,20 @@ async guardarAjusteTotal(pedidoId) {
     });
 
     const elBase = document.getElementById('arq-base');
-    const baseRuta = parseFloat(elBase?.dataset?.valor) ||
-      parseFloat(document.getElementById('arq-resumen')?.dataset?.base) || 0;
+    const baseRuta = parseFloat(elBase?.dataset?.valor) || 0;
+
+    // Efectivo de pedidos + devueltas de transferencias (vuelven a caja)
+    // Nota: la base completa ya está en baseRuta; aquí mostramos cobrado en efectivo.
     const totalEntregar = totalEfectivoRecolectado + baseRuta;
 
     const elEfectivo = document.getElementById('arq-efectivo');
     const elTotal = document.getElementById('arq-total');
-
     if (elEfectivo) elEfectivo.innerText = `$${totalEfectivoRecolectado.toLocaleString('es-CO')}`;
     if (elTotal) {
       elTotal.innerText = `$${totalEntregar.toLocaleString('es-CO')}`;
       elTotal.dataset.valor = String(totalEntregar);
     }
+    return totalEntregar;
   },
 
   async cerrarYLiquidarRuta(rutaId) {

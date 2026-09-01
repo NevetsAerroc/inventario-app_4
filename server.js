@@ -175,7 +175,7 @@ app.get('/api/rutas/:id', (req, res) => {
 // Actualizar un pedido mientras la ruta está en curso (precio, método, entrega)
 app.put('/api/rutas/pedido/:id', (req, res) => {
   try {
-    const { total, metodoPago, estadoEntrega, comprobante, observacion } = req.body;
+    const { total, metodoPago, estadoEntrega, comprobante, observacion, total_original } = req.body;
     const id = req.params.id;
 
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(id);
@@ -184,22 +184,32 @@ app.put('/api/rutas/pedido/:id', (req, res) => {
       return res.status(400).json({ ok: false, error: 'El pedido ya está liquidado' });
     }
 
-    db.prepare(`
-      UPDATE pedidos SET
-        total = COALESCE(?, total),
-        metodo_pago_final = COALESCE(?, metodo_pago_final),
-        estado_entrega = COALESCE(?, estado_entrega),
-        comprobante_transf = COALESCE(?, comprobante_transf),
-        observacion = COALESCE(?, observacion)
-      WHERE id = ?
-    `).run(
-      total != null ? total : null,
-      metodoPago || null,
-      estadoEntrega || null,
-      comprobante != null ? comprobante : null,
-      observacion != null ? observacion : null,
-      id
-    );
+    // Solo actualiza campos que vengan en el body (undefined = no tocar)
+    const sets = [];
+    const vals = [];
+
+    if (total != null) { sets.push('total = ?'); vals.push(total); }
+    if (metodoPago != null && metodoPago !== '') {
+      sets.push('metodo_pago_final = ?'); vals.push(metodoPago);
+    }
+    if (estadoEntrega != null && estadoEntrega !== '') {
+      sets.push('estado_entrega = ?'); vals.push(estadoEntrega);
+    }
+    if (comprobante !== undefined) {
+      sets.push('comprobante_transf = ?'); vals.push(comprobante || '');
+    }
+    if (observacion != null && observacion !== '') {
+      sets.push('observacion = ?'); vals.push(observacion);
+    }
+    // total_original solo la primera vez
+    if (total_original != null && !(pedido.total_original > 0)) {
+      sets.push('total_original = ?'); vals.push(total_original);
+    }
+
+    if (sets.length) {
+      vals.push(id);
+      db.prepare(`UPDATE pedidos SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+    }
 
     const actualizado = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(id);
     res.json({ ok: true, pedido: actualizado });
