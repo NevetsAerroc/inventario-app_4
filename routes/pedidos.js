@@ -70,7 +70,7 @@ router.post('/manual', (req, res) => {
       cliente_id,
       telefono,
       direccion,
-      municipioFinal,   // en lugar de municipio || ''
+      municipio,   // en lugar de municipio || ''
       total,
       observacion,
       items,
@@ -134,7 +134,7 @@ router.post('/manual', (req, res) => {
         cliente_nombre || 'Cliente General',
         telefono || '',
         direccion || '',
-        municipio || '',
+        municipioFinal,
         Number(total),
         observacion || '',
         tipo_entrega || 'DOMICILIO'
