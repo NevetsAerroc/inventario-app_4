@@ -1030,8 +1030,11 @@ const ModuloDomicilios = {
       // ---- Totales por municipio ----
 
       function calcDevueltaPedido(p) {
-        // NO se recalcula nada aquí: solo se usa lo que quedó guardado al
-        // despachar. Si no se le puso devuelta (p.ej. Transferencia), es $0.
+        // La devuelta queda FIJA desde que se despachó (según lo que se puso
+        // en la pestaña "Despachar"): si se despachó en Efectivo, aquí queda
+        // ese valor aunque luego el cliente pague por transferencia; si se
+        // despachó en Transferencia, ya quedó guardada en $0. No se recalcula
+        // ni se cambia según el método actual — solo se lee lo guardado.
         const storedDev = Number(p.devuelta_calculada);
         return (!isNaN(storedDev) && storedDev > 0) ? storedDev : 0;
       }
@@ -1133,17 +1136,19 @@ const ModuloDomicilios = {
                     const metodoActual = p.metodo_pago_final || 'EFECTIVO';
                     const motivoAjuste = (p.observacion || '').trim();
 
-                    // Devuelta FIJA: solo la guardada al despachar. Si no se le
-                    // puso devuelta al despachar (p.ej. pagó por Transferencia),
-                    // se queda en $0 — no se inventa ni se recalcula aquí.
-                    const storedDev = Number(p.devuelta_calculada);
-                    const devueltaEntregada = (!isNaN(storedDev) && storedDev > 0) ? storedDev : 0;
-
                     const esTransfer = metodoActual === 'TRANSFERENCIA'
                       || metodoActual === 'TRANSFERENCIA_PENDIENTE';
 
+                    // Devuelta FIJA: es la que quedó guardada al despachar, sin
+                    // importar el método actual. Si se despachó en Efectivo con
+                    // devuelta, esa devuelta se debe aunque luego el cliente
+                    // pague por transferencia (el domiciliario ya salió con ese
+                    // cambio). Si se despachó en Transferencia, ya quedó en $0.
+                    const storedDev = Number(p.devuelta_calculada);
+                    const devueltaEntregada = (!isNaN(storedDev) && storedDev > 0) ? storedDev : 0;
+
                     // Efectivo: valor cobrado (editado) + devuelta que salió con el domiciliario
-                    // Transferencia: solo la devuelta de la base
+                    // Transferencia: solo la devuelta de la base (si se despachó con devuelta)
                     const aCaja = esTransfer
                       ? devueltaEntregada
                       : (totalPedido + devueltaEntregada);
@@ -1276,7 +1281,11 @@ const ModuloDomicilios = {
                             <b id="caja-line-${p.id}">$${aCaja.toLocaleString('es-CO')}</b>
                           </div>
                           <p class="text-[10px] text-slate-400" id="caja-hint-${p.id}">
-                            ${esTransfer ? 'Transferencia: en caja solo regresa la devuelta de la base.' : 'Efectivo: en caja el valor cobrado del pedido.'}
+                            ${esTransfer
+                              ? (devueltaEntregada > 0
+                                  ? 'Transferencia: el domiciliario regresa la devuelta que salió con él.'
+                                  : 'Transferencia: sin devuelta (se despachó sin cambio).')
+                              : 'Efectivo: en caja el valor cobrado del pedido.'}
                           </p>
                         </div>
 
@@ -1585,10 +1594,14 @@ async guardarAjusteTotal(pedidoId) {
     const card = document.getElementById(`item-pedido-${pedidoId}`);
     const total = parseFloat(document.querySelector(`.inp-total[data-id="${pedidoId}"]`)?.value)
       || parseFloat(sel?.dataset?.total) || 0;
-    const devuelta = parseFloat(sel?.dataset?.devuelta)
-      || parseFloat(card?.dataset?.devuelta) || 0;
     const metodo = sel?.value || 'EFECTIVO';
     const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
+    // La devuelta es FIJA: es la que quedó guardada en BD al momento del despacho
+    // (devuelta_calculada). Si se despachó en efectivo, el domiciliario ya salió con
+    // esa plata de cambio — se muestra aunque el cliente luego pague por transferencia.
+    // Si se despachó en transferencia, devuelta_calculada ya quedó en $0.
+    // NUNCA se recalcula aquí, solo se lee lo guardado.
+    const devuelta = parseFloat(sel?.dataset?.devuelta) || parseFloat(card?.dataset?.devuelta) || 0;
     const aCaja = esTransfer ? devuelta : (total + devuelta);
 
     const elCaja = document.getElementById(`caja-line-${pedidoId}`);
@@ -1601,8 +1614,10 @@ async guardarAjusteTotal(pedidoId) {
     }
     if (elHint) {
       elHint.textContent = esTransfer
-        ? 'Transferencia: en caja solo la devuelta de la base.'
-        : 'Efectivo: valor cobrado + devuelta que salió con el domiciliario.';
+        ? (devuelta > 0
+            ? 'Transferencia: el domiciliario regresa la devuelta que salió con él.'
+            : 'Transferencia: sin devuelta (se despachó sin cambio).')
+        : 'Efectivo: en caja el valor cobrado del pedido.';
     }
   },
 
