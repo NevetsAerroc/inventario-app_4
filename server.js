@@ -114,21 +114,48 @@ app.post('/api/rutas/despachar', (req, res) => {
             tipo_entrega = 'DOMICILIO',
             estado_liquidacion = 'EN_RUTA',
             metodo_pago_final = ?,
-            total_original = COALESCE(NULLIF(total_original, 0), total),
+            total = ?,
+            total_original = COALESCE(NULLIF(total_original, 0), ?),
             devuelta_calculada = ?
         WHERE id = ?
       `);
 
+      const BILLETE = 50000;
+      // La devuelta se redondea al múltiplo de $50 más cercano: no existen
+      // monedas de menor denominación, así que no se puede dar cambio exacto.
+      const redondearDevuelta50 = (v) => {
+        const n = Number(v) || 0;
+        if (n <= 0) return 0;
+        return Math.round(n / 50) * 50;
+      };
+
       for (const item of lista) {
         const pedido = getPedido.get(item.id);
-        const total = Number(pedido.total) || 0;
-        const BILLETE = 50000;
-        const pagaCon = total > 0 ? Math.ceil(total / BILLETE) * BILLETE : 0;
-        const devuelta = Math.max(0, pagaCon - total);
+        const totalOriginal = Number(pedido.total) || 0;
+
+        // Si el pedido fue editado antes de despachar (precio corregido),
+        // se usa el nuevo valor; si no, se conserva el que ya tenía.
+        let total = (item.total !== undefined && item.total !== null && Number(item.total) > 0)
+          ? Number(item.total)
+          : totalOriginal;
+        total = Math.round(total);
+
+        // "Paga con" y "devuelta": se respeta lo definido en el despacho
+        // (incluye ediciones manuales y la opción "sin devuelta"); si no
+        // llegó nada, se calcula el sugerido por defecto.
+        let pagaCon = (item.pagaCon !== undefined && item.pagaCon !== null && Number(item.pagaCon) >= total)
+          ? Math.round(Number(item.pagaCon))
+          : (total > 0 ? Math.ceil(total / BILLETE) * BILLETE : 0);
+
+        let devuelta = (item.devuelta !== undefined && item.devuelta !== null)
+          ? redondearDevuelta50(Number(item.devuelta))
+          : redondearDevuelta50(Math.max(0, pagaCon - total));
 
         updatePedido.run(
           infoRuta.lastInsertRowid,
           item.metodoPago || 'EFECTIVO',
+          total,
+          totalOriginal,
           devuelta,
           item.id
         );

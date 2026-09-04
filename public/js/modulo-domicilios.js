@@ -458,7 +458,11 @@ const ModuloDomicilios = {
               ${this.pedidosPendientes.map(p => {
                 const total = Number(p.total) || 0;
                 const pagaCon = this.pagaConSugerido(total);      // ej. 37400 → 50000
-                const devuelta = Math.max(0, pagaCon - total);    // 12600
+                const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total)); // redondeado a $50
+                const nombreCliente = p.cliente || p.cliente_nombre || 'Cliente General';
+                const local = p.direccion || '';
+                const municipio = p.municipio || '';
+                const infoNegrita = [nombreCliente, local, municipio].filter(Boolean).join(' | ');
                 return `
                 <div class="bg-white p-2.5 rounded border space-y-1.5" data-pedido-card="${p.id}">
                   <label class="flex items-start gap-2 text-xs cursor-pointer">
@@ -466,17 +470,34 @@ const ModuloDomicilios = {
                            data-total="${total}"
                            data-paga-con="${pagaCon}"
                            data-devuelta="${devuelta}"
+                           data-sin-devuelta="0"
                            class="chk-pedido mt-0.5"
                            onchange="ModuloDomicilios.calcularBaseEfectivo()">
                     <div class="flex-1 min-w-0">
                       <div class="flex justify-between gap-2">
-                        <span class="font-bold text-slate-900">${p.codigo_pedido ? p.codigo_pedido : 'Pedido #' + p.id}</span>
-                        <span class="font-semibold text-emerald-600 whitespace-nowrap">$${total.toLocaleString('es-CO')}</span>
+                        <span class="font-bold text-slate-900">${infoNegrita}</span>
+                        <span class="flex items-center gap-1 whitespace-nowrap">
+                          <b id="total-txt-${p.id}" class="font-semibold text-emerald-600">$${total.toLocaleString('es-CO')}</b>
+                          <button type="button" onclick="event.preventDefault(); ModuloDomicilios.editarPrecioPedido(${p.id})"
+                                  class="px-1 py-0.5 rounded border border-sky-300 bg-white text-sky-900 hover:bg-sky-50"
+                                  title="Editar precio del pedido">✏️</button>
+                        </span>
                       </div>
-                      <p class="text-slate-500">${p.cliente || p.cliente_nombre || 'Cliente General'} | ${p.direccion || 'Sin Dirección'}</p>
+                      <p class="text-slate-500">${p.codigo_pedido ? p.codigo_pedido : 'Pedido #' + p.id}</p>
                       ${p.observacion || p.observacion_liquidacion ? `<p class="text-[10px] text-amber-700 font-medium italic">Nota: ${p.observacion || p.observacion_liquidacion}</p>` : ''}
                     </div>
                   </label>
+
+                  <!-- Edición del precio del pedido -->
+                  <div id="precio-edit-${p.id}" class="hidden pl-5 flex flex-wrap items-center gap-1.5">
+                    <span class="text-slate-600 font-medium">Nuevo valor del pedido $</span>
+                    <input type="number" id="precio-input-${p.id}" min="0" step="500" value="${total}"
+                           class="w-28 border border-sky-300 rounded px-1.5 py-0.5 text-[11px] font-bold" />
+                    <button type="button" onclick="ModuloDomicilios.guardarPrecioPedido(${p.id})"
+                            class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold">OK</button>
+                    <button type="button" onclick="ModuloDomicilios.cancelarPrecioPedido(${p.id})"
+                            class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
+                  </div>
 
                   <div class="pl-5 space-y-1 text-[11px]">
                     <!-- Lectura -->
@@ -502,6 +523,13 @@ const ModuloDomicilios = {
                         <option value="TRANSFERENCIA">Transferencia</option>
                       </select>
                     </div>
+
+                    <!-- Opción: no dar devuelta (pago exacto o valores muy pequeños) -->
+                    <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
+                      <input type="checkbox" id="chk-sindev-${p.id}" class="chk-sin-devuelta"
+                             onchange="ModuloDomicilios.toggleSinDevuelta(${p.id})">
+                      Sin devuelta (pago exacto / valor muy pequeño)
+                    </label>
 
                     <!-- Edición: solo "paga con" -->
                     <div id="pago-edit-${p.id}" class="hidden flex flex-wrap items-center gap-1.5">
@@ -532,7 +560,9 @@ const ModuloDomicilios = {
               <b id="txt-total-entregar" class="text-emerald-800">$0</b>
             </div>
             <p class="text-[10px] text-slate-400">
-              Por defecto paga con múltiplos de $50.000. Con el ✏️ cambias “paga con”; la devuelta se calcula sola.
+              Por defecto paga con múltiplos de $50.000 y la devuelta se redondea a múltiplos de $50 (no hay monedas más pequeñas).
+              Con el ✏️ junto al precio editas el valor del pedido; con el ✏️ junto a "Paga con" cambias con cuánto paga.
+              Marca "Sin devuelta" si el valor es exacto o muy pequeño.
             </p>
           </div>
 
@@ -582,9 +612,17 @@ const ModuloDomicilios = {
     return Math.ceil(t / BILLETE) * BILLETE;
   },
 
+  /** Redondea la devuelta al múltiplo de $50 más cercano (no hay monedas más chicas en Colombia). */
+  redondearDevuelta50(valor) {
+    const v = Number(valor) || 0;
+    if (v <= 0) return 0;
+    return Math.round(v / 50) * 50;
+  },
+
   devueltaPorPedido(totalPedido) {
     const t = Number(totalPedido) || 0;
-    return Math.max(0, this.pagaConSugerido(t) - t);
+    const pagaCon = this.pagaConSugerido(t);
+    return this.redondearDevuelta50(Math.max(0, pagaCon - t));
   },
 
   editarPagaCon(pedidoId) {
@@ -612,10 +650,14 @@ const ModuloDomicilios = {
       return alert(`"Paga con" no puede ser menor al total del pedido ($${total.toLocaleString('es-CO')})`);
     }
     pagaCon = Math.round(pagaCon);
-    const devuelta = Math.max(0, pagaCon - total);
+    const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
 
     chk.dataset.pagaCon = String(pagaCon);
     chk.dataset.devuelta = String(devuelta);
+    // Editar manualmente "paga con" desactiva la opción "sin devuelta".
+    chk.dataset.sinDevuelta = '0';
+    const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+    if (chkSinDev) chkSinDev.checked = false;
 
     const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
     const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
@@ -653,6 +695,104 @@ const ModuloDomicilios = {
     this.guardarPagaCon(pedidoId);
   },
 
+  /** Abre el campo para editar el precio (total) del pedido antes de despachar. */
+  editarPrecioPedido(pedidoId) {
+    const box = document.getElementById(`precio-edit-${pedidoId}`);
+    if (box) {
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+    }
+    const inp = document.getElementById(`precio-input-${pedidoId}`);
+    if (inp) { inp.focus(); inp.select(); }
+  },
+
+  /** Guarda el nuevo precio del pedido y recalcula "paga con" / devuelta. */
+  guardarPrecioPedido(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    if (!chk) return;
+
+    let nuevoTotal = parseFloat(document.getElementById(`precio-input-${pedidoId}`)?.value);
+    if (isNaN(nuevoTotal) || nuevoTotal <= 0) {
+      return alert('Ingresa un valor válido para el pedido');
+    }
+    nuevoTotal = Math.round(nuevoTotal);
+    chk.dataset.total = String(nuevoTotal);
+
+    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const elTotal = document.getElementById(`total-txt-${pedidoId}`);
+    if (elTotal) elTotal.innerText = fmt(nuevoTotal);
+
+    const sinDev = chk.dataset.sinDevuelta === '1';
+    let pagaCon, devuelta;
+    if (sinDev) {
+      pagaCon = nuevoTotal;
+      devuelta = 0;
+    } else {
+      pagaCon = this.pagaConSugerido(nuevoTotal);
+      devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - nuevoTotal));
+    }
+    chk.dataset.pagaCon = String(pagaCon);
+    chk.dataset.devuelta = String(devuelta);
+
+    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
+    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
+    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
+    if (elPaga) elPaga.innerText = fmt(pagaCon);
+    if (elDev) elDev.innerText = fmt(devuelta);
+    if (elEnt) elEnt.innerText = fmt(pagaCon);
+
+    const inpPaga = document.getElementById(`paga-input-${pedidoId}`);
+    if (inpPaga) inpPaga.value = String(pagaCon);
+
+    document.getElementById(`precio-edit-${pedidoId}`)?.classList.add('hidden');
+    document.getElementById(`precio-edit-${pedidoId}`)?.classList.remove('flex');
+
+    this.calcularBaseEfectivo();
+  },
+
+  cancelarPrecioPedido(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    const actual = parseFloat(chk?.dataset?.total) || 0;
+    const inp = document.getElementById(`precio-input-${pedidoId}`);
+    if (inp) inp.value = String(actual);
+    document.getElementById(`precio-edit-${pedidoId}`)?.classList.add('hidden');
+    document.getElementById(`precio-edit-${pedidoId}`)?.classList.remove('flex');
+  },
+
+  /** Marca/desmarca "sin devuelta": pago exacto, sin cambio (valores pequeños o exactos). */
+  toggleSinDevuelta(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+    if (!chk || !chkSinDev) return;
+
+    const total = parseFloat(chk.dataset.total) || 0;
+    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
+    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
+    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
+    const btnEditarPaga = document.querySelector(`#pago-view-${pedidoId} button[title="Cambiar con cuánto paga"]`);
+
+    if (chkSinDev.checked) {
+      chk.dataset.sinDevuelta = '1';
+      chk.dataset.pagaCon = String(total);
+      chk.dataset.devuelta = '0';
+      if (btnEditarPaga) btnEditarPaga.classList.add('hidden');
+    } else {
+      chk.dataset.sinDevuelta = '0';
+      const pagaCon = this.pagaConSugerido(total);
+      const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
+      chk.dataset.pagaCon = String(pagaCon);
+      chk.dataset.devuelta = String(devuelta);
+      if (btnEditarPaga) btnEditarPaga.classList.remove('hidden');
+    }
+
+    if (elPaga) elPaga.innerText = fmt(Number(chk.dataset.pagaCon));
+    if (elDev) elDev.innerText = fmt(Number(chk.dataset.devuelta));
+    if (elEnt) elEnt.innerText = fmt(Number(chk.dataset.pagaCon));
+
+    this.calcularBaseEfectivo();
+  },
+
   /**
    * Solo pedidos marcados en Efectivo.
    * Base de cambio = suma de devueltas.
@@ -673,7 +813,7 @@ const ModuloDomicilios = {
       let pagaCon = parseFloat(chk.dataset.pagaCon);
       if (isNaN(pagaCon)) pagaCon = this.pagaConSugerido(total);
       let devuelta = parseFloat(chk.dataset.devuelta);
-      if (isNaN(devuelta)) devuelta = Math.max(0, pagaCon - total);
+      if (isNaN(devuelta)) devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
 
       baseCambio += devuelta;
       totalEntregar += pagaCon;
@@ -689,12 +829,26 @@ const ModuloDomicilios = {
 
   async despacharRuta() {
     const domId = document.getElementById('select-domiciliario')?.value;
-    const chks = Array.from(document.querySelectorAll('.chk-pedido:checked'))
-      .map(c => parseInt(c.value, 10));
+    const chks = Array.from(document.querySelectorAll('.chk-pedido:checked'));
 
     if (!chks.length) return alert('Selecciona al menos un pedido');
 
     const base = this.calcularBaseEfectivo(); // suma de devueltas (cambio a llevar)
+
+    // Se manda el detalle de cada pedido (precio editado, paga con, devuelta
+    // y método de pago) para que el servidor respete lo definido aquí.
+    const pedidos = chks.map(chk => {
+      const pid = parseInt(chk.value, 10);
+      const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pid}"]`);
+      const metodo = sel ? sel.value : 'EFECTIVO';
+      return {
+        id: pid,
+        metodoPago: metodo,
+        total: parseFloat(chk.dataset.total) || 0,
+        pagaCon: parseFloat(chk.dataset.pagaCon) || 0,
+        devuelta: parseFloat(chk.dataset.devuelta) || 0
+      };
+    });
 
     try {
       const res = await apiFetch('/rutas/despachar', {
@@ -702,7 +856,7 @@ const ModuloDomicilios = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           domiciliarioId: domId,
-          pedidoIds: chks,
+          pedidos,
           baseEfectivo: base
         })
       });
