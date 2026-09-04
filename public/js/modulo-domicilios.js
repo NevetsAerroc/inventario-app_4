@@ -500,48 +500,57 @@ const ModuloDomicilios = {
                   </div>
 
                   <div class="pl-5 space-y-1 text-[11px]">
-                    <!-- Lectura -->
-                    <div id="pago-view-${p.id}" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span class="text-slate-600">
-                        Paga con:
-                        <b id="paga-txt-${p.id}" class="text-slate-900">$${pagaCon.toLocaleString('es-CO')}</b>
-                      </span>
-                      <button type="button" onclick="ModuloDomicilios.editarPagaCon(${p.id})"
-                              class="px-1.5 py-0.5 rounded border border-amber-300 bg-white text-amber-900 hover:bg-amber-50"
-                              title="Cambiar con cuánto paga">✏️</button>
-                      <span class="text-amber-800">
-                        Devuelta:
-                        <b id="dev-txt-${p.id}">$${devuelta.toLocaleString('es-CO')}</b>
-                      </span>
-                      <span class="text-emerald-800 font-semibold">
-                        A entregar:
-                        <b id="ent-txt-${p.id}">$${pagaCon.toLocaleString('es-CO')}</b>
-                      </span>
-                      <select class="sel-metodo-despacho border rounded px-1.5 py-0.5 bg-slate-50 text-[11px] ml-auto"
-                              data-id="${p.id}" onchange="ModuloDomicilios.calcularBaseEfectivo()">
+                    <div class="flex items-center justify-end">
+                      <select class="sel-metodo-despacho border rounded px-1.5 py-0.5 bg-slate-50 text-[11px]"
+                              data-id="${p.id}" onchange="ModuloDomicilios.cambiarMetodoDespacho(${p.id})">
                         <option value="EFECTIVO">Efectivo</option>
                         <option value="TRANSFERENCIA">Transferencia</option>
                       </select>
                     </div>
 
-                    <!-- Opción: no dar devuelta (pago exacto o valores muy pequeños) -->
-                    <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
-                      <input type="checkbox" id="chk-sindev-${p.id}" class="chk-sin-devuelta"
-                             onchange="ModuloDomicilios.toggleSinDevuelta(${p.id})">
-                      Sin devuelta (pago exacto / valor muy pequeño)
-                    </label>
+                    <p id="pago-transfer-note-${p.id}" class="hidden text-sky-700">
+                      Transferencia: no aplica devuelta.
+                    </p>
 
-                    <!-- Edición: solo "paga con" -->
-                    <div id="pago-edit-${p.id}" class="hidden flex flex-wrap items-center gap-1.5">
-                      <span class="text-slate-600 font-medium">Cliente paga con $</span>
-                      <input type="number" id="paga-input-${p.id}" min="0" step="1000" value="${pagaCon}"
-                             class="w-28 border border-amber-300 rounded px-1.5 py-0.5 text-[11px] font-bold" />
-                      <button type="button" onclick="ModuloDomicilios.guardarPagaCon(${p.id})"
-                              class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold">OK</button>
-                      <button type="button" onclick="ModuloDomicilios.cancelarPagaCon(${p.id})"
-                              class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
-                      <button type="button" onclick="ModuloDomicilios.restaurarPagaConSugerido(${p.id})"
-                              class="px-2 py-0.5 rounded border border-amber-300 text-amber-900 text-[10px] font-bold">$50.000</button>
+                    <div id="pago-efectivo-box-${p.id}" class="space-y-1">
+                      <!-- Lectura -->
+                      <div id="pago-view-${p.id}" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span class="text-slate-600">
+                          Paga con:
+                          <b id="paga-txt-${p.id}" class="text-slate-900">$${pagaCon.toLocaleString('es-CO')}</b>
+                        </span>
+                        <button type="button" onclick="ModuloDomicilios.editarPagaCon(${p.id})"
+                                class="px-1.5 py-0.5 rounded border border-amber-300 bg-white text-amber-900 hover:bg-amber-50"
+                                title="Cambiar con cuánto paga">✏️</button>
+                        <span class="text-amber-800">
+                          Devuelta:
+                          <b id="dev-txt-${p.id}">$${devuelta.toLocaleString('es-CO')}</b>
+                        </span>
+                        <span class="text-emerald-800 font-semibold">
+                          A entregar:
+                          <b id="ent-txt-${p.id}">$${pagaCon.toLocaleString('es-CO')}</b>
+                        </span>
+                      </div>
+
+                      <!-- Opción: no dar devuelta (pago exacto o valores muy pequeños) -->
+                      <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
+                        <input type="checkbox" id="chk-sindev-${p.id}" class="chk-sin-devuelta"
+                               onchange="ModuloDomicilios.toggleSinDevuelta(${p.id})">
+                        Sin devuelta (pago exacto / valor muy pequeño)
+                      </label>
+
+                      <!-- Edición: solo "paga con" -->
+                      <div id="pago-edit-${p.id}" class="hidden flex flex-wrap items-center gap-1.5">
+                        <span class="text-slate-600 font-medium">Cliente paga con $</span>
+                        <input type="number" id="paga-input-${p.id}" min="0" step="1000" value="${pagaCon}"
+                               class="w-28 border border-amber-300 rounded px-1.5 py-0.5 text-[11px] font-bold" />
+                        <button type="button" onclick="ModuloDomicilios.guardarPagaCon(${p.id})"
+                                class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold">OK</button>
+                        <button type="button" onclick="ModuloDomicilios.cancelarPagaCon(${p.id})"
+                                class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
+                        <button type="button" onclick="ModuloDomicilios.restaurarPagaConSugerido(${p.id})"
+                                class="px-2 py-0.5 rounded border border-amber-300 text-amber-900 text-[10px] font-bold">$50.000</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -793,6 +802,53 @@ const ModuloDomicilios = {
     this.calcularBaseEfectivo();
   },
 
+  /** Cambia el método de pago de un pedido en Despachar: si es Transferencia, no aplica devuelta. */
+  cambiarMetodoDespacho(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
+    if (!chk || !sel) return;
+
+    const metodo = sel.value;
+    const total = parseFloat(chk.dataset.total) || 0;
+    const boxEfectivo = document.getElementById(`pago-efectivo-box-${pedidoId}`);
+    const notaTransfer = document.getElementById(`pago-transfer-note-${pedidoId}`);
+    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+
+    if (metodo !== 'EFECTIVO') {
+      // Transferencia: no hay efectivo de por medio, no se calcula ni se muestra devuelta.
+      chk.dataset.pagaCon = String(total);
+      chk.dataset.devuelta = '0';
+      chk.dataset.sinDevuelta = '0';
+      if (boxEfectivo) boxEfectivo.classList.add('hidden');
+      if (notaTransfer) notaTransfer.classList.remove('hidden');
+    } else {
+      if (boxEfectivo) boxEfectivo.classList.remove('hidden');
+      if (notaTransfer) notaTransfer.classList.add('hidden');
+
+      const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+      const sinDev = chkSinDev?.checked;
+      let pagaCon, devuelta;
+      if (sinDev) {
+        pagaCon = total;
+        devuelta = 0;
+      } else {
+        pagaCon = this.pagaConSugerido(total);
+        devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
+      }
+      chk.dataset.pagaCon = String(pagaCon);
+      chk.dataset.devuelta = String(devuelta);
+
+      const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
+      const elDev = document.getElementById(`dev-txt-${pedidoId}`);
+      const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
+      if (elPaga) elPaga.innerText = fmt(pagaCon);
+      if (elDev) elDev.innerText = fmt(devuelta);
+      if (elEnt) elEnt.innerText = fmt(pagaCon);
+    }
+
+    this.calcularBaseEfectivo();
+  },
+
   /**
    * Solo pedidos marcados en Efectivo.
    * Base de cambio = suma de devueltas.
@@ -972,20 +1028,12 @@ const ModuloDomicilios = {
       const municipios = Object.keys(porMunicipio);
 
       // ---- Totales por municipio ----
-      const BILLETE_MUN = 50000;
 
       function calcDevueltaPedido(p) {
-        const totalPedido = Number(p.total) || 0;
-        const tieneOriginal = Number(p.total_original) > 0;
-        const totalOriginal = tieneOriginal ? Number(p.total_original) : totalPedido;
+        // NO se recalcula nada aquí: solo se usa lo que quedó guardado al
+        // despachar. Si no se le puso devuelta (p.ej. Transferencia), es $0.
         const storedDev = Number(p.devuelta_calculada);
-        if (!isNaN(storedDev) && storedDev > 0) return storedDev;
-        if (tieneOriginal) {
-          const paga = Math.ceil(totalOriginal / BILLETE_MUN) * BILLETE_MUN;
-          return Math.max(0, paga - totalOriginal);
-        }
-        const paga = totalPedido > 0 ? Math.ceil(totalPedido / BILLETE_MUN) * BILLETE_MUN : 0;
-        return Math.max(0, paga - totalPedido);
+        return (!isNaN(storedDev) && storedDev > 0) ? storedDev : 0;
       }
 
       const statsPorMun = {};
@@ -1038,7 +1086,7 @@ const ModuloDomicilios = {
           </div>
 
           <div class="space-y-3" id="lista-municipios-cuadre">
-            ${municipios.map(mun => {
+            ${municipios.map((mun, munIdx) => {
               const lista = porMunicipio[mun];
               const st = statsPorMun[mun];
               const devueltasPendientesOtros = municipios.reduce((acc, m2) => {
@@ -1049,16 +1097,20 @@ const ModuloDomicilios = {
 
               return `
               <div class="border rounded-lg overflow-hidden" data-municipio="${mun}">
-                <div class="bg-indigo-50 px-3 py-2 border-b">
+                <div class="bg-indigo-50 px-3 py-2 border-b cursor-pointer select-none"
+                     onclick="ModuloDomicilios.toggleMunicipioCuadre(${munIdx})">
                   <div class="flex justify-between items-start gap-2">
-                    <div>
-                      <p class="text-xs font-bold text-indigo-900">📍 ${mun}</p>
-                      <p class="text-[10px] text-indigo-700">
-                        ${st.numEntregados}/${st.numPedidos} entregado(s)
-                        ${st.todosEntregados
-                          ? ' · <span class="text-emerald-700 font-semibold">Completo</span>'
-                          : ' · <span class="text-amber-700 font-semibold">En curso</span>'}
-                      </p>
+                    <div class="flex items-start gap-1.5">
+                      <span id="mun-arrow-${munIdx}" class="text-indigo-700 text-xs mt-0.5 transition-transform">▸</span>
+                      <div>
+                        <p class="text-xs font-bold text-indigo-900">📍 ${mun}</p>
+                        <p class="text-[10px] text-indigo-700">
+                          ${st.numEntregados}/${st.numPedidos} entregado(s)
+                          ${st.todosEntregados
+                            ? ' · <span class="text-emerald-700 font-semibold">Completo</span>'
+                            : ' · <span class="text-amber-700 font-semibold">En curso</span>'}
+                        </p>
+                      </div>
                     </div>
                     <div class="text-right text-[10px]">
                       <p class="text-indigo-900 font-bold">
@@ -1068,7 +1120,7 @@ const ModuloDomicilios = {
                     </div>
                   </div>
                 </div>
-                <div class="p-2 space-y-2 bg-white">
+                <div class="p-2 space-y-2 bg-white hidden" id="mun-body-${munIdx}">
                                       ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
                     const totalPedido = Number(p.total) || 0;
@@ -1081,21 +1133,11 @@ const ModuloDomicilios = {
                     const metodoActual = p.metodo_pago_final || 'EFECTIVO';
                     const motivoAjuste = (p.observacion || '').trim();
 
-                    // Devuelta FIJA: solo la guardada al despachar.
-                    // Si no hay, calcula UNA vez con total_original (no con total actual).
-                    const BILLETE = 50000;
+                    // Devuelta FIJA: solo la guardada al despachar. Si no se le
+                    // puso devuelta al despachar (p.ej. pagó por Transferencia),
+                    // se queda en $0 — no se inventa ni se recalcula aquí.
                     const storedDev = Number(p.devuelta_calculada);
-                    let devueltaEntregada;
-                    if (!isNaN(storedDev) && storedDev > 0) {
-                      devueltaEntregada = storedDev;
-                    } else if (tieneOriginal) {
-                      const paga = Math.ceil(totalOriginal / BILLETE) * BILLETE;
-                      devueltaEntregada = Math.max(0, paga - totalOriginal);
-                    } else {
-                      // Pedido viejo sin datos de despacho: estimado (se fijará al primer ajuste)
-                      const paga = totalPedido > 0 ? Math.ceil(totalPedido / BILLETE) * BILLETE : 0;
-                      devueltaEntregada = Math.max(0, paga - totalPedido);
-                    }
+                    const devueltaEntregada = (!isNaN(storedDev) && storedDev > 0) ? storedDev : 0;
 
                     const esTransfer = metodoActual === 'TRANSFERENCIA'
                       || metodoActual === 'TRANSFERENCIA_PENDIENTE';
@@ -1174,7 +1216,7 @@ const ModuloDomicilios = {
                                                    <p id="formula-txt-${p.id}" class="text-[10px] text-slate-600 mt-0.5 ${delta === 0 ? 'hidden' : ''}">
                             ${formulaTxt}
                           </p>
-                          <p class="text-[10px] text-amber-800 mt-0.5">
+                          <p class="text-[10px] text-amber-800 mt-0.5 ${devueltaEntregada > 0 ? '' : 'hidden'}">
                             Devuelta al salir: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b> (no cambia si ajustas el precio)
                           </p>
                           ${motivoAjuste ? `<p class="text-[10px] text-amber-800 italic mt-0.5" id="motivo-txt-${p.id}">📝 ${motivoAjuste.replace(/</g,'')}</p>` : `<p class="hidden text-[10px] text-amber-800 italic mt-0.5" id="motivo-txt-${p.id}"></p>`}
@@ -1225,7 +1267,7 @@ const ModuloDomicilios = {
 
                         <!-- Cifras de caja / devuelta -->
                         <div class="bg-slate-50 border rounded p-2 text-[11px] space-y-0.5">
-                          <div class="flex justify-between text-amber-900">
+                          <div class="flex justify-between text-amber-900 ${devueltaEntregada > 0 ? '' : 'hidden'}">
                             <span>Devuelta entregada (base):</span>
                             <b id="dev-line-${p.id}">$${devueltaEntregada.toLocaleString('es-CO')}</b>
                           </div>
@@ -1396,7 +1438,21 @@ async guardarAjusteTotal(pedidoId) {
   }
 },
 
-      toggleDetallePedido(pedidoId) {
+      toggleMunicipioCuadre(idx) {
+    const body = document.getElementById(`mun-body-${idx}`);
+    const arrow = document.getElementById(`mun-arrow-${idx}`);
+    if (!body) return;
+    const abierto = !body.classList.contains('hidden');
+    if (abierto) {
+      body.classList.add('hidden');
+      if (arrow) arrow.textContent = '▸';
+    } else {
+      body.classList.remove('hidden');
+      if (arrow) arrow.textContent = '▾';
+    }
+  },
+
+  toggleDetallePedido(pedidoId) {
     const det = document.getElementById(`detalle-${pedidoId}`);
     const res = document.getElementById(`resumen-${pedidoId}`);
     if (!det) return;
@@ -1537,7 +1593,12 @@ async guardarAjusteTotal(pedidoId) {
 
     const elCaja = document.getElementById(`caja-line-${pedidoId}`);
     const elHint = document.getElementById(`caja-hint-${pedidoId}`);
+    const elDevLine = document.getElementById(`dev-line-${pedidoId}`);
     if (elCaja) elCaja.innerText = `$${aCaja.toLocaleString('es-CO')}`;
+    if (elDevLine) {
+      elDevLine.innerText = `$${devuelta.toLocaleString('es-CO')}`;
+      elDevLine.closest('div')?.classList.toggle('hidden', !(devuelta > 0));
+    }
     if (elHint) {
       elHint.textContent = esTransfer
         ? 'Transferencia: en caja solo la devuelta de la base.'
