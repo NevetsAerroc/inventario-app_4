@@ -628,6 +628,18 @@ const ModuloDomicilios = {
     return Math.round(v / 50) * 50;
   },
 
+  /**
+   * Redondea cualquier monto en EFECTIVO físico (a entregar en caja, a cobrar,
+   * subtotales de municipio, arqueo) al múltiplo de $50 más cercano. No hay
+   * forma de entregar valores con centavos o "sueltos" de $1-$49 en billetes,
+   * así que el monto que realmente cambia de mano siempre se redondea.
+   * Los valores EXACTOS (Total a cobrar, Despachado, precio del producto)
+   * nunca se tocan: solo se redondea lo que se entrega/recibe en físico.
+   */
+  redondearCaja50(valor) {
+    return this.redondearDevuelta50(valor);
+  },
+
   devueltaPorPedido(totalPedido) {
     const t = Number(totalPedido) || 0;
     const pagaCon = this.pagaConSugerido(t);
@@ -1053,7 +1065,8 @@ const ModuloDomicilios = {
           const dev = calcDevueltaPedido(p);
           devueltas += dev;
           if (p.estado_entrega === 'ENTREGADO' && !esTransfer) {
-            cobradoEfectivo += totalPedido;
+            // Redondeado a $50: es el efectivo físico que realmente se entrega.
+            cobradoEfectivo += this.redondearCaja50(totalPedido);
           }
         });
 
@@ -1149,9 +1162,10 @@ const ModuloDomicilios = {
 
                     // Efectivo: valor cobrado (editado) + devuelta que salió con el domiciliario
                     // Transferencia: solo la devuelta de la base (si se despachó con devuelta)
-                    const aCaja = esTransfer
+                    // Redondeado a $50: es lo que físicamente se puede entregar en billetes/monedas.
+                    const aCaja = this.redondearCaja50(esTransfer
                       ? devueltaEntregada
-                      : (totalPedido + devueltaEntregada);
+                      : (totalPedido + devueltaEntregada));
 
                     const delta = tieneOriginal ? (totalPedido - totalOriginal) : 0;
                     const hayAjuste = tieneOriginal && delta !== 0;
@@ -1558,11 +1572,12 @@ async guardarAjusteTotal(pedidoId) {
       formulaEl.classList.remove('hidden');
     }
 
-    // Caja = cobrado + devuelta fija (efectivo)
+    // Caja = cobrado + devuelta fija (efectivo). Redondeado a $50: es lo que
+    // físicamente se puede entregar en billetes/monedas.
     const elCaja = document.getElementById(`caja-line-${pedidoId}`);
     const metodo = sel?.value || 'EFECTIVO';
     const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
-    const aCaja = esTransfer ? devueltaFija : (nuevoTotal + devueltaFija);
+    const aCaja = this.redondearCaja50(esTransfer ? devueltaFija : (nuevoTotal + devueltaFija));
     if (elCaja) elCaja.innerText = `$${aCaja.toLocaleString('es-CO')}`;
 
     document.getElementById(`panel-ajuste-${pedidoId}`)?.classList.add('hidden');
@@ -1602,7 +1617,8 @@ async guardarAjusteTotal(pedidoId) {
     // Si se despachó en transferencia, devuelta_calculada ya quedó en $0.
     // NUNCA se recalcula aquí, solo se lee lo guardado.
     const devuelta = parseFloat(sel?.dataset?.devuelta) || parseFloat(card?.dataset?.devuelta) || 0;
-    const aCaja = esTransfer ? devuelta : (total + devuelta);
+    // Redondeado a $50: es lo que físicamente se puede entregar en billetes/monedas.
+    const aCaja = this.redondearCaja50(esTransfer ? devuelta : (total + devuelta));
 
     const elCaja = document.getElementById(`caja-line-${pedidoId}`);
     const elHint = document.getElementById(`caja-hint-${pedidoId}`);
@@ -1702,7 +1718,8 @@ async guardarAjusteTotal(pedidoId) {
         totalDevueltasTransfer += devuelta;
       } else {
         if (boxComp) boxComp.classList.add('hidden');
-        totalEfectivoRecolectado += total;
+        // Redondeado a $50: es el efectivo físico que realmente se entrega/recibe.
+        totalEfectivoRecolectado += this.redondearCaja50(total);
       }
     });
 
