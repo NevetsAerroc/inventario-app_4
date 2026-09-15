@@ -204,6 +204,10 @@ app.get('/api/rutas/:id', (req, res) => {
   try {
     const ruta = db.prepare("SELECT r.*, d.nombre as domiciliario_nombre FROM rutas_domicilio r LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id WHERE r.id = ?").get(req.params.id);
     const pedidos = db.prepare("SELECT * FROM pedidos WHERE ruta_id = ?").all(req.params.id);
+    for (const p of pedidos) {
+      const items = db.prepare("SELECT * FROM detalle_pedidos WHERE pedido_id = ?").all(p.id);
+      p.items = items || [];
+    }
     res.json({ ok: true, ruta, pedidos });
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });

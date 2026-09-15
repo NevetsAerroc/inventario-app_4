@@ -107,12 +107,35 @@ router.get('/sugerencias', (req, res) => {
   const soloConCodigo = req.query.con_codigo === '1' || req.query.con_codigo === 'true';
   if (!q) return res.json({ ok: true, data: [], total: 0 });
 
-  const qNorm = db.normalizarCodigoBarras(q) || q;
+  const words = q.split(/\s+/).filter(Boolean);
   const like = `%${q}%`;
+  const likeNoSpaces = `%${q.replace(/\s+/g, '')}%`;
+  const qNorm = db.normalizarCodigoBarras(q) || q;
   const likeNorm = `%${qNorm}%`;
-  let where = `(nombre LIKE ? OR sku LIKE ? OR ubicacion LIKE ? OR categoria LIKE ? OR subcategoria LIKE ?
-                 OR codigo_barras LIKE ? OR codigo_caja LIKE ? OR codigo_barras LIKE ? OR codigo_caja LIKE ?)`;
-  const params = [like, like, like, like, like, like, like, likeNorm, likeNorm];
+
+  let conditions = [];
+  let params = [];
+
+  // 1. Direct match with original query
+  conditions.push(`(nombre LIKE ? OR sku LIKE ? OR ubicacion LIKE ? OR categoria LIKE ? OR subcategoria LIKE ? OR codigo_barras LIKE ? OR codigo_caja LIKE ? OR codigo_barras LIKE ? OR codigo_caja LIKE ?)`);
+  params.push(like, like, like, like, like, like, like, likeNorm, likeNorm);
+
+  // 2. Match without spaces (e.g. "vaso icopor" matches "vasoicopor")
+  conditions.push(`(REPLACE(LOWER(nombre), ' ', '') LIKE ? OR REPLACE(LOWER(sku), ' ', '') LIKE ? OR REPLACE(LOWER(categoria), ' ', '') LIKE ?)`);
+  params.push(likeNoSpaces, likeNoSpaces, likeNoSpaces);
+
+  // 3. If multiple words, ensure all words match
+  if (words.length > 1) {
+    let wordConditions = [];
+    for (const w of words) {
+      const wLike = `%${w}%`;
+      wordConditions.push(`(nombre LIKE ? OR sku LIKE ? OR categoria LIKE ? OR subcategoria LIKE ?)`);
+      params.push(wLike, wLike, wLike, wLike);
+    }
+    conditions.push(`(${wordConditions.join(' AND ')})`);
+  }
+
+  let where = `(${conditions.join(' OR ')})`;
 
   if (soloConCodigo) {
     where += ` AND ((codigo_barras IS NOT NULL AND codigo_barras != '') OR (codigo_caja IS NOT NULL AND codigo_caja != ''))`;

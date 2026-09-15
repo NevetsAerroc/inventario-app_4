@@ -38,6 +38,9 @@ const ModuloDomicilios = {
             <button onclick="ModuloDomicilios.abrirModalNuevoDomiciliario()" class="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium">
               + Domiciliario
             </button>
+            <button onclick="abrirModalNuevoCliente('', () => showToast('Cliente guardado con éxito', 'success'))" class="px-2 py-1 text-xs bg-teal-600 hover:bg-teal-700 text-white rounded-md font-medium">
+              + Cliente
+            </button>
             <button onclick="ModuloDomicilios.toggleFormularioNuevoPedido()" class="px-2 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium">
               + Crear Pedido
             </button>
@@ -80,8 +83,18 @@ const ModuloDomicilios = {
             <!-- BÚSQUEDA Y CREACIÓN DE CLIENTES (AUTOCOMPLETE) -->
             <div class="relative">
               <label class="block text-[10px] text-slate-500 mb-0.5">Cliente</label>
-              <input id="dom-cliente" type="text" placeholder="Buscar o crear cliente..." autocomplete="off"
-                     class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
+              <div class="flex gap-1">
+                <input id="dom-cliente" type="text" placeholder="Buscar o crear cliente..." autocomplete="off"
+                       class="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
+                <button type="button" onclick="abrirModalNuevoCliente('', (c) => {
+                  ModuloDomicilios.clienteSeleccionadoId = c.id;
+                  document.getElementById('dom-cliente').value = c.nombre || '';
+                  if (c.telefono) document.getElementById('dom-telefono').value = c.telefono;
+                  if (c.direccion) document.getElementById('dom-direccion').value = c.direccion;
+                  if (c.ciudad) document.getElementById('dom-municipio').value = c.ciudad;
+                  showToast('Cliente creado y seleccionado', 'success');
+                })" class="px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold" title="Agregar cliente nuevo">➕</button>
+              </div>
               <div id="dom-autocomplete-cliente" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto"></div>
             </div>
           </div>
@@ -200,6 +213,9 @@ const ModuloDomicilios = {
         (clienteNuevo) => {
           this.clienteSeleccionadoId = clienteNuevo.id;
           document.getElementById('dom-cliente').value = clienteNuevo.nombre || clienteNuevo.cliente || '';
+          if (clienteNuevo.telefono) document.getElementById('dom-telefono').value = clienteNuevo.telefono;
+          if (clienteNuevo.direccion) document.getElementById('dom-direccion').value = clienteNuevo.direccion;
+          if (clienteNuevo.ciudad) document.getElementById('dom-municipio').value = clienteNuevo.ciudad;
         }
       );
     }
@@ -1111,13 +1127,14 @@ const ModuloDomicilios = {
                 return acc + (s2.todosEntregados ? 0 : s2.devueltas);
               }, 0);
 
+              const abiertoMun = this.municipiosAbiertos && this.municipiosAbiertos[munIdx];
               return `
               <div class="border rounded-lg overflow-hidden" data-municipio="${mun}">
                 <div class="bg-indigo-50 px-3 py-2 border-b cursor-pointer select-none"
                      onclick="ModuloDomicilios.toggleMunicipioCuadre(${munIdx})">
                   <div class="flex justify-between items-start gap-2">
                     <div class="flex items-start gap-1.5">
-                      <span id="mun-arrow-${munIdx}" class="text-indigo-700 text-xs mt-0.5 transition-transform">▸</span>
+                      <span id="mun-arrow-${munIdx}" class="text-indigo-700 text-xs mt-0.5 transition-transform">${abiertoMun ? '▾' : '▸'}</span>
                       <div>
                         <p class="text-xs font-bold text-indigo-900">📍 ${mun}</p>
                         <p class="text-[10px] text-indigo-700">
@@ -1136,7 +1153,7 @@ const ModuloDomicilios = {
                     </div>
                   </div>
                 </div>
-                <div class="p-2 space-y-2 bg-white hidden" id="mun-body-${munIdx}">
+                <div class="p-2 space-y-2 bg-white ${abiertoMun ? '' : 'hidden'}" id="mun-body-${munIdx}">
                                       ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
                     const totalPedido = Number(p.total) || 0;
@@ -1190,9 +1207,29 @@ const ModuloDomicilios = {
                           : `<span class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Pendiente</span>`}
                       </div>
 
+                      <div class="border-t border-slate-100 pt-1.5">
+                        <button type="button" onclick="ModuloDomicilios.toggleProductosPedido(${p.id})"
+                                class="text-[11px] text-sky-700 font-semibold hover:underline flex items-center justify-between w-full">
+                          <span>🛒 Productos de la factura (${p.items?.length || 0})</span>
+                          <span id="prod-arrow-${p.id}">${(this.productosPedidoAbiertos && this.productosPedidoAbiertos[p.id]) ? '▴' : '▾'}</span>
+                        </button>
+                        <div id="productos-pedido-${p.id}" class="${(this.productosPedidoAbiertos && this.productosPedidoAbiertos[p.id]) ? '' : 'hidden'} mt-1.5 space-y-1 bg-slate-50 p-2 rounded-lg text-[11px] text-slate-700 border border-slate-200/60">
+                          ${(p.items && p.items.length > 0) ? p.items.map(item => `
+                            <div class="flex justify-between items-center border-b border-slate-200/60 pb-1 last:border-b-0 last:pb-0">
+                              <div>
+                                <p class="font-medium text-slate-800">${item.nombre_producto || 'Producto'} <span class="text-[10px] text-slate-400 font-mono">(SKU ${item.sku || '—'})</span></p>
+                              </div>
+                              <div class="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                ×${item.cantidad_solicitada || item.cantidad_empacada || 1}
+                              </div>
+                            </div>
+                          `).join('') : '<p class="text-[10px] text-slate-400 italic">No hay productos registrados en este pedido.</p>'}
+                        </div>
+                      </div>
+
                       ${entregado ? `
                       <!-- VISTA COLAPSADA (entregado) -->
-                      <div id="resumen-${p.id}" class="text-[11px] space-y-1">
+                      <div id="resumen-${p.id}" class="text-[11px] space-y-1 ${(this.detallesAbiertos && this.detallesAbiertos[p.id]) ? 'hidden' : ''}">
                         <p class="text-slate-600">Despachado: <b>$${totalOriginal.toLocaleString('es-CO')}</b></p>
                         ${hayAjuste ? `
                         <p class="text-slate-600">
@@ -1214,7 +1251,7 @@ const ModuloDomicilios = {
                         <button type="button" onclick="ModuloDomicilios.toggleDetallePedido(${p.id})"
                                 class="text-[10px] text-indigo-600 font-semibold mt-1">▶ Ver más detalles</button>
                       </div>
-                      <div id="detalle-${p.id}" class="hidden space-y-2">
+                      <div id="detalle-${p.id}" class="${(this.detallesAbiertos && this.detallesAbiertos[p.id]) ? '' : 'hidden'} space-y-2">
                       ` : `<div id="detalle-${p.id}" class="space-y-2">`}
 
                         <!-- Valor + botones + / − -->
@@ -1462,6 +1499,7 @@ async guardarAjusteTotal(pedidoId) {
 },
 
       toggleMunicipioCuadre(idx) {
+    this.municipiosAbiertos = this.municipiosAbiertos || {};
     const body = document.getElementById(`mun-body-${idx}`);
     const arrow = document.getElementById(`mun-arrow-${idx}`);
     if (!body) return;
@@ -1469,13 +1507,16 @@ async guardarAjusteTotal(pedidoId) {
     if (abierto) {
       body.classList.add('hidden');
       if (arrow) arrow.textContent = '▸';
+      this.municipiosAbiertos[idx] = false;
     } else {
       body.classList.remove('hidden');
       if (arrow) arrow.textContent = '▾';
+      this.municipiosAbiertos[idx] = true;
     }
   },
 
   toggleDetallePedido(pedidoId) {
+    this.detallesAbiertos = this.detallesAbiertos || {};
     const det = document.getElementById(`detalle-${pedidoId}`);
     const res = document.getElementById(`resumen-${pedidoId}`);
     if (!det) return;
@@ -1483,10 +1524,28 @@ async guardarAjusteTotal(pedidoId) {
     if (abierto) {
       det.classList.add('hidden');
       if (res) res.classList.remove('hidden');
+      this.detallesAbiertos[pedidoId] = false;
     } else {
       det.classList.remove('hidden');
-      // el resumen puede quedarse visible arriba; opcional ocultarlo:
-      // if (res) res.classList.add('hidden');
+      if (res) res.classList.add('hidden');
+      this.detallesAbiertos[pedidoId] = true;
+    }
+  },
+
+  toggleProductosPedido(pedidoId) {
+    this.productosPedidoAbiertos = this.productosPedidoAbiertos || {};
+    const box = document.getElementById(`productos-pedido-${pedidoId}`);
+    const arrow = document.getElementById(`prod-arrow-${pedidoId}`);
+    if (!box || !box.classList) return;
+    const abierto = !box.classList.contains('hidden');
+    if (abierto) {
+      box.classList.add('hidden');
+      if (arrow) arrow.textContent = '▾';
+      this.productosPedidoAbiertos[pedidoId] = false;
+    } else {
+      box.classList.remove('hidden');
+      if (arrow) arrow.textContent = '▴';
+      this.productosPedidoAbiertos[pedidoId] = true;
     }
   },
 

@@ -162,6 +162,12 @@ const ModuloCarga = (() => {
           <label class="block text-xs font-semibold text-slate-700">Código de barras escaneado (puedes editarlo):</label>
           <input id="vinculo-confirm-codigo" type="text" autocomplete="off" inputmode="numeric"
                  class="w-full border-2 border-emerald-300 rounded-lg px-3 py-2.5 text-sm font-mono bg-white focus:ring-2 focus:ring-emerald-500" />
+          
+          <div id="vinculo-confirm-upc-wrap" class="hidden space-y-1">
+            <label class="block text-xs font-semibold text-slate-700">📦 Unidades por caja:</label>
+            <input id="vinculo-confirm-upc" type="number" min="1" value="1"
+                   class="w-full border-2 border-emerald-300 rounded-lg px-3 py-2 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500" />
+          </div>
           <div class="grid grid-cols-3 gap-2">
             <button type="button" data-vinculo-accion="cancelar" class="py-2.5 rounded-lg bg-slate-200 text-slate-700 font-semibold text-xs">
               Cancelar
@@ -354,31 +360,35 @@ const ModuloCarga = (() => {
 
   async function guardarProductoNuevo() {
     const errorEl = document.getElementById('form-agregar-error');
-    errorEl.classList.add('hidden');
+    errorEl?.classList.add('hidden');
 
     const payload = {
-      sku: document.getElementById('f-sku').value.trim(),
-      nombre: document.getElementById('f-nombre').value.trim(),
-      categoria: document.getElementById('f-categoria').value.trim(),
-      subcategoria: document.getElementById('f-subcategoria').value.trim(),
-      ubicacion: document.getElementById('f-ubicacion').value.trim(),
-      stock: document.getElementById('f-stock').value || 0,
-      precio: document.getElementById('f-precio').value || 0,
-      codigo_barras: document.getElementById('f-codigo').value.trim(),
-      codigo_caja: document.getElementById('f-codigo-caja').value.trim(),
-      unidades_por_caja: Number(document.getElementById('f-unidades-caja').value) || 1
+      sku: document.getElementById('f-sku')?.value?.trim() || '',
+      nombre: document.getElementById('f-nombre')?.value?.trim() || '',
+      categoria: document.getElementById('f-categoria')?.value?.trim() || '',
+      subcategoria: document.getElementById('f-subcategoria')?.value?.trim() || '',
+      ubicacion: document.getElementById('f-ubicacion')?.value?.trim() || '',
+      stock: document.getElementById('f-stock')?.value || 0,
+      precio: document.getElementById('f-precio')?.value || 0,
+      codigo_barras: document.getElementById('f-codigo')?.value?.trim() || '',
+      codigo_caja: document.getElementById('f-codigo-caja')?.value?.trim() || '',
+      unidades_por_caja: Number(document.getElementById('f-unidades-caja')?.value) || 1
     };
 
     if (!payload.sku || !payload.nombre) {
-      errorEl.textContent = 'SKU y Nombre son obligatorios.';
-      errorEl.classList.remove('hidden');
+      if (errorEl) {
+        errorEl.textContent = 'SKU y Nombre son obligatorios.';
+        errorEl.classList.remove('hidden');
+      }
       return;
     }
 
     const data = await apiFetch('/productos', { method: 'POST', body: JSON.stringify(payload) });
     if (!data.ok) {
-      errorEl.textContent = data.error;
-      errorEl.classList.remove('hidden');
+      if (errorEl) {
+        errorEl.textContent = data.error;
+        errorEl.classList.remove('hidden');
+      }
       return;
     }
 
@@ -828,7 +838,7 @@ const ModuloCarga = (() => {
 
     if (producto) {
       const buscar = document.getElementById('input-buscar-vinculo');
-      if (buscar) buscar.value = `${producto.sku} — ${producto.nombre}`;
+      if (buscar) buscar.value = '';
 
       if (cardSel) {
         cardSel.classList.remove('hidden');
@@ -991,7 +1001,11 @@ const ModuloCarga = (() => {
     if (!productoSeleccionado) return;
 
     const tipoVinculo = document.querySelector('input[name="tipo_vinculo"]:checked').value;
-    const unidadesCaja = Number(document.getElementById('input-vinculo-unidades-caja')?.value) || 1;
+    const unidadesCajaConfirm = document.getElementById('vinculo-confirm-upc');
+    const unidadesCajaInput = document.getElementById('input-vinculo-unidades-caja');
+    const unidadesCaja = tipoVinculo === 'CAJA'
+      ? (Number(unidadesCajaConfirm?.value) || Number(unidadesCajaInput?.value) || 1)
+      : 1;
 
     const data = await apiFetch(`/productos/${productoSeleccionado}/vincular-barcode`, {
       method: 'POST',
@@ -1305,6 +1319,17 @@ async function cargarProductos() {
     codigoEl.value = (typeof normalizarCodigoBarras === 'function')
       ? normalizarCodigoBarras(codigo || '')
       : String(codigo || '').trim();
+
+    const upcWrap = document.getElementById('vinculo-confirm-upc-wrap');
+    const upcInput = document.getElementById('vinculo-confirm-upc');
+    if (tipoVinculo === 'CAJA') {
+      if (upcWrap) upcWrap.classList.remove('hidden');
+      if (upcInput) {
+        upcInput.value = producto?.unidades_por_caja || document.getElementById('input-vinculo-unidades-caja')?.value || 1;
+      }
+    } else {
+      if (upcWrap) upcWrap.classList.add('hidden');
+    }
 
     // Cámara cerrada; el botón se queda oculto mientras se confirma
     if (btnStart) btnStart.classList.add('hidden');
