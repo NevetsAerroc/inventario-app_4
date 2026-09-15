@@ -26,7 +26,18 @@ async function apiFetch(url, options = {}) {
   }
 
   let data;
-  try { data = await res.json(); } catch (e) { data = { ok: false, error: 'Respuesta invalida del servidor.' }; }
+  try {
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      // Si el servidor respondió HTML o texto plano con error
+      const cleanText = (text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      data = { ok: false, error: cleanText ? cleanText.slice(0, 150) : `Error ${res.status} del servidor.` };
+    }
+  } catch (e) {
+    data = { ok: false, error: `Error ${res.status || ''} al comunicar con el servidor.` };
+  }
   if (!res.ok && data.ok !== false) data.ok = false;
 
   // Si la sesión expiró o es inválida, invocar cierre automático

@@ -155,12 +155,16 @@ router.post('/manual', (req, res) => {
 
       const pedidoId = info.lastInsertRowid;
       const stmtItem = db.prepare(`
-        INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada, cantidad_empacada, verificado)
-        VALUES (?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada, cantidad_empacada, verificado, es_faltante, nota_faltante)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const item of items) {
         const cant = Number(item.cantidad) || 1;
+        const esFaltante = item.es_faltante ? 1 : 0;
+        const notaFaltante = item.nota_faltante || '';
+        const verificado = esFaltante ? 1 : 1;
+        const cantEmpacada = esFaltante ? 0 : cant;
         const prod = item.producto_id ? buscarProductoPorId.get(item.producto_id) : (item.sku ? buscarProducto.get(item.sku) : null);
         stmtItem.run(
           pedidoId,
@@ -168,7 +172,10 @@ router.post('/manual', (req, res) => {
           (prod && prod.sku) || item.sku || '',
           (prod && prod.nombre) || item.nombre || 'Producto',
           cant,
-          cant
+          cantEmpacada,
+          verificado,
+          esFaltante,
+          notaFaltante
         );
       }
 
@@ -585,6 +592,46 @@ router.post('/:id/escanear', (req, res) => {
 });
 
 // ------------------------------------------------------------------
+// POST /api/pedidos/:pedidoId/items/:itemId/faltante
+// ------------------------------------------------------------------
+router.post('/:pedidoId/items/:itemId/faltante', (req, res) => {
+  const { pedidoId, itemId } = req.params;
+  const { es_faltante, nota_faltante } = req.body;
+
+  try {
+    const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
+    if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
+
+    const item = db.prepare('SELECT * FROM detalle_pedidos WHERE id = ? AND pedido_id = ?').get(itemId, pedidoId);
+    if (!item) return res.status(404).json({ ok: false, error: 'Ítem no encontrado' });
+
+    const nuevoEsFaltante = es_faltante ? 1 : 0;
+    const nuevaNota = nota_faltante !== undefined ? String(nota_faltante).trim() : (item.nota_faltante || '');
+    const verificadoFinal = 1; // Si es faltante o verificado, se marca como procesado para empaque
+
+    db.prepare(`
+      UPDATE detalle_pedidos 
+      SET es_faltante = ?, nota_faltante = ?, verificado = ?
+      WHERE id = ?
+    `).run(nuevoEsFaltante, nuevaNota, verificadoFinal, itemId);
+
+    const itemActualizado = db.prepare('SELECT * FROM detalle_pedidos WHERE id = ?').get(itemId);
+    const totales = db.prepare(`
+      SELECT COUNT(*) as total, SUM(verificado) as verificados FROM detalle_pedidos WHERE pedido_id = ?
+    `).get(pedidoId);
+
+    res.json({
+      ok: true,
+      mensaje: nuevoEsFaltante ? 'Ítem marcado como faltante para compra/recolección' : 'Ítem desmarcado de faltante',
+      item: itemActualizado,
+      progreso: { total: totales.total, verificados: totales.verificados || 0 }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
 // POST /api/pedidos/:id/cerrar
 // ------------------------------------------------------------------
 router.post('/:id/cerrar', (req, res) => {
@@ -594,6 +641,9 @@ router.post('/:id/cerrar', (req, res) => {
   if (pedido.estado === 'EMPACADO') {
     return res.status(400).json({ ok: false, error: 'El pedido ya esta EMPACADO.' });
   }
+
+  // Marcar automáticamente como verificados los ítems faltantes antes de evaluar
+  db.prepare("UPDATE detalle_pedidos SET verificado = 1 WHERE pedido_id = ? AND es_faltante = 1").run(id);
 
   const items = db.prepare('SELECT * FROM detalle_pedidos WHERE pedido_id = ?').all(id);
   const incompletos = items.filter(i => i.verificado !== 1);

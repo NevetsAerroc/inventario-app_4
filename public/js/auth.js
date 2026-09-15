@@ -838,21 +838,113 @@ const Auth = (() => {
     }
   }
 
-  async function crearDomiciliarioRapido() {
-    const nombre = prompt('Ingresa el nombre del repartidor a registrar:');
-    if (!nombre || !nombre.trim()) return;
-    const telefono = prompt('Ingresa el teléfono del repartidor (opcional):') || '';
+  function crearDomiciliarioRapido() {
+    abrirModalCrearDomiciliario();
+  }
+
+  function abrirModalCrearDomiciliario() {
+    let modalDomi = document.getElementById('modal-crear-domiciliario-auth');
+    if (!modalDomi) {
+      modalDomi = document.createElement('div');
+      modalDomi.id = 'modal-crear-domiciliario-auth';
+      modalDomi.className = 'fixed inset-0 z-[70] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4';
+      document.body.appendChild(modalDomi);
+    }
+
+    modalDomi.classList.remove('hidden');
+    modalDomi.innerHTML = `
+      <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+        <!-- HEADER -->
+        <div class="bg-emerald-800 text-white px-5 py-3.5 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-lg">🛵</div>
+            <div>
+              <h3 class="font-bold text-sm sm:text-base leading-tight">Registrar Nuevo Domiciliario</h3>
+              <p class="text-[11px] text-emerald-100">Crea el perfil de repartidor para asignarle rutas y pedidos</p>
+            </div>
+          </div>
+          <button type="button" onclick="Auth.cerrarModalCrearDomiciliario()"
+                  class="text-emerald-200 hover:text-white p-1 rounded-lg text-lg">✕</button>
+        </div>
+
+        <!-- FORMULARIO -->
+        <form id="form-nuevo-domiciliario-auth" onsubmit="event.preventDefault(); Auth.confirmarCrearDomiciliarioRapido();" class="p-5 space-y-4">
+          <div id="error-crear-domi-auth" class="hidden text-xs bg-rose-50 border border-rose-200 text-rose-700 p-2.5 rounded-lg font-medium"></div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Nombre Completo del Repartidor *</label>
+            <input id="input-nombre-domi-auth" type="text" required placeholder="Ej: Carlos Andrés Pérez"
+                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-emerald-500 font-medium" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Teléfono / WhatsApp de Contacto</label>
+            <input id="input-tel-domi-auth" type="tel" placeholder="Ej: 300 123 4567"
+                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-emerald-500 font-medium" />
+          </div>
+
+          <div class="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+            <button type="button" onclick="Auth.cerrarModalCrearDomiciliario()"
+                    class="px-3.5 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition">
+              Cancelar
+            </button>
+            <button type="submit" id="btn-submit-domi-auth"
+                    class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5">
+              <span>✓ Guardar y Seleccionar</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    setTimeout(() => {
+      const inp = document.getElementById('input-nombre-domi-auth');
+      if (inp) inp.focus();
+    }, 50);
+  }
+
+  function cerrarModalCrearDomiciliario() {
+    const modalDomi = document.getElementById('modal-crear-domiciliario-auth');
+    if (modalDomi) modalDomi.classList.add('hidden');
+  }
+
+  async function confirmarCrearDomiciliarioRapido() {
+    const errorEl = document.getElementById('error-crear-domi-auth');
+    const btnSubmit = document.getElementById('btn-submit-domi-auth');
+    if (errorEl) errorEl.classList.add('hidden');
+
+    const inpNombre = document.getElementById('input-nombre-domi-auth');
+    const inpTel = document.getElementById('input-tel-domi-auth');
+    const nombre = inpNombre ? inpNombre.value.trim() : '';
+    const telefono = inpTel ? inpTel.value.trim() : '';
+
+    if (!nombre) {
+      if (errorEl) {
+        errorEl.textContent = 'El nombre del domiciliario es obligatorio';
+        errorEl.classList.remove('hidden');
+      }
+      return;
+    }
 
     try {
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span>⏳ Guardando...</span>';
+      }
+
       const res = await apiFetch('/domiciliarios', {
         method: 'POST',
-        body: JSON.stringify({ nombre: nombre.trim(), telefono: telefono.trim() })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, telefono })
       });
-      if (res.ok && res.id) {
-        showToast('Domiciliario registrado con éxito', 'success');
-        // Recargar lista
+
+      if (res && res.ok && res.id) {
+        showToast('Domiciliario creado con éxito', 'success');
+        cerrarModalCrearDomiciliario();
+
+        // Recargar lista de domiciliarios
         const resDom = await apiFetch('/domiciliarios');
-        if (resDom.ok) {
+        if (resDom && resDom.ok) {
           domiciliariosList = resDom.domiciliarios || [];
           const select = document.getElementById('usr-domiciliario-id');
           if (select) {
@@ -864,13 +956,29 @@ const Auth = (() => {
                 </option>
               `).join('')}
             `;
+            select.value = String(res.id);
           }
         }
       } else {
-        showToast(res.error || 'No se pudo crear el domiciliario', 'error');
+        if (errorEl) {
+          errorEl.textContent = (res && res.error) || 'No se pudo crear el domiciliario';
+          errorEl.classList.remove('hidden');
+        } else {
+          showToast((res && res.error) || 'No se pudo crear el domiciliario', 'error');
+        }
       }
     } catch (e) {
-      showToast('Error de conexión', 'error');
+      if (errorEl) {
+        errorEl.textContent = 'Error de conexión con el servidor';
+        errorEl.classList.remove('hidden');
+      } else {
+        showToast('Error de conexión', 'error');
+      }
+    } finally {
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<span>✓ Guardar y Seleccionar</span>';
+      }
     }
   }
 
@@ -1018,6 +1126,9 @@ const Auth = (() => {
     onToggleTipoDomicilio,
     aplicarPlantillaPermisos,
     crearDomiciliarioRapido,
+    abrirModalCrearDomiciliario,
+    cerrarModalCrearDomiciliario,
+    confirmarCrearDomiciliarioRapido,
     guardarUsuario,
     toggleEstadoUsuario,
     eliminarUsuario

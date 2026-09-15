@@ -55,6 +55,12 @@ agregarColumnaSiNoExiste('pedidos', 'estado_liquidacion', "TEXT DEFAULT 'PENDIEN
 agregarColumnaSiNoExiste('pedidos', 'estado_entrega', "TEXT DEFAULT 'PENDIENTE'");
 agregarColumnaSiNoExiste('pedidos', 'total_original', 'REAL');
 agregarColumnaSiNoExiste('pedidos', 'devuelta_calculada', 'REAL DEFAULT 0');
+agregarColumnaSiNoExiste('pedidos', 'monto_abono', 'REAL DEFAULT 0');
+agregarColumnaSiNoExiste('pedidos', 'saldo_pendiente', 'REAL DEFAULT 0');
+agregarColumnaSiNoExiste('pedidos', 'metodo_abono', "TEXT DEFAULT 'EFECTIVO'");
+agregarColumnaSiNoExiste('pedidos', 'tipo_saldo', "TEXT DEFAULT 'CREDITO'");
+agregarColumnaSiNoExiste('pedidos', 'usuario_confirmacion_id', 'INTEGER');
+agregarColumnaSiNoExiste('pedidos', 'usuario_confirmacion_nombre', "TEXT DEFAULT ''");
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pedidos_telefono ON pedidos(telefono);
   CREATE INDEX IF NOT EXISTS idx_pedidos_cliente ON pedidos(cliente);
@@ -80,9 +86,19 @@ db.exec(`
     base_efectivo REAL DEFAULT 0,
     total_recolectado REAL DEFAULT 0,
     fecha_liquidacion DATETIME,
+    usuario_liquidacion_id INTEGER,
+    usuario_liquidacion_nombre TEXT DEFAULT '',
     FOREIGN KEY (domiciliario_id) REFERENCES domiciliarios(id)
   );
 `);
+
+agregarColumnaSiNoExiste('rutas_domicilio', 'usuario_liquidacion_id', 'INTEGER');
+agregarColumnaSiNoExiste('rutas_domicilio', 'usuario_liquidacion_nombre', "TEXT DEFAULT ''");
+agregarColumnaSiNoExiste('pedidos', 'usuario_confirmacion_id', 'INTEGER');
+agregarColumnaSiNoExiste('pedidos', 'usuario_confirmacion_nombre', "TEXT DEFAULT ''");
+agregarColumnaSiNoExiste('pedidos', 'fecha_confirmacion_pago', 'DATETIME');
+agregarColumnaSiNoExiste('detalle_pedidos', 'es_faltante', 'INTEGER DEFAULT 0');
+agregarColumnaSiNoExiste('detalle_pedidos', 'nota_faltante', "TEXT DEFAULT ''");
 
 // ==========================================
 // MIGRACIONES: USUARIOS, SESIONES Y ROLES (RBAC)
@@ -223,6 +239,7 @@ db.descontarStockDePedido = function descontarStockDePedido(pedidoId, motivo) {
   const vincularItem = db.prepare('UPDATE detalle_pedidos SET producto_id = ? WHERE id = ? AND producto_id IS NULL');
 
   items.forEach((item) => {
+    if (item.es_faltante === 1) return;
     let producto = item.producto_id ? getPorId.get(item.producto_id) : null;
     if (!producto && item.sku) producto = getPorSku.get(item.sku);
     if (!producto) return;

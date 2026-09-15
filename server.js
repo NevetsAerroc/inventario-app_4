@@ -166,20 +166,26 @@ app.post('/api/rutas/despachar', (req, res) => {
           : totalOriginal;
         total = Math.round(total);
 
-        // "Paga con" y "devuelta": se respeta lo definido en el despacho
-        // (incluye ediciones manuales y la opción "sin devuelta"); si no
-        // llegó nada, se calcula el sugerido por defecto.
-        let pagaCon = (item.pagaCon !== undefined && item.pagaCon !== null && Number(item.pagaCon) >= total)
-          ? Math.round(Number(item.pagaCon))
-          : (total > 0 ? Math.ceil(total / BILLETE) * BILLETE : 0);
+        const metodo = item.metodoPago || 'EFECTIVO';
+        const esYaPago = metodo === 'YA_PAGO' || item.yaPago === true || item.yaPago === 1;
 
-        let devuelta = (item.devuelta !== undefined && item.devuelta !== null)
-          ? redondearDevuelta50(Number(item.devuelta))
-          : redondearDevuelta50(Math.max(0, pagaCon - total));
+        let pagaCon = 0;
+        let devuelta = 0;
+
+        if (!esYaPago && metodo === 'EFECTIVO') {
+          // "Paga con" y "devuelta": se respeta lo definido en el despacho
+          pagaCon = (item.pagaCon !== undefined && item.pagaCon !== null && Number(item.pagaCon) >= total)
+            ? Math.round(Number(item.pagaCon))
+            : (total > 0 ? Math.ceil(total / BILLETE) * BILLETE : 0);
+
+          devuelta = (item.devuelta !== undefined && item.devuelta !== null)
+            ? redondearDevuelta50(Number(item.devuelta))
+            : redondearDevuelta50(Math.max(0, pagaCon - total));
+        }
 
         updatePedido.run(
           infoRuta.lastInsertRowid,
-          item.metodoPago || 'EFECTIVO',
+          esYaPago ? 'YA_PAGO' : metodo,
           total,
           totalOriginal,
           devuelta,
@@ -254,11 +260,23 @@ app.get('/api/rutas/:id', (req, res) => {
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
-// Actualizar un pedido mientras la ruta está en curso (precio, método, entrega)
+// Actualizar un pedido mientras la ruta está en curso (precio, método, entrega, abonos)
 app.put('/api/rutas/pedido/:id', (req, res) => {
   try {
-    const { total, metodoPago, estadoEntrega, comprobante, observacion, total_original } = req.body;
     const id = req.params.id;
+    const body = req.body || {};
+
+    const total = body.total;
+    const metodoPago = body.metodoPago || body.metodo_pago || body.metodo_pago_final;
+    const estadoEntrega = body.estadoEntrega || body.estado_entrega;
+    const comprobante = body.comprobante !== undefined ? body.comprobante : body.comprobante_transf;
+    const observacion = body.observacion;
+    const total_original = body.total_original || body.totalOriginal;
+    
+    const montoAbono = body.montoAbono !== undefined ? body.montoAbono : body.monto_abono;
+    const saldoPendiente = body.saldoPendiente !== undefined ? body.saldoPendiente : body.saldo_pendiente;
+    const metodoAbono = body.metodoAbono !== undefined ? body.metodoAbono : body.metodo_abono;
+    const tipoSaldo = body.tipoSaldo !== undefined ? body.tipoSaldo : body.tipo_saldo;
 
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(id);
     if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
@@ -287,6 +305,20 @@ app.put('/api/rutas/pedido/:id', (req, res) => {
     if (total_original != null && !(pedido.total_original > 0)) {
       sets.push('total_original = ?'); vals.push(total_original);
     }
+    // Soporte para Abono / Pago Parcial
+    if (montoAbono !== undefined) {
+      const valAbono = Number(montoAbono) || 0;
+      const totalBase = total != null ? Number(total) : Number(pedido.total || 0);
+      const valSaldo = saldoPendiente !== undefined ? Number(saldoPendiente) : Math.max(0, totalBase - valAbono);
+      sets.push('monto_abono = ?'); vals.push(valAbono);
+      sets.push('saldo_pendiente = ?'); vals.push(valSaldo);
+    }
+    if (metodoAbono !== undefined) {
+      sets.push('metodo_abono = ?'); vals.push(metodoAbono || 'EFECTIVO');
+    }
+    if (tipoSaldo !== undefined) {
+      sets.push('tipo_saldo = ?'); vals.push(tipoSaldo || 'CREDITO');
+    }
 
     if (sets.length) {
       vals.push(id);
@@ -305,27 +337,46 @@ app.post('/api/rutas/liquidar', (req, res) => {
     if (esDomiDeCalle(req.user)) {
       return res.status(403).json({ ok: false, error: 'Solo administradores pueden liquidar rutas' });
     }
-    const { rutaId, pedidosLiquidacion, totalEfectivoEntregado } = req.body;
+    const { rutaId, pedidosLiquidacion, totalEfectivoEntregado } = req.body || {};
+    if (!rutaId) {
+      return res.status(400).json({ ok: false, error: 'ID de ruta requerido para liquidar' });
+    }
+    const usuarioLiquida = req.user ? (req.user.nombre || req.user.username) : 'Administrador';
+    const usuarioLiquidaId = req.user ? req.user.id : null;
+
+    const items = Array.isArray(pedidosLiquidacion) ? pedidosLiquidacion : [];
     const tx = db.transaction(() => {
       const updatePedido = db.prepare(`
         UPDATE pedidos
         SET metodo_pago_final = ?,
             comprobante_transf = ?,
-            estado_liquidacion = ?
+            estado_liquidacion = ?,
+            tipo_saldo = COALESCE(?, tipo_saldo)
         WHERE id = ?
       `);
 
-      for (const item of pedidosLiquidacion) {
-        // Si quedó transferencia pendiente, no lo marca como liquidado total
-        const estado =
-          item.metodoPago === 'TRANSFERENCIA_PENDIENTE'
-            ? 'PAGO_PENDIENTE'
-            : 'LIQUIDADO';
+      const getPedido = db.prepare('SELECT * FROM pedidos WHERE id = ?');
+
+      for (const item of items) {
+        if (!item || !item.id) continue;
+        const p = getPedido.get(item.id);
+        const saldoPend = Number(p?.saldo_pendiente || 0);
+        const metodo = item.metodoPago || p?.metodo_pago_final || 'EFECTIVO';
+        const tipoSaldo = item.tipoSaldo || item.tipo_saldo || p?.tipo_saldo || 'CREDITO';
+
+        // Si quedó saldo pendiente por abono o transferencia pendiente
+        let estado = 'LIQUIDADO';
+        if (metodo === 'TRANSFERENCIA_PENDIENTE' || metodo === 'CREDITO' || saldoPend > 0) {
+          estado = 'PAGO_PENDIENTE';
+        } else if (metodo === 'YA_PAGO') {
+          estado = 'LIQUIDADO';
+        }
 
         updatePedido.run(
-          item.metodoPago,
+          metodo,
           item.comprobante || '',
           estado,
+          tipoSaldo,
           item.id
         );
       }
@@ -334,13 +385,16 @@ app.post('/api/rutas/liquidar', (req, res) => {
         UPDATE rutas_domicilio
         SET estado = 'LIQUIDADA',
             total_recolectado = ?,
-            fecha_liquidacion = CURRENT_TIMESTAMP
+            fecha_liquidacion = CURRENT_TIMESTAMP,
+            usuario_liquidacion_id = ?,
+            usuario_liquidacion_nombre = ?
         WHERE id = ?
-      `).run(totalEfectivoEntregado, rutaId);
+      `).run(Number(totalEfectivoEntregado) || 0, usuarioLiquidaId, usuarioLiquida, rutaId);
     });
     tx();
-    res.json({ ok: true, mensaje: 'Ruta liquidada' });
+    res.json({ ok: true, mensaje: 'Ruta liquidada exitosamente' });
   } catch (err) {
+    console.error('Error al liquidar ruta:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -386,10 +440,39 @@ app.get('/api/domicilios/auditoria', (req, res) => {
       }
       ruta.pedidos = pedidos;
 
-      // Calcular totales desglosados de la ruta
-      ruta.efectivo = pedidos.reduce((acc, p) => acc + (p.metodo_pago_final === 'EFECTIVO' ? (Number(p.total) || 0) : 0), 0);
-      ruta.transferencia = pedidos.reduce((acc, p) => acc + (p.metodo_pago_final === 'TRANSFERENCIA' ? (Number(p.total) || 0) : 0), 0);
-      ruta.pendiente = pedidos.reduce((acc, p) => acc + (p.estado_liquidacion === 'PAGO_PENDIENTE' || p.metodo_pago_final === 'TRANSFERENCIA_PENDIENTE' || p.metodo_pago_final === 'CREDITO' ? (Number(p.total) || 0) : 0), 0);
+      // Calcular totales desglosados de la ruta con soporte para YA_PAGO y Abonos
+      let efec = 0;
+      let transf = 0;
+      let pend = 0;
+      let yaPago = 0;
+
+      for (const p of pedidos) {
+        const tot = Number(p.total) || 0;
+        const abono = Number(p.monto_abono) || 0;
+        const saldo = Number(p.saldo_pendiente) || 0;
+        const met = p.metodo_pago_final || 'EFECTIVO';
+        const metAbono = p.metodo_abono || 'EFECTIVO';
+
+        if (met === 'YA_PAGO') {
+          yaPago += tot;
+        } else if (abono > 0) {
+          if (metAbono === 'TRANSFERENCIA') transf += abono;
+          else efec += abono;
+          if (saldo > 0) pend += saldo;
+        } else if (met === 'TRANSFERENCIA') {
+          transf += tot;
+        } else if (met === 'TRANSFERENCIA_PENDIENTE' || met === 'CREDITO' || p.estado_liquidacion === 'PAGO_PENDIENTE') {
+          pend += tot;
+        } else {
+          // Efectivo completo
+          efec += tot;
+        }
+      }
+
+      ruta.efectivo = efec;
+      ruta.transferencia = transf;
+      ruta.pendiente = pend;
+      ruta.ya_pago = yaPago;
       ruta.entregados = pedidos.filter(p => p.estado_entrega === 'ENTREGADO').length;
       ruta.no_entregados = pedidos.filter(p => p.estado_entrega === 'NO_ENTREGADO').length;
     }
@@ -413,6 +496,7 @@ app.get('/api/domicilios/auditoria', (req, res) => {
           total_efectivo: 0,
           total_transferencia: 0,
           total_pendiente: 0,
+          total_ya_pago: 0,
           total_bases: 0,
           total_recolectado: 0
         });
@@ -426,17 +510,32 @@ app.get('/api/domicilios/auditoria', (req, res) => {
         item.pedidos_totales += 1;
         if (p.estado_entrega === 'ENTREGADO') item.pedidos_entregados += 1;
         if (p.estado_entrega === 'NO_ENTREGADO') item.pedidos_no_entregados += 1;
-        item.total_facturado += Number(p.total || 0);
-        if (p.metodo_pago_final === 'EFECTIVO') item.total_efectivo += Number(p.total || 0);
-        else if (p.metodo_pago_final === 'TRANSFERENCIA') item.total_transferencia += Number(p.total || 0);
-        if (p.estado_liquidacion === 'PAGO_PENDIENTE' || p.metodo_pago_final === 'TRANSFERENCIA_PENDIENTE' || p.metodo_pago_final === 'CREDITO') {
-          item.total_pendiente += Number(p.total || 0);
+        const tot = Number(p.total || 0);
+        const abono = Number(p.monto_abono || 0);
+        const saldo = Number(p.saldo_pendiente || 0);
+        const met = p.metodo_pago_final || 'EFECTIVO';
+        const metAbono = p.metodo_abono || 'EFECTIVO';
+
+        item.total_facturado += tot;
+
+        if (met === 'YA_PAGO') {
+          item.total_ya_pago += tot;
+        } else if (abono > 0) {
+          if (metAbono === 'TRANSFERENCIA') item.total_transferencia += abono;
+          else item.total_efectivo += abono;
+          if (saldo > 0) item.total_pendiente += saldo;
+        } else if (met === 'TRANSFERENCIA') {
+          item.total_transferencia += tot;
+        } else if (met === 'TRANSFERENCIA_PENDIENTE' || met === 'CREDITO' || p.estado_liquidacion === 'PAGO_PENDIENTE') {
+          item.total_pendiente += tot;
+        } else {
+          item.total_efectivo += tot;
         }
       }
     }
     const resumenDomiciliarios = Array.from(domMap.values());
 
-    // 3. Pagos pendientes (cartera / transferencias por verificar)
+    // 3. Pagos pendientes (cartera / transferencias por verificar / saldos pendientes por abono)
     let sqlPendientes = `
       SELECT p.*, d.nombre as domiciliario_nombre, r.id as ruta_id, r.estado as ruta_estado,
              date(COALESCE(r.fecha_liquidacion, r.fecha_creacion, p.fecha_creacion), 'localtime') as fecha_pedido_ruta
@@ -445,7 +544,9 @@ app.get('/api/domicilios/auditoria', (req, res) => {
       LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
       WHERE (p.estado_liquidacion = 'PAGO_PENDIENTE' 
              OR p.metodo_pago_final = 'TRANSFERENCIA_PENDIENTE'
-             OR p.metodo_pago_final = 'CREDITO')
+             OR p.metodo_pago_final = 'CREDITO'
+             OR (p.saldo_pendiente > 0 AND p.estado_entrega = 'ENTREGADO'))
+        AND COALESCE(p.estado_liquidacion, '') != 'LIQUIDADO'
     `;
     const paramsPendientes = [];
     if (fecha) {
@@ -465,8 +566,48 @@ app.get('/api/domicilios/auditoria', (req, res) => {
       LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
       WHERE (p.estado_liquidacion = 'PAGO_PENDIENTE' 
              OR p.metodo_pago_final = 'TRANSFERENCIA_PENDIENTE'
-             OR p.metodo_pago_final = 'CREDITO')
+             OR p.metodo_pago_final = 'CREDITO'
+             OR (p.saldo_pendiente > 0 AND p.estado_entrega = 'ENTREGADO'))
+        AND COALESCE(p.estado_liquidacion, '') != 'LIQUIDADO'
       ORDER BY p.id DESC
+    `).all();
+
+    // 3b. Pagos confirmados (transferencias verificadas, cartera cobrada y saldos liquidados)
+    let sqlConfirmados = `
+      SELECT p.*, d.nombre as domiciliario_nombre, r.id as ruta_id, r.estado as ruta_estado,
+             date(COALESCE(p.fecha_confirmacion_pago, r.fecha_liquidacion, r.fecha_creacion, p.fecha_creacion), 'localtime') as fecha_pedido_ruta,
+             time(COALESCE(p.fecha_confirmacion_pago, r.fecha_liquidacion, p.fecha_creacion), 'localtime') as hora_confirmacion_pago
+      FROM pedidos p
+      LEFT JOIN rutas_domicilio r ON p.ruta_id = r.id
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
+      WHERE (
+        (p.usuario_confirmacion_nombre IS NOT NULL AND p.usuario_confirmacion_nombre != '')
+        OR p.fecha_confirmacion_pago IS NOT NULL
+        OR (p.estado_liquidacion = 'LIQUIDADO' AND (p.observacion LIKE '%Confirmado por%' OR p.observacion LIKE '%Pago confirmado%'))
+      )
+    `;
+    const paramsConfirmados = [];
+    if (fecha) {
+      sqlConfirmados += ` AND date(COALESCE(p.fecha_confirmacion_pago, r.fecha_liquidacion, r.fecha_creacion, p.fecha_creacion), 'localtime') = ?`;
+      paramsConfirmados.push(fecha);
+    }
+    sqlConfirmados += ` ORDER BY COALESCE(p.fecha_confirmacion_pago, p.id) DESC`;
+
+    const pagosConfirmados = db.prepare(sqlConfirmados).all(...paramsConfirmados);
+
+    const todosPagosConfirmados = db.prepare(`
+      SELECT p.*, d.nombre as domiciliario_nombre, r.id as ruta_id, r.estado as ruta_estado,
+             date(COALESCE(p.fecha_confirmacion_pago, r.fecha_liquidacion, r.fecha_creacion, p.fecha_creacion), 'localtime') as fecha_pedido_ruta,
+             time(COALESCE(p.fecha_confirmacion_pago, r.fecha_liquidacion, p.fecha_creacion), 'localtime') as hora_confirmacion_pago
+      FROM pedidos p
+      LEFT JOIN rutas_domicilio r ON p.ruta_id = r.id
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
+      WHERE (
+        (p.usuario_confirmacion_nombre IS NOT NULL AND p.usuario_confirmacion_nombre != '')
+        OR p.fecha_confirmacion_pago IS NOT NULL
+        OR (p.estado_liquidacion = 'LIQUIDADO' AND (p.observacion LIKE '%Confirmado por%' OR p.observacion LIKE '%Pago confirmado%'))
+      )
+      ORDER BY COALESCE(p.fecha_confirmacion_pago, p.id) DESC
     `).all();
 
     // 4. Novedades y Ajustes de precio en las rutas del día
@@ -494,6 +635,7 @@ app.get('/api/domicilios/auditoria', (req, res) => {
     let totalEfectivo = 0;
     let totalTransferencia = 0;
     let totalPendiente = 0;
+    let totalYaPago = 0;
     let totalBases = 0;
     let totalRecolectadoRutas = 0;
     let totalPedidos = 0;
@@ -505,11 +647,26 @@ app.get('/api/domicilios/auditoria', (req, res) => {
       for (const p of r.pedidos) {
         totalPedidos += 1;
         if (p.estado_entrega === 'ENTREGADO') totalEntregados += 1;
-        totalFacturado += Number(p.total || 0);
-        if (p.metodo_pago_final === 'EFECTIVO') totalEfectivo += Number(p.total || 0);
-        else if (p.metodo_pago_final === 'TRANSFERENCIA') totalTransferencia += Number(p.total || 0);
-        if (p.estado_liquidacion === 'PAGO_PENDIENTE' || p.metodo_pago_final === 'TRANSFERENCIA_PENDIENTE' || p.metodo_pago_final === 'CREDITO') {
-          totalPendiente += Number(p.total || 0);
+        const tot = Number(p.total || 0);
+        const abono = Number(p.monto_abono || 0);
+        const saldo = Number(p.saldo_pendiente || 0);
+        const met = p.metodo_pago_final || 'EFECTIVO';
+        const metAbono = p.metodo_abono || 'EFECTIVO';
+
+        totalFacturado += tot;
+
+        if (met === 'YA_PAGO') {
+          totalYaPago += tot;
+        } else if (abono > 0) {
+          if (metAbono === 'TRANSFERENCIA') totalTransferencia += abono;
+          else totalEfectivo += abono;
+          if (saldo > 0) totalPendiente += saldo;
+        } else if (met === 'TRANSFERENCIA') {
+          totalTransferencia += tot;
+        } else if (met === 'TRANSFERENCIA_PENDIENTE' || met === 'CREDITO' || p.estado_liquidacion === 'PAGO_PENDIENTE') {
+          totalPendiente += tot;
+        } else {
+          totalEfectivo += tot;
         }
       }
     }
@@ -522,10 +679,13 @@ app.get('/api/domicilios/auditoria', (req, res) => {
         totalEfectivo,
         totalTransferencia,
         totalPendiente,
+        totalYaPago,
         totalBases,
         totalRecolectadoRutas,
         totalPedidos,
         totalEntregados,
+        totalConfirmados: pagosConfirmados.reduce((acc, p) => acc + Number(p.total || 0), 0),
+        confirmadosCount: pagosConfirmados.length,
         rutasCount: rutas.length,
         novedadesCount: novedadesAjustes.length
       },
@@ -533,6 +693,8 @@ app.get('/api/domicilios/auditoria', (req, res) => {
       resumenDomiciliarios,
       pagosPendientes,
       todosPagosPendientes,
+      pagosConfirmados,
+      todosPagosConfirmados,
       novedadesAjustes
     });
   } catch (err) {
@@ -547,8 +709,20 @@ app.post('/api/domicilios/confirmar-pago-pendiente', (req, res) => {
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
     if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
 
+    const usuarioConfirma = req.user ? (req.user.nombre || req.user.username) : 'Administrador';
+    const usuarioConfirmaId = req.user ? req.user.id : null;
+
     let observacion = pedido.observacion || '';
-    const detalleNota = nota ? ` | Confirmado: ${nota}` : ` | Pago confirmado`;
+    const abonoPrevio = Number(pedido.monto_abono || 0);
+    const totalPedido = Number(pedido.total || 0);
+    const saldoRestante = Math.max(0, totalPedido - abonoPrevio);
+
+    let detalleAbono = '';
+    if (abonoPrevio > 0) {
+      detalleAbono = ` (Abono domicilio: $${abonoPrevio.toLocaleString('es-CO')} [${pedido.metodo_abono || 'EFECTIVO'}] | Restante liquidado: $${saldoRestante.toLocaleString('es-CO')})`;
+    }
+
+    const detalleNota = nota ? ` | Confirmado por ${usuarioConfirma}${detalleAbono}: ${nota}` : ` | Pago confirmado por ${usuarioConfirma}${detalleAbono}`;
     observacion += detalleNota;
 
     db.prepare(`
@@ -556,14 +730,30 @@ app.post('/api/domicilios/confirmar-pago-pendiente', (req, res) => {
       SET estado_liquidacion = 'LIQUIDADO',
           metodo_pago_final = ?,
           comprobante_transf = ?,
-          observacion = ?
+          saldo_pendiente = 0,
+          fecha_confirmacion_pago = CURRENT_TIMESTAMP,
+          observacion = ?,
+          usuario_confirmacion_id = ?,
+          usuario_confirmacion_nombre = ?
       WHERE id = ?
-    `).run(metodoPago || 'EFECTIVO', comprobante || '', observacion, pedidoId);
+    `).run(metodoPago || 'EFECTIVO', comprobante || '', observacion, usuarioConfirmaId, usuarioConfirma, pedidoId);
 
     res.json({ ok: true, mensaje: 'Pago confirmado y liquidado con éxito' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
+});
+
+// Manejador 404 para cualquier endpoint /api/* que no coincida
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ ok: false, error: `Ruta API no encontrada: ${req.method} ${req.originalUrl}` });
+});
+
+// Manejador global de errores para asegurar respuesta JSON siempre
+app.use((err, req, res, next) => {
+  console.error('[server global error]', err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({ ok: false, error: err.message || 'Error interno del servidor' });
 });
 
 function obtenerIPsLocales() {

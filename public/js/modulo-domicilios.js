@@ -10,6 +10,7 @@ const ModuloDomicilios = {
   filtroDomiciliarioAuditoria: '',
   filtroTextoAuditoria: '',
   vistaPendientesAuditoria: 'dia', // 'dia' | 'todos'
+  vistaConfirmadosAuditoria: 'dia', // 'dia' | 'todos'
   auditoriaData: null,
 
   // Variables para creación de pedidos e ítems
@@ -420,27 +421,120 @@ const ModuloDomicilios = {
     }
   },
 
-  async abrirModalNuevoDomiciliario() {
-    const nombre = prompt('Nombre del nuevo domiciliario:');
-    if (!nombre || !nombre.trim()) return;
+  abrirModalNuevoDomiciliario() {
+    let modalDomi = document.getElementById('modal-crear-domiciliario-modulo');
+    if (!modalDomi) {
+      modalDomi = document.createElement('div');
+      modalDomi.id = 'modal-crear-domiciliario-modulo';
+      modalDomi.className = 'fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4';
+      document.body.appendChild(modalDomi);
+    }
 
-    const telefono = prompt('Teléfono (opcional):') || '';
+    modalDomi.classList.remove('hidden');
+    modalDomi.innerHTML = `
+      <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+        <div class="bg-emerald-800 text-white px-5 py-3.5 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-lg">🛵</div>
+            <div>
+              <h3 class="font-bold text-sm sm:text-base leading-tight">Nuevo Domiciliario / Repartidor</h3>
+              <p class="text-[11px] text-emerald-100">Registra un domiciliario para asignarle rutas de entrega</p>
+            </div>
+          </div>
+          <button type="button" onclick="document.getElementById('modal-crear-domiciliario-modulo').classList.add('hidden')"
+                  class="text-emerald-200 hover:text-white p-1 rounded-lg text-lg">✕</button>
+        </div>
+
+        <form id="form-nuevo-domi-modulo" onsubmit="event.preventDefault(); ModuloDomicilios.confirmarCrearNuevoDomiciliario();" class="p-5 space-y-4">
+          <div id="error-crear-domi-modulo" class="hidden text-xs bg-rose-50 border border-rose-200 text-rose-700 p-2.5 rounded-lg font-medium"></div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Nombre Completo del Repartidor *</label>
+            <input id="input-nombre-domi-modulo" type="text" required placeholder="Ej: Juan Camilo Osorio"
+                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-emerald-500 font-medium" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Teléfono / WhatsApp de Contacto</label>
+            <input id="input-tel-domi-modulo" type="tel" placeholder="Ej: 310 987 6543"
+                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-emerald-500 font-medium" />
+          </div>
+
+          <div class="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+            <button type="button" onclick="document.getElementById('modal-crear-domiciliario-modulo').classList.add('hidden')"
+                    class="px-3.5 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition">
+              Cancelar
+            </button>
+            <button type="submit" id="btn-submit-domi-modulo"
+                    class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5">
+              <span>✓ Registrar Domiciliario</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    setTimeout(() => {
+      const inp = document.getElementById('input-nombre-domi-modulo');
+      if (inp) inp.focus();
+    }, 50);
+  },
+
+  async confirmarCrearNuevoDomiciliario() {
+    const errorEl = document.getElementById('error-crear-domi-modulo');
+    const btnSubmit = document.getElementById('btn-submit-domi-modulo');
+    if (errorEl) errorEl.classList.add('hidden');
+
+    const inpNombre = document.getElementById('input-nombre-domi-modulo');
+    const inpTel = document.getElementById('input-tel-domi-modulo');
+    const nombre = inpNombre ? inpNombre.value.trim() : '';
+    const telefono = inpTel ? inpTel.value.trim() : '';
+
+    if (!nombre) {
+      if (errorEl) {
+        errorEl.textContent = 'El nombre del repartidor es obligatorio';
+        errorEl.classList.remove('hidden');
+      }
+      return;
+    }
 
     try {
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span>⏳ Guardando...</span>';
+      }
+
       const res = await apiFetch('/domiciliarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre: nombre.trim(), telefono: telefono.trim() })
+        body: JSON.stringify({ nombre, telefono })
       });
 
       if (res && res.ok) {
-        showToast('Domiciliario creado con éxito');
+        showToast('Domiciliario creado con éxito', 'success');
+        const modal = document.getElementById('modal-crear-domiciliario-modulo');
+        if (modal) modal.classList.add('hidden');
         await this.cargarInicial();
       } else {
-        alert((res && res.error) || 'Error al crear repartidor');
+        if (errorEl) {
+          errorEl.textContent = (res && res.error) || 'Error al crear repartidor';
+          errorEl.classList.remove('hidden');
+        } else {
+          showToast((res && res.error) || 'Error al crear repartidor', 'error');
+        }
       }
     } catch (e) {
-      alert('Error al conectar con el servidor');
+      if (errorEl) {
+        errorEl.textContent = 'Error al conectar con el servidor';
+        errorEl.classList.remove('hidden');
+      } else {
+        showToast('Error de conexión', 'error');
+      }
+    } finally {
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<span>✓ Registrar Domiciliario</span>';
+      }
     }
   },
 
@@ -584,17 +678,28 @@ const ModuloDomicilios = {
                             class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
                   </div>
 
-                  <div class="pl-5 space-y-1 text-[11px]">
-                    <div class="flex items-center justify-end">
-                      <select class="sel-metodo-despacho border rounded px-1.5 py-0.5 bg-slate-50 text-[11px]"
+                   <div class="pl-5 space-y-1.5 text-[11px]">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <label class="flex items-center gap-1.5 text-emerald-800 font-bold cursor-pointer bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <input type="checkbox" id="chk-yapago-${p.id}" class="chk-ya-pago rounded text-emerald-600 focus:ring-emerald-500"
+                               onchange="ModuloDomicilios.toggleYaPago(${p.id})">
+                        <span>✅ Ya pagó (Cobro $0)</span>
+                      </label>
+
+                      <select class="sel-metodo-despacho border rounded px-1.5 py-0.5 bg-slate-50 text-[11px] font-medium"
                               data-id="${p.id}" onchange="ModuloDomicilios.cambiarMetodoDespacho(${p.id})">
-                        <option value="EFECTIVO">Efectivo</option>
-                        <option value="TRANSFERENCIA">Transferencia</option>
+                        <option value="EFECTIVO">💵 Efectivo</option>
+                        <option value="TRANSFERENCIA">🏦 Transferencia</option>
+                        <option value="YA_PAGO">✅ Ya pagó (No cobrar)</option>
                       </select>
                     </div>
 
-                    <p id="pago-transfer-note-${p.id}" class="hidden text-sky-700">
-                      Transferencia: no aplica devuelta.
+                    <p id="pago-transfer-note-${p.id}" class="hidden text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-200">
+                      🏦 Transferencia: no aplica devuelta de efectivo.
+                    </p>
+
+                    <p id="pago-yapago-note-${p.id}" class="hidden text-emerald-800 font-semibold bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                      ✅ El cliente ya pagó previamente: Cobro $0 · Devuelta $0 para el repartidor.
                     </p>
 
                     <div id="pago-efectivo-box-${p.id}" class="space-y-1">
@@ -840,6 +945,23 @@ const ModuloDomicilios = {
     chk.dataset.total = String(nuevoTotal);
 
     const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
+    const metodo = sel ? sel.value : 'EFECTIVO';
+
+    if (metodo === 'YA_PAGO') {
+      chk.dataset.pagaCon = '0';
+      chk.dataset.devuelta = '0';
+      this.calcularBaseEfectivo();
+      return;
+    }
+
+    if (metodo === 'TRANSFERENCIA') {
+      chk.dataset.pagaCon = String(nuevoTotal);
+      chk.dataset.devuelta = '0';
+      this.calcularBaseEfectivo();
+      return;
+    }
+
     const sinDev = chk.dataset.sinDevuelta === '1';
     let pagaCon, devuelta;
     if (sinDev) {
@@ -886,7 +1008,8 @@ const ModuloDomicilios = {
       return alert('Ingresa un valor válido para el pedido');
     }
     nuevoTotal = Math.round(nuevoTotal);
-    chk.dataset.total = String(nuevoTotal);
+    
+    this.actualizarTotalDirecto(pedidoId, nuevoTotal);
 
     const inpDirecto = document.getElementById(`precio-directo-${pedidoId}`);
     if (inpDirecto) inpDirecto.value = String(nuevoTotal);
@@ -895,32 +1018,8 @@ const ModuloDomicilios = {
     const elTotal = document.getElementById(`total-txt-${pedidoId}`);
     if (elTotal) elTotal.innerText = fmt(nuevoTotal);
 
-    const sinDev = chk.dataset.sinDevuelta === '1';
-    let pagaCon, devuelta;
-    if (sinDev) {
-      pagaCon = nuevoTotal;
-      devuelta = 0;
-    } else {
-      pagaCon = this.pagaConSugerido(nuevoTotal);
-      devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - nuevoTotal));
-    }
-    chk.dataset.pagaCon = String(pagaCon);
-    chk.dataset.devuelta = String(devuelta);
-
-    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
-    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
-    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
-    if (elPaga) elPaga.innerText = fmt(pagaCon);
-    if (elDev) elDev.innerText = fmt(devuelta);
-    if (elEnt) elEnt.innerText = fmt(pagaCon);
-
-    const inpPaga = document.getElementById(`paga-input-${pedidoId}`);
-    if (inpPaga) inpPaga.value = String(pagaCon);
-
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.add('hidden');
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.remove('flex');
-
-    this.calcularBaseEfectivo();
   },
 
   cancelarPrecioPedido(pedidoId) {
@@ -1143,6 +1242,19 @@ const ModuloDomicilios = {
         </div>
       `;
 
+      // Eventos de botones cerrar y cancelar
+      modal.querySelector('#btn-cerrar-modal-edit')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ModuloDomicilios.cerrarModalEditarPedido();
+      });
+
+      modal.querySelector('#btn-cancelar-modal-edit')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ModuloDomicilios.cerrarModalEditarPedido();
+      });
+
       // Eventos de botones sumar/restar/quitar
       modal.querySelectorAll('.btn-medit-sumar').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1331,7 +1443,22 @@ const ModuloDomicilios = {
     this.calcularBaseEfectivo();
   },
 
-  /** Cambia el método de pago de un pedido en Despachar: si es Transferencia, no aplica devuelta. */
+  /** Marca o desmarca que el cliente ya pagó previamente (cobro $0 y sin devuelta). */
+  toggleYaPago(pedidoId) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
+    const chkYaPago = document.getElementById(`chk-yapago-${pedidoId}`);
+    if (!chk) return;
+
+    if (chkYaPago && chkYaPago.checked) {
+      if (sel) sel.value = 'YA_PAGO';
+    } else {
+      if (sel && sel.value === 'YA_PAGO') sel.value = 'EFECTIVO';
+    }
+    this.cambiarMetodoDespacho(pedidoId);
+  },
+
+  /** Cambia el método de pago de un pedido en Despachar: si es Transferencia o Ya Pagó, no aplica devuelta. */
   cambiarMetodoDespacho(pedidoId) {
     const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
     const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
@@ -1341,18 +1468,35 @@ const ModuloDomicilios = {
     const total = parseFloat(chk.dataset.total) || 0;
     const boxEfectivo = document.getElementById(`pago-efectivo-box-${pedidoId}`);
     const notaTransfer = document.getElementById(`pago-transfer-note-${pedidoId}`);
+    const notaYaPago = document.getElementById(`pago-yapago-note-${pedidoId}`);
+    const chkYaPago = document.getElementById(`chk-yapago-${pedidoId}`);
     const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
 
-    if (metodo !== 'EFECTIVO') {
-      // Transferencia: no hay efectivo de por medio, no se calcula ni se muestra devuelta.
+    if (chkYaPago) {
+      chkYaPago.checked = (metodo === 'YA_PAGO');
+    }
+
+    if (metodo === 'YA_PAGO') {
+      chk.dataset.pagaCon = '0';
+      chk.dataset.devuelta = '0';
+      chk.dataset.sinDevuelta = '1';
+      chk.dataset.yaPago = '1';
+      if (boxEfectivo) boxEfectivo.classList.add('hidden');
+      if (notaTransfer) notaTransfer.classList.add('hidden');
+      if (notaYaPago) notaYaPago.classList.remove('hidden');
+    } else if (metodo === 'TRANSFERENCIA') {
       chk.dataset.pagaCon = String(total);
       chk.dataset.devuelta = '0';
       chk.dataset.sinDevuelta = '0';
+      chk.dataset.yaPago = '0';
       if (boxEfectivo) boxEfectivo.classList.add('hidden');
       if (notaTransfer) notaTransfer.classList.remove('hidden');
+      if (notaYaPago) notaYaPago.classList.add('hidden');
     } else {
+      chk.dataset.yaPago = '0';
       if (boxEfectivo) boxEfectivo.classList.remove('hidden');
       if (notaTransfer) notaTransfer.classList.add('hidden');
+      if (notaYaPago) notaYaPago.classList.add('hidden');
 
       const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
       const sinDev = chkSinDev?.checked;
@@ -1596,16 +1740,27 @@ const ModuloDomicilios = {
           const totalPedido = Number(p.total) || 0;
           const metodo = p.metodo_pago_final || 'EFECTIVO';
           const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
+          const esYaPago = metodo === 'YA_PAGO';
+          const montoAbono = Number(p.monto_abono) || 0;
+          const metodoAbono = p.metodo_abono || 'EFECTIVO';
           const dev = calcDevueltaPedido(p);
           devueltas += dev;
-          if (p.estado_entrega === 'ENTREGADO' && !esTransfer) {
-            // Redondeado a $50: es el efectivo físico que realmente se entrega.
-            cobradoEfectivo += this.redondearCaja50(totalPedido);
+          if (p.estado_entrega === 'ENTREGADO') {
+            if (esYaPago) {
+              // 0 cobrado en efectivo
+            } else if (montoAbono > 0) {
+              if (metodoAbono === 'EFECTIVO') {
+                cobradoEfectivo += this.redondearCaja50(montoAbono);
+              }
+            } else if (!esTransfer) {
+              // Redondeado a $50: es el efectivo físico que realmente se entrega.
+              cobradoEfectivo += this.redondearCaja50(totalPedido);
+            }
           }
         });
 
-        // Completo → cobrado + devueltas; en curso → solo devueltas
-        const subtotal = todosEntregados ? (cobradoEfectivo + devueltas) : devueltas;
+        // Subtotal de efectivo a entregar por este municipio = cobrado efectivo de los entregados + devueltas base asignadas
+        const subtotal = cobradoEfectivo + devueltas;
 
         statsPorMun[mun] = {
           todosEntregados,
@@ -1677,19 +1832,27 @@ const ModuloDomicilios = {
                     </div>
                     <div class="text-right text-[10px]">
                       <p class="text-indigo-900 font-bold">
-                        ${st.todosEntregados ? 'Subtotal' : 'Devueltas'}:
-                        $${st.subtotal.toLocaleString('es-CO')}
+                        A caja: $${st.subtotal.toLocaleString('es-CO')}
+                      </p>
+                      <p class="text-[9px] text-slate-500 font-normal">
+                        ${st.cobradoEfectivo > 0 ? `(Cobrado $${st.cobradoEfectivo.toLocaleString('es-CO')} + Dev $${st.devueltas.toLocaleString('es-CO')})` : `(Base devueltas $${st.devueltas.toLocaleString('es-CO')})`}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div class="p-2 space-y-2 bg-white ${abiertoMun ? '' : 'hidden'}" id="mun-body-${munIdx}">
-                                      ${lista.map(p => {
+                  ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
                     const totalPedido = Number(p.total) || 0;
+                    const montoAbono = Number(p.monto_abono) || 0;
+                    const hayAbono = montoAbono > 0;
+                    const saldoPendiente = (p.saldo_pendiente !== undefined && p.saldo_pendiente !== null && Number(p.saldo_pendiente) >= 0)
+                      ? Number(p.saldo_pendiente)
+                      : Math.max(0, totalPedido - montoAbono);
+                    const metodoAbono = p.metodo_abono || 'EFECTIVO';
+                    const tipoSaldo = p.tipo_saldo || 'CREDITO';
 
                     // Original SOLO si vino de BD. Si no hay, no inventamos con el total actual
-                    // (si no, al editar “Despachado” y la devuelta se mueven).
                     const tieneOriginal = Number(p.total_original) > 0;
                     const totalOriginal = tieneOriginal ? Number(p.total_original) : totalPedido;
 
@@ -1698,21 +1861,25 @@ const ModuloDomicilios = {
 
                     const esTransfer = metodoActual === 'TRANSFERENCIA'
                       || metodoActual === 'TRANSFERENCIA_PENDIENTE';
+                    const esYaPago = metodoActual === 'YA_PAGO';
 
-                    // Devuelta FIJA: es la que quedó guardada al despachar, sin
-                    // importar el método actual. Si se despachó en Efectivo con
-                    // devuelta, esa devuelta se debe aunque luego el cliente
-                    // pague por transferencia (el domiciliario ya salió con ese
-                    // cambio). Si se despachó en Transferencia, ya quedó en $0.
                     const storedDev = Number(p.devuelta_calculada);
                     const devueltaEntregada = (!isNaN(storedDev) && storedDev > 0) ? storedDev : 0;
 
-                    // Efectivo: valor cobrado (editado) + devuelta que salió con el domiciliario
-                    // Transferencia: solo la devuelta de la base (si se despachó con devuelta)
-                    // Redondeado a $50: es lo que físicamente se puede entregar en billetes/monedas.
-                    const aCaja = this.redondearCaja50(esTransfer
-                      ? devueltaEntregada
-                      : (totalPedido + devueltaEntregada));
+                    let aCaja = 0;
+                    if (esYaPago) {
+                      aCaja = this.redondearCaja50(devueltaEntregada);
+                    } else if (hayAbono) {
+                      if (metodoAbono === 'TRANSFERENCIA') {
+                        aCaja = this.redondearCaja50(devueltaEntregada);
+                      } else {
+                        aCaja = this.redondearCaja50(montoAbono + devueltaEntregada);
+                      }
+                    } else if (esTransfer) {
+                      aCaja = this.redondearCaja50(devueltaEntregada);
+                    } else {
+                      aCaja = this.redondearCaja50(totalPedido + devueltaEntregada);
+                    }
 
                     const delta = tieneOriginal ? (totalPedido - totalOriginal) : 0;
                     const hayAjuste = tieneOriginal && delta !== 0;
@@ -1724,7 +1891,12 @@ const ModuloDomicilios = {
                     <div class="border p-2.5 rounded-md space-y-2 ${entregado ? 'bg-emerald-50 border-emerald-200' : 'bg-white'}"
                          id="item-pedido-${p.id}"
                          data-total-original="${tieneOriginal ? totalOriginal : ''}"
-                         data-devuelta="${devueltaEntregada}">
+                         data-devuelta="${devueltaEntregada}"
+                         data-monto-abono="${montoAbono}"
+                         data-saldo-pendiente="${saldoPendiente}"
+                         data-metodo-abono="${metodoAbono}"
+                         data-tipo-saldo="${tipoSaldo}"
+                         data-ya-pago="${esYaPago ? '1' : '0'}">
 
                       <!-- Encabezado siempre visible -->
                       <div class="flex justify-between items-start gap-2">
@@ -1732,10 +1904,35 @@ const ModuloDomicilios = {
                           <p class="font-bold text-xs text-slate-900">${p.codigo_pedido || ('Pedido #' + p.id)}</p>
                           <p class="text-[10px] text-slate-500">${p.cliente || 'Cliente'} · ${p.direccion || ''}</p>
                         </div>
-                        ${entregado
-                          ? `<span class="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-semibold">Entregado</span>`
-                          : `<span class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Pendiente</span>`}
+                        <div class="flex items-center gap-1.5">
+                          ${esYaPago ? `<span class="text-[10px] bg-sky-600 text-white px-1.5 py-0.5 rounded font-semibold">Ya pagado</span>` : ''}
+                          ${hayAbono ? `<span class="text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded font-semibold">Abonado</span>` : ''}
+                          ${entregado
+                            ? `<span class="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-semibold">Entregado</span>`
+                            : `<span class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Pendiente</span>`}
+                        </div>
                       </div>
+
+                      ${(() => {
+                        const itemsFaltantes = (p.items || []).filter(i => i.es_faltante);
+                        if (itemsFaltantes.length === 0) return '';
+                        return `
+                          <div class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1">
+                            <p class="font-bold flex items-center gap-1 text-amber-900"><span>⚠️</span> Productos Faltantes (Comprar / Recoger):</p>
+                            <div class="space-y-1">
+                              ${itemsFaltantes.map(it => `
+                                <div class="bg-white p-1.5 rounded border border-amber-200 text-[11px]">
+                                  <div class="flex justify-between items-center">
+                                    <span class="font-bold text-slate-800">• ${escapeHtml(it.nombre_producto || 'Producto')}</span>
+                                    <span class="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold text-[10px]">Cant: ${it.cantidad_solicitada || 1}</span>
+                                  </div>
+                                  ${it.nota_faltante ? `<p class="text-[10px] text-amber-900 italic mt-0.5">📝 ${escapeHtml(it.nota_faltante)}</p>` : ''}
+                                </div>
+                              `).join('')}
+                            </div>
+                          </div>
+                        `;
+                      })()}
 
                       <div class="border-t border-slate-100 pt-1.5">
                         <button type="button" onclick="ModuloDomicilios.toggleProductosPedido(${p.id})"
@@ -1745,17 +1942,47 @@ const ModuloDomicilios = {
                         </button>
                         <div id="productos-pedido-${p.id}" class="${(this.productosPedidoAbiertos && this.productosPedidoAbiertos[p.id]) ? '' : 'hidden'} mt-1.5 space-y-1 bg-slate-50 p-2 rounded-lg text-[11px] text-slate-700 border border-slate-200/60">
                           ${(p.items && p.items.length > 0) ? p.items.map(item => `
-                            <div class="flex justify-between items-center border-b border-slate-200/60 pb-1 last:border-b-0 last:pb-0">
-                              <div>
-                                <p class="font-medium text-slate-800">${item.nombre_producto || 'Producto'} <span class="text-[10px] text-slate-400 font-mono">(SKU ${item.sku || '—'})</span></p>
+                            <div class="flex flex-col gap-0.5 border-b border-slate-200/60 pb-1.5 last:border-b-0 last:pb-0 ${item.es_faltante ? 'bg-amber-50/70 p-1 rounded border border-amber-200' : ''}">
+                              <div class="flex justify-between items-center">
+                                <div>
+                                  <p class="font-medium text-slate-800 flex items-center gap-1">
+                                    <span>${escapeHtml(item.nombre_producto || 'Producto')}</span>
+                                    ${item.es_faltante ? '<span class="bg-amber-100 text-amber-900 text-[9px] px-1 rounded font-bold">⚠️ Faltante</span>' : ''}
+                                  </p>
+                                  <p class="text-[10px] text-slate-400 font-mono">SKU ${item.sku || '—'}</p>
+                                </div>
+                                <div class="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
+                                  ${item.es_faltante ? 'Faltante' : '×' + (item.cantidad_solicitada || item.cantidad_empacada || 1)}
+                                </div>
                               </div>
-                              <div class="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                ×${item.cantidad_solicitada || item.cantidad_empacada || 1}
-                              </div>
+                              ${item.nota_faltante ? `<p class="text-[10px] text-amber-900 italic">Nota: ${escapeHtml(item.nota_faltante)}</p>` : ''}
                             </div>
                           `).join('') : '<p class="text-[10px] text-slate-400 italic">No hay productos registrados en este pedido.</p>'}
                         </div>
                       </div>
+
+                      ${hayAbono ? `
+                      <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1.5 shadow-2xs">
+                        <div class="flex items-center justify-between">
+                          <span class="font-bold flex items-center gap-1"><span>💵</span> Abono registrado:</span>
+                          <span class="text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded font-extrabold">$${montoAbono.toLocaleString('es-CO')} (${metodoAbono === 'EFECTIVO' ? '💵 Efectivo' : '🏦 Transf'})</span>
+                        </div>
+                        <div class="flex items-center justify-between text-slate-700">
+                          <span class="font-medium">Saldo restante (deuda):</span>
+                          <span class="font-extrabold text-rose-700">$${saldoPendiente.toLocaleString('es-CO')}
+                            <span class="text-[10px] bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded font-bold ml-1 uppercase">
+                              ${tipoSaldo === 'TRANSFERENCIA_PENDIENTE' ? '⏳ Transf Pendiente' : '💳 Crédito'}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                      ` : ''}
+
+                      ${esYaPago ? `
+                      <div class="p-1.5 rounded-md bg-sky-50 border border-sky-200 text-sky-900 text-xs font-medium flex items-center gap-1.5">
+                        <span>✅</span> <span>Pedido pagado previamente. No se cobra al cliente.</span>
+                      </div>
+                      ` : ''}
 
                       ${entregado ? `
                       <!-- VISTA COLAPSADA (entregado) -->
@@ -1767,7 +1994,7 @@ const ModuloDomicilios = {
                           ${motivoAjuste ? `<span class="text-amber-800 italic"> — ${motivoAjuste.replace(/"/g,'')}</span>` : ''}
                         </p>
                         ` : ''}
-                        <p class="text-slate-800">Total a cobrar: <b class="text-emerald-700">$${totalPedido.toLocaleString('es-CO')}</b></p>
+                        <p class="text-slate-800">Total a cobrar: <b class="text-emerald-700">${esYaPago ? '$0 (Ya pagó)' : (hayAbono ? `$${montoAbono.toLocaleString('es-CO')} (Abono)` : `$${totalPedido.toLocaleString('es-CO')}`)}</b></p>
                         <p class="text-amber-800">
                           Devuelta entregada: <b>$${devueltaEntregada.toLocaleString('es-CO')}</b>
                           <span class="text-[10px] text-slate-400">(fija al salir)</span>
@@ -1775,7 +2002,7 @@ const ModuloDomicilios = {
                         <p class="text-emerald-800 font-semibold">
                           A entregar en caja: <b>$${aCaja.toLocaleString('es-CO')}</b>
                           <span class="text-[10px] font-normal text-slate-500">
-                            ${esTransfer ? '(solo devuelta · transferencia)' : '(cobrado + devuelta)'}
+                            ${esYaPago ? '(solo devuelta · ya pagó)' : (hayAbono ? `(${metodoAbono === 'TRANSFERENCIA' ? 'solo devuelta · abono transf' : 'abono efectivo + devuelta'})` : (esTransfer ? '(solo devuelta · transferencia)' : '(cobrado + devuelta)'))}
                           </span>
                         </p>
                         <button type="button" onclick="ModuloDomicilios.toggleDetallePedido(${p.id})"
@@ -1786,7 +2013,7 @@ const ModuloDomicilios = {
 
                         <!-- Valor + botones + / − -->
                         <div class="text-xs">
-                          <label class="block text-[10px] text-slate-500 mb-0.5">Valor a cobrar ($)</label>
+                          <label class="block text-[10px] text-slate-500 mb-0.5">Valor del pedido ($)</label>
                           <div class="flex items-center gap-1">
                             <span id="total-txt-${p.id}" class="flex-1 p-1.5 border rounded font-bold text-emerald-700 bg-slate-50 text-sm">
                               $${totalPedido.toLocaleString('es-CO')}
@@ -1794,12 +2021,12 @@ const ModuloDomicilios = {
                             <input type="hidden" class="inp-total" data-id="${p.id}" value="${totalPedido}">
                             ${!yaLiquidada ? `
                             <button type="button" onclick="ModuloDomicilios.abrirAjuste(${p.id}, 1)"
-                                    class="w-8 h-8 rounded-md bg-emerald-600 text-white font-bold text-sm">+</button>
+                                     class="w-8 h-8 rounded-md bg-emerald-600 text-white font-bold text-sm">+</button>
                             <button type="button" onclick="ModuloDomicilios.abrirAjuste(${p.id}, -1)"
-                                    class="w-8 h-8 rounded-md bg-rose-500 text-white font-bold text-sm">−</button>
+                                     class="w-8 h-8 rounded-md bg-rose-500 text-white font-bold text-sm">−</button>
                             ` : ''}
                           </div>
-                                                   <p id="formula-txt-${p.id}" class="text-[10px] text-slate-600 mt-0.5 ${delta === 0 ? 'hidden' : ''}">
+                          <p id="formula-txt-${p.id}" class="text-[10px] text-slate-600 mt-0.5 ${delta === 0 ? 'hidden' : ''}">
                             ${formulaTxt}
                           </p>
                           <p class="text-[10px] text-amber-800 mt-0.5 ${devueltaEntregada > 0 ? '' : 'hidden'}">
@@ -1826,18 +2053,36 @@ const ModuloDomicilios = {
                           </div>
                         </div>
 
+                        <!-- Botón de Abono parcial -->
+                        ${!yaLiquidada ? `
+                        <div class="flex items-center justify-between pt-1">
+                          <button type="button" onclick="ModuloDomicilios.abrirModalAbono(${p.id})"
+                                  class="px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${hayAbono ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs' : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'}">
+                            <span>💵</span>
+                            <span>${hayAbono ? `Editar Abono ($${montoAbono.toLocaleString('es-CO')})` : 'Registrar Abono parcial'}</span>
+                          </button>
+                          ${hayAbono ? `
+                          <button type="button" onclick="ModuloDomicilios.eliminarAbono(${p.id})"
+                                  class="text-[11px] text-rose-600 hover:text-rose-800 font-semibold underline">
+                            Quitar abono
+                          </button>
+                          ` : ''}
+                        </div>
+                        ` : ''}
+
                         <!-- Método de pago -->
                         <div class="text-xs">
-                          <label class="block text-[10px] text-slate-500">Método de pago</label>
-                          <select class="sel-metodo w-full p-1.5 border rounded bg-slate-50"
+                          <label class="block text-[10px] text-slate-500">Método de pago / Estado</label>
+                          <select class="sel-metodo w-full p-1.5 border rounded bg-slate-50 text-xs font-medium"
                             data-id="${p.id}"
                             data-total="${totalPedido}"
                             data-devuelta="${devueltaEntregada}"
                             ${yaLiquidada ? 'disabled' : ''}
                             onchange="ModuloDomicilios.guardarCambioPedido(${p.id})">
-                            <option value="EFECTIVO" ${metodoActual === 'EFECTIVO' ? 'selected' : ''}>Efectivo</option>
-                            <option value="TRANSFERENCIA" ${metodoActual === 'TRANSFERENCIA' ? 'selected' : ''}>Transferencia (ya hecha)</option>
-                            <option value="TRANSFERENCIA_PENDIENTE" ${metodoActual === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>Transferencia pendiente</option>
+                            <option value="EFECTIVO" ${metodoActual === 'EFECTIVO' ? 'selected' : ''}>💵 Efectivo</option>
+                            <option value="TRANSFERENCIA" ${metodoActual === 'TRANSFERENCIA' ? 'selected' : ''}>🏦 Transferencia (ya hecha)</option>
+                            <option value="TRANSFERENCIA_PENDIENTE" ${metodoActual === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>⏳ Transferencia pendiente</option>
+                            <option value="YA_PAGO" ${metodoActual === 'YA_PAGO' ? 'selected' : ''}>✅ Ya pagó (Cobro $0)</option>
                           </select>
                         </div>
 
@@ -1862,11 +2107,19 @@ const ModuloDomicilios = {
                             <b id="caja-line-${p.id}">$${aCaja.toLocaleString('es-CO')}</b>
                           </div>
                           <p class="text-[10px] text-slate-400" id="caja-hint-${p.id}">
-                            ${esTransfer
+                            ${esYaPago
                               ? (devueltaEntregada > 0
-                                  ? 'Transferencia: el domiciliario regresa la devuelta que salió con él.'
-                                  : 'Transferencia: sin devuelta (se despachó sin cambio).')
-                              : 'Efectivo: en caja el valor cobrado del pedido.'}
+                                  ? 'Ya pagó: el domiciliario regresa la devuelta que salió con él (cobro $0).'
+                                  : 'Ya pagó: cobro $0 al cliente.')
+                              : (hayAbono
+                                  ? (metodoAbono === 'TRANSFERENCIA'
+                                      ? 'Abono por transferencia: solo regresa la devuelta base en efectivo.'
+                                      : `Abono en efectivo: $${montoAbono.toLocaleString('es-CO')} + devuelta base.`)
+                                  : (esTransfer
+                                      ? (devueltaEntregada > 0
+                                          ? 'Transferencia: el domiciliario regresa la devuelta que salió con él.'
+                                          : 'Transferencia: sin devuelta (se despachó sin cambio).')
+                                      : 'Efectivo: en caja el valor cobrado del pedido.'))}
                           </p>
                         </div>
 
@@ -1929,18 +2182,22 @@ const ModuloDomicilios = {
             `}).join('')}
           </div>
 
-          <div class="bg-slate-900 text-white p-3 rounded-lg text-xs space-y-1.5">
+          <div class="bg-slate-900 text-white p-3.5 rounded-xl text-xs space-y-2 shadow-lg">
             <div class="flex justify-between text-slate-300">
-              <span>(+) Efectivo recolectado:</span>
-              <span id="arq-efectivo" class="font-semibold">$0</span>
+              <span class="flex items-center gap-1.5"><span>💵</span> (+) Efectivo cobrado (pedidos + abonos):</span>
+              <span id="arq-efectivo" class="font-bold text-white">$0</span>
             </div>
             <div class="flex justify-between text-slate-300">
-              <span>(+) Base devueltas:</span>
-              <span id="arq-base" data-valor="${Number(ruta.base_efectivo||0)}" class="font-semibold">$${(ruta.base_efectivo||0).toLocaleString()}</span>
+              <span class="flex items-center gap-1.5"><span>🎒</span> (+) Base devueltas asignada:</span>
+              <span id="arq-base" data-valor="${Number(ruta.base_efectivo||0)}" class="font-bold text-white">$${(ruta.base_efectivo||0).toLocaleString()}</span>
             </div>
-            <div class="flex justify-between font-bold text-emerald-400 border-t border-slate-700 pt-1 text-sm">
-              <span>(=) Total a entregar en caja:</span>
-              <span id="arq-total" data-valor="0">$0</span>
+            <div class="flex justify-between text-amber-300 border-t border-slate-800 pt-1">
+              <span class="flex items-center gap-1.5"><span>⏳</span> Saldos pendientes / Cartera (deuda):</span>
+              <span id="arq-saldos" class="font-bold">$0</span>
+            </div>
+            <div class="flex justify-between font-extrabold text-emerald-400 border-t border-slate-700 pt-1.5 text-sm">
+              <span class="flex items-center gap-1.5"><span>💰</span> (=) Total a entregar en caja:</span>
+              <span id="arq-total" data-valor="0" class="text-base font-black">$0</span>
             </div>
           </div>
 
@@ -2211,14 +2468,29 @@ async guardarAjusteTotal(pedidoId) {
       || parseFloat(sel?.dataset?.total) || 0;
     const metodo = sel?.value || 'EFECTIVO';
     const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
-    // La devuelta es FIJA: es la que quedó guardada en BD al momento del despacho
-    // (devuelta_calculada). Si se despachó en efectivo, el domiciliario ya salió con
-    // esa plata de cambio — se muestra aunque el cliente luego pague por transferencia.
-    // Si se despachó en transferencia, devuelta_calculada ya quedó en $0.
-    // NUNCA se recalcula aquí, solo se lee lo guardado.
+    const esYaPago = metodo === 'YA_PAGO';
+    const montoAbono = parseFloat(card?.dataset?.montoAbono) || 0;
+    const metodoAbono = card?.dataset?.metodoAbono || 'EFECTIVO';
+    const tipoSaldo = card?.dataset?.tipoSaldo || 'CREDITO';
+    const saldoPendiente = parseFloat(card?.dataset?.saldoPendiente) || 0;
+    const hayAbono = montoAbono > 0;
+
     const devuelta = parseFloat(sel?.dataset?.devuelta) || parseFloat(card?.dataset?.devuelta) || 0;
-    // Redondeado a $50: es lo que físicamente se puede entregar en billetes/monedas.
-    const aCaja = this.redondearCaja50(esTransfer ? devuelta : (total + devuelta));
+    
+    let aCaja = 0;
+    if (esYaPago) {
+      aCaja = this.redondearCaja50(devuelta);
+    } else if (hayAbono) {
+      if (metodoAbono === 'TRANSFERENCIA') {
+        aCaja = this.redondearCaja50(devuelta);
+      } else {
+        aCaja = this.redondearCaja50(montoAbono + devuelta);
+      }
+    } else if (esTransfer) {
+      aCaja = this.redondearCaja50(devuelta);
+    } else {
+      aCaja = this.redondearCaja50(total + devuelta);
+    }
 
     const elCaja = document.getElementById(`caja-line-${pedidoId}`);
     const elHint = document.getElementById(`caja-hint-${pedidoId}`);
@@ -2229,11 +2501,19 @@ async guardarAjusteTotal(pedidoId) {
       elDevLine.closest('div')?.classList.toggle('hidden', !(devuelta > 0));
     }
     if (elHint) {
-      elHint.textContent = esTransfer
+      elHint.textContent = esYaPago
         ? (devuelta > 0
-            ? 'Transferencia: el domiciliario regresa la devuelta que salió con él.'
-            : 'Transferencia: sin devuelta (se despachó sin cambio).')
-        : 'Efectivo: en caja el valor cobrado del pedido.';
+            ? 'Ya pagó: el domiciliario regresa la devuelta que salió con él (cobro $0).'
+            : 'Ya pagó: cobro $0 al cliente.')
+        : (hayAbono
+            ? (metodoAbono === 'TRANSFERENCIA'
+                ? `Abono por transferencia ($${montoAbono.toLocaleString('es-CO')}): el repartidor entrega la devuelta base de $${devuelta.toLocaleString('es-CO')}.`
+                : `Abono en efectivo ($${montoAbono.toLocaleString('es-CO')}) + devuelta base ($${devuelta.toLocaleString('es-CO')}) = $${aCaja.toLocaleString('es-CO')} a caja. Resto: $${saldoPendiente.toLocaleString('es-CO')} a ${tipoSaldo === 'TRANSFERENCIA_PENDIENTE' ? 'transferencia pendiente' : 'crédito'}.`)
+            : (esTransfer
+                ? (devuelta > 0
+                    ? 'Transferencia: el domiciliario regresa la devuelta que salió con él.'
+                    : 'Transferencia: sin devuelta (se despachó sin cambio).')
+                : 'Efectivo: en caja el valor cobrado del pedido.'));
     }
   },
 
@@ -2262,7 +2542,7 @@ async guardarAjusteTotal(pedidoId) {
       // NO enviamos observacion aquí → no se borra en el servidor
       const body = { total, metodoPago };
       if (metodoPago === 'TRANSFERENCIA') body.comprobante = comprobante;
-      // TRANSFERENCIA_PENDIENTE: sin exigir ni pisar comprobante
+      // TRANSFERENCIA_PENDIENTE / YA_PAGO: sin exigir comprobante
 
       await apiFetch(`/rutas/pedido/${pedidoId}`, {
         method: 'PUT',
@@ -2272,6 +2552,249 @@ async guardarAjusteTotal(pedidoId) {
       this.recalcularArqueo();
     } catch (e) {
       console.error(e);
+    }
+  },
+
+  /** Abre el modal para registrar o modificar un abono parcial */
+  abrirModalAbono(pedidoId) {
+    this.cerrarModalAbono();
+    const pedido = (this._cuadrePedidos || []).find(p => p.id === pedidoId);
+    if (!pedido) return;
+
+    const totalPedido = Number(pedido.total) || 0;
+    const montoActual = Number(pedido.monto_abono) || 0;
+    const metodoActual = pedido.metodo_abono || 'EFECTIVO';
+    const tipoSaldoActual = pedido.tipo_saldo || 'CREDITO';
+    const devueltaEntregada = Number(pedido.devuelta_calculada) || 0;
+    const saldoActual = (pedido.saldo_pendiente !== undefined && pedido.saldo_pendiente !== null && Number(pedido.saldo_pendiente) >= 0)
+      ? Number(pedido.saldo_pendiente)
+      : Math.max(0, totalPedido - montoActual);
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-abono-pedido';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity';
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 transform transition-all text-slate-800" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span>💵</span> Registrar Abono Parcial
+            </h3>
+            <p class="text-xs text-slate-500">${pedido.codigo_pedido || ('Pedido #' + pedido.id)} · ${pedido.cliente || 'Cliente'}</p>
+          </div>
+          <button type="button" onclick="ModuloDomicilios.cerrarModalAbono()"
+                  class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 font-bold transition">✕</button>
+        </div>
+
+        <div class="py-4 space-y-4 text-xs">
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center">
+            <span class="text-slate-600 font-medium">Valor total del pedido:</span>
+            <span class="text-sm font-bold text-slate-900">$${totalPedido.toLocaleString('es-CO')}</span>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block font-bold text-slate-700">Monto del abono recibido ($)</label>
+            <input type="number" id="input-monto-abono" min="0" max="${totalPedido}" step="1000"
+                   value="${montoActual > 0 ? montoActual : ''}" placeholder="Ej: 20000"
+                   class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                   oninput="ModuloDomicilios.recalcularSaldoAbonoModal(${totalPedido}, ${devueltaEntregada})" />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="space-y-1.5">
+              <label class="block font-bold text-slate-700">Método del abono</label>
+              <select id="select-metodo-abono" onchange="ModuloDomicilios.recalcularSaldoAbonoModal(${totalPedido}, ${devueltaEntregada})"
+                      class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-amber-500 bg-white">
+                <option value="EFECTIVO" ${metodoActual === 'EFECTIVO' ? 'selected' : ''}>💵 Efectivo (Recibido)</option>
+                <option value="TRANSFERENCIA" ${metodoActual === 'TRANSFERENCIA' ? 'selected' : ''}>🏦 Transferencia</option>
+              </select>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block font-bold text-slate-700">¿Cómo queda el saldo restante?</label>
+              <select id="select-tipo-saldo" onchange="ModuloDomicilios.recalcularSaldoAbonoModal(${totalPedido}, ${devueltaEntregada})"
+                      class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-amber-500 bg-white">
+                <option value="CREDITO" ${tipoSaldoActual === 'CREDITO' ? 'selected' : ''}>💳 Crédito (Cartera/Fiado)</option>
+                <option value="TRANSFERENCIA_PENDIENTE" ${tipoSaldoActual === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>⏳ Transferencia pendiente</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pt-1">
+            <label class="flex items-center gap-2 text-xs text-slate-700 font-medium cursor-pointer bg-slate-50 p-2 rounded-lg border border-slate-200">
+              <input type="checkbox" id="chk-modal-marcar-entregado" class="w-4 h-4 text-emerald-600 rounded" ${pedido.estado_entrega === 'ENTREGADO' ? 'checked' : 'checked'} />
+              <span>Marcar pedido como <b>Entregado al cliente</b></span>
+            </label>
+          </div>
+
+          <div class="p-3 bg-amber-50/90 rounded-xl border border-amber-200 space-y-2">
+            <div class="flex justify-between items-center text-amber-950 font-bold">
+              <span>Saldo que queda debiendo el cliente:</span>
+              <span id="txt-modal-saldo-pendiente" class="text-sm font-extrabold text-rose-700">$${saldoActual.toLocaleString('es-CO')}</span>
+            </div>
+            <div id="txt-modal-arqueo-explicacion" class="text-[11px] text-slate-700 border-t border-amber-200/80 pt-1.5 leading-relaxed">
+              <!-- Calculado dinámicamente -->
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="ModuloDomicilios.cerrarModalAbono()"
+                  class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancelar</button>
+          <button type="button" onclick="ModuloDomicilios.guardarAbono(${pedidoId})"
+                  class="px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md transition">Guardar Abono</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) ModuloDomicilios.cerrarModalAbono();
+    });
+    this.recalcularSaldoAbonoModal(totalPedido, devueltaEntregada);
+    setTimeout(() => {
+      const inp = document.getElementById('input-monto-abono');
+      if (inp) { inp.focus(); inp.select(); }
+    }, 50);
+  },
+
+  cerrarModalAbono() {
+    const modal = document.getElementById('modal-abono-pedido');
+    if (modal) modal.remove();
+  },
+
+  recalcularSaldoAbonoModal(totalPedido, devueltaEntregada = 0) {
+    const inp = document.getElementById('input-monto-abono');
+    const txt = document.getElementById('txt-modal-saldo-pendiente');
+    const txtExp = document.getElementById('txt-modal-arqueo-explicacion');
+    const selMetodo = document.getElementById('select-metodo-abono');
+    const selTipoSaldo = document.getElementById('select-tipo-saldo');
+    if (!inp || !txt) return;
+
+    let monto = parseFloat(inp.value) || 0;
+    if (monto < 0) monto = 0;
+    const saldo = Math.max(0, totalPedido - monto);
+    txt.innerText = `$${saldo.toLocaleString('es-CO')}`;
+
+    const metodo = selMetodo?.value || 'EFECTIVO';
+    const tipoSaldo = selTipoSaldo?.value || 'CREDITO';
+    const dev = Number(devueltaEntregada) || 0;
+
+    let totalCajaPedido = 0;
+    if (metodo === 'EFECTIVO') {
+      totalCajaPedido = monto + dev;
+    } else {
+      totalCajaPedido = dev;
+    }
+
+    if (txtExp) {
+      txtExp.innerHTML = `
+        <div class="space-y-1.5">
+          <p><strong>📥 A entregar en caja por este pedido:</strong>
+            ${metodo === 'EFECTIVO'
+              ? `Abono recibido en efectivo ($${monto.toLocaleString('es-CO')}) + Devuelta base ($${dev.toLocaleString('es-CO')}) = <strong class="text-emerald-800 text-xs">$${totalCajaPedido.toLocaleString('es-CO')}</strong>`
+              : `Abono por transferencia ($${monto.toLocaleString('es-CO')} - entra a cuenta). En caja se entrega la devuelta base de <strong class="text-emerald-800 text-xs">$${dev.toLocaleString('es-CO')}</strong>`}
+          </p>
+          <p><strong>📑 Cartera / Cobro pendiente:</strong>
+            Saldo restante de <strong class="text-rose-700">$${saldo.toLocaleString('es-CO')}</strong> queda como <strong>${tipoSaldo === 'TRANSFERENCIA_PENDIENTE' ? '⏳ Transferencia pendiente' : '💳 Crédito / Cartera cliente'}</strong>.
+          </p>
+        </div>
+      `;
+    }
+  },
+
+  async guardarAbono(pedidoId) {
+    const pedido = (this._cuadrePedidos || []).find(p => p.id === pedidoId);
+    if (!pedido) return;
+
+    const totalPedido = Number(pedido.total) || 0;
+    const inpMonto = document.getElementById('input-monto-abono');
+    const selMetodo = document.getElementById('select-metodo-abono');
+    const selTipoSaldo = document.getElementById('select-tipo-saldo');
+    const chkEntregado = document.getElementById('chk-modal-marcar-entregado');
+    const marcarEntregado = chkEntregado ? chkEntregado.checked : true;
+
+    let montoAbono = parseFloat(inpMonto?.value) || 0;
+    if (montoAbono < 0) montoAbono = 0;
+    if (montoAbono > totalPedido) {
+      return alert(`El monto del abono ($${montoAbono.toLocaleString('es-CO')}) no puede ser mayor que el total del pedido ($${totalPedido.toLocaleString('es-CO')}).`);
+    }
+
+    const metodoAbono = selMetodo?.value || 'EFECTIVO';
+    const tipoSaldo = selTipoSaldo?.value || 'CREDITO';
+    const saldoPendiente = Math.max(0, totalPedido - montoAbono);
+    const estadoEntregaFinal = marcarEntregado ? 'ENTREGADO' : (pedido.estado_entrega || 'PENDIENTE');
+
+    try {
+      const res = await apiFetch(`/rutas/pedido/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          montoAbono: montoAbono,
+          monto_abono: montoAbono,
+          saldoPendiente: saldoPendiente,
+          saldo_pendiente: saldoPendiente,
+          metodoAbono: metodoAbono,
+          metodo_abono: metodoAbono,
+          tipoSaldo: tipoSaldo,
+          tipo_saldo: tipoSaldo,
+          estadoEntrega: estadoEntregaFinal,
+          estado_entrega: estadoEntregaFinal
+        })
+      });
+
+      if (res && res.ok) {
+        if (res.pedido) {
+          Object.assign(pedido, res.pedido);
+        } else {
+          pedido.monto_abono = montoAbono;
+          pedido.saldo_pendiente = saldoPendiente;
+          pedido.metodo_abono = metodoAbono;
+          pedido.tipo_saldo = tipoSaldo;
+          pedido.estado_entrega = estadoEntregaFinal;
+        }
+        showToast(`Abono de $${montoAbono.toLocaleString('es-CO')} guardado exitosamente`);
+        this.cerrarModalAbono();
+        await this.renderTabCuadre();
+        this.recalcularArqueo();
+      } else {
+        alert(res?.error || 'No se pudo guardar el abono');
+      }
+    } catch (err) {
+      alert('Error al guardar el abono: ' + (err.message || 'Error de conexión'));
+    }
+  },
+
+  async eliminarAbono(pedidoId) {
+    if (!confirm('¿Deseas quitar el abono registrado para este pedido?')) return;
+    const pedido = (this._cuadrePedidos || []).find(p => p.id === pedidoId);
+    try {
+      const res = await apiFetch(`/rutas/pedido/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          montoAbono: 0,
+          monto_abono: 0,
+          saldoPendiente: 0,
+          saldo_pendiente: 0,
+          metodoAbono: 'EFECTIVO',
+          metodo_abono: 'EFECTIVO',
+          tipoSaldo: 'CREDITO',
+          tipo_saldo: 'CREDITO'
+        })
+      });
+      if (res && res.ok) {
+        if (pedido) {
+          pedido.monto_abono = 0;
+          pedido.saldo_pendiente = 0;
+          pedido.metodo_abono = 'EFECTIVO';
+          pedido.tipo_saldo = 'CREDITO';
+        }
+        showToast('Abono eliminado');
+        await this.renderTabCuadre();
+      }
+    } catch (err) {
+      alert('Error al quitar abono');
     }
   },
 
@@ -2299,25 +2822,38 @@ async guardarAjusteTotal(pedidoId) {
 
   recalcularArqueo() {
     let totalEfectivoRecolectado = 0;
-    let totalDevueltasTransfer = 0;
+    let totalSaldosPendientes = 0;
     const selects = document.querySelectorAll('.sel-metodo');
 
     selects.forEach(sel => {
-      const total = parseFloat(sel.dataset.total) || 0;
-      const devuelta = parseFloat(sel.dataset.devuelta) || 0;
       const pid = sel.dataset.id;
+      const card = document.getElementById(`item-pedido-${pid}`);
+      const total = parseFloat(sel.dataset.total) || 0;
+      const montoAbono = parseFloat(card?.dataset?.montoAbono) || 0;
+      const saldoPendiente = parseFloat(card?.dataset?.saldoPendiente) || 0;
+      const metodoAbono = card?.dataset?.metodoAbono || 'EFECTIVO';
+      const metodo = sel.value;
       const boxComp = document.getElementById(`box-comp-${pid}`);
-      const esTransfer = sel.value === 'TRANSFERENCIA' || sel.value === 'TRANSFERENCIA_PENDIENTE';
+      const esTransfer = metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE';
+      const esYaPago = metodo === 'YA_PAGO';
 
-      if (esTransfer) {
-        // Solo muestra comprobante si es transferencia YA hecha
-        if (boxComp) {
-          if (sel.value === 'TRANSFERENCIA') boxComp.classList.remove('hidden');
-          else boxComp.classList.add('hidden');
+      if (boxComp) {
+        if (metodo === 'TRANSFERENCIA') boxComp.classList.remove('hidden');
+        else boxComp.classList.add('hidden');
+      }
+
+      if (esYaPago) {
+        // Nada en efectivo cobrado
+      } else if (montoAbono > 0) {
+        if (metodoAbono === 'EFECTIVO') {
+          totalEfectivoRecolectado += this.redondearCaja50(montoAbono);
         }
-        totalDevueltasTransfer += devuelta;
+        totalSaldosPendientes += saldoPendiente;
+      } else if (esTransfer) {
+        if (metodo === 'TRANSFERENCIA_PENDIENTE') {
+          totalSaldosPendientes += total;
+        }
       } else {
-        if (boxComp) boxComp.classList.add('hidden');
         // Redondeado a $50: es el efectivo físico que realmente se entrega/recibe.
         totalEfectivoRecolectado += this.redondearCaja50(total);
       }
@@ -2326,13 +2862,14 @@ async guardarAjusteTotal(pedidoId) {
     const elBase = document.getElementById('arq-base');
     const baseRuta = parseFloat(elBase?.dataset?.valor) || 0;
 
-    // Efectivo de pedidos + devueltas de transferencias (vuelven a caja)
-    // Nota: la base completa ya está en baseRuta; aquí mostramos cobrado en efectivo.
+    // Total a entregar en caja = efectivo físico cobrado + base devueltas
     const totalEntregar = totalEfectivoRecolectado + baseRuta;
 
     const elEfectivo = document.getElementById('arq-efectivo');
+    const elSaldos = document.getElementById('arq-saldos');
     const elTotal = document.getElementById('arq-total');
     if (elEfectivo) elEfectivo.innerText = `$${totalEfectivoRecolectado.toLocaleString('es-CO')}`;
+    if (elSaldos) elSaldos.innerText = `$${totalSaldosPendientes.toLocaleString('es-CO')}`;
     if (elTotal) {
       elTotal.innerText = `$${totalEntregar.toLocaleString('es-CO')}`;
       elTotal.dataset.valor = String(totalEntregar);
@@ -2344,11 +2881,13 @@ async guardarAjusteTotal(pedidoId) {
     const selects = document.querySelectorAll('.sel-metodo');
     const pedidosLiquidacion = [];
 
-        for (const sel of selects) {
+    for (const sel of selects) {
       const pid = parseInt(sel.dataset.id, 10);
+      const card = document.getElementById(`item-pedido-${pid}`);
       const metodo = sel.value;
       const inpComp = document.querySelector(`.inp-comp[data-id="${pid}"]`);
       const comp = inpComp ? inpComp.value.trim() : '';
+      const tipoSaldo = card?.dataset?.tipoSaldo || 'CREDITO';
 
       // Solo obliga comprobante si la transferencia YA se hizo
       if (metodo === 'TRANSFERENCIA' && !comp) {
@@ -2356,7 +2895,7 @@ async guardarAjusteTotal(pedidoId) {
       }
       // TRANSFERENCIA_PENDIENTE: se permite sin comprobante
 
-      pedidosLiquidacion.push({ id: pid, metodoPago: metodo, comprobante: comp });
+      pedidosLiquidacion.push({ id: pid, metodoPago: metodo, comprobante: comp, tipoSaldo });
     }
 
     const totalEfectivoEntregado = this.recalcularArqueo();
@@ -2414,6 +2953,11 @@ async guardarAjusteTotal(pedidoId) {
     this.renderTabAuditoria();
   },
 
+  setVistaConfirmadosAuditoria(vista) {
+    this.vistaConfirmadosAuditoria = vista;
+    this.renderTabAuditoria();
+  },
+
   fechaAyerLocal() {
     const d = new Date();
     d.setDate(d.getDate() - 1);
@@ -2442,7 +2986,7 @@ async guardarAjusteTotal(pedidoId) {
       }
 
       this.auditoriaData = res;
-      const { totales, rutas, resumenDomiciliarios, pagosPendientes, todosPagosPendientes, novedadesAjustes, fecha } = res;
+      const { totales, rutas, resumenDomiciliarios, pagosPendientes, todosPagosPendientes, pagosConfirmados, todosPagosConfirmados, novedadesAjustes, fecha } = res;
 
       // Filtrado por buscador
       const q = this.filtroTextoAuditoria;
@@ -2475,6 +3019,20 @@ async guardarAjusteTotal(pedidoId) {
             (p.domiciliario_nombre || '').toLowerCase().includes(q)
           )
         : listaPendientes;
+
+      // Lista de pagos confirmados a mostrar según el selector de vista
+      const listaConfirmados = (this.vistaConfirmadosAuditoria === 'todos' ? todosPagosConfirmados : pagosConfirmados) || [];
+      const confirmadosFiltrados = q
+        ? listaConfirmados.filter(p =>
+            (p.codigo_pedido || '').toLowerCase().includes(q) ||
+            (p.cliente || '').toLowerCase().includes(q) ||
+            (p.telefono || '').toLowerCase().includes(q) ||
+            (p.domiciliario_nombre || '').toLowerCase().includes(q) ||
+            (p.comprobante_transf || '').toLowerCase().includes(q) ||
+            (p.usuario_confirmacion_nombre || '').toLowerCase().includes(q) ||
+            (p.observacion || '').toLowerCase().includes(q)
+          )
+        : listaConfirmados;
 
       const subActiva = this.subseccionAuditoria || 'rutas';
       const pillActiva = 'bg-indigo-600 text-white shadow-xs font-bold';
@@ -2601,6 +3159,10 @@ async guardarAjusteTotal(pedidoId) {
               class="px-3 py-1.5 text-xs rounded-lg transition ${subActiva === 'pendientes' ? pillActiva : pillInactiva}">
               ⏳ Cartera & Pendientes (${pagosPendientes?.length || 0})
             </button>
+            <button onclick="ModuloDomicilios.cambiarSubseccionAuditoria('confirmados')"
+              class="px-3 py-1.5 text-xs rounded-lg transition ${subActiva === 'confirmados' ? pillActiva : pillInactiva}">
+              ✅ Pagos Confirmados (${pagosConfirmados?.length || 0})
+            </button>
             <button onclick="ModuloDomicilios.cambiarSubseccionAuditoria('novedades')"
               class="px-3 py-1.5 text-xs rounded-lg transition ${subActiva === 'novedades' ? pillActiva : pillInactiva}">
               ⚖️ Ajustes de Precios (${novedadesAjustes?.length || 0})
@@ -2630,6 +3192,9 @@ async guardarAjusteTotal(pedidoId) {
               pendientes: pendientesFiltrados,
               todosPendientesCount: todosPagosPendientes?.length || 0,
               diaPendientesCount: pagosPendientes?.length || 0,
+              confirmados: confirmadosFiltrados,
+              todosConfirmadosCount: todosPagosConfirmados?.length || 0,
+              diaConfirmadosCount: pagosConfirmados?.length || 0,
               novedades: novedadesAjustes,
               filtroDom
             })}
@@ -2649,13 +3214,15 @@ async guardarAjusteTotal(pedidoId) {
     }
   },
 
-  renderSubseccionAuditoria({ subActiva, rutas, resumenDomiciliarios, pendientes, todosPendientesCount, diaPendientesCount, novedades, filtroDom }) {
+  renderSubseccionAuditoria({ subActiva, rutas, resumenDomiciliarios, pendientes, todosPendientesCount, diaPendientesCount, confirmados, todosConfirmadosCount, diaConfirmadosCount, novedades, filtroDom }) {
     if (subActiva === 'rutas') {
       return this.renderSubseccionRutas(rutas, resumenDomiciliarios, filtroDom);
     } else if (subActiva === 'domiciliarios') {
       return this.renderSubseccionDomiciliarios(resumenDomiciliarios);
     } else if (subActiva === 'pendientes') {
       return this.renderSubseccionPendientes(pendientes, todosPendientesCount, diaPendientesCount);
+    } else if (subActiva === 'confirmados') {
+      return this.renderSubseccionConfirmados(confirmados, todosConfirmadosCount, diaConfirmadosCount);
     } else if (subActiva === 'novedades') {
       return this.renderSubseccionNovedades(novedades);
     }
@@ -2714,6 +3281,7 @@ async guardarAjusteTotal(pedidoId) {
                       </h4>
                       <p class="text-[10px] text-slate-500">
                         Salida: ${horaSalida}${horaCierre ? ` · Cierre: ${horaCierre}` : ''}
+                        ${r.usuario_liquidacion_nombre ? ` · Liquidada por: <strong class="text-slate-700">${escapeHtml(r.usuario_liquidacion_nombre)}</strong>` : ''}
                       </p>
                     </div>
                   </div>
@@ -2825,6 +3393,11 @@ async guardarAjusteTotal(pedidoId) {
                                   💳 ${p.metodo_pago_final || 'Por definir'}
                                   ${p.comprobante_transf ? ` (#${p.comprobante_transf})` : ''}
                                 </span>
+                                ${p.usuario_confirmacion_nombre ? `
+                                  <span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 font-semibold rounded text-[10px] border border-emerald-200">
+                                    ✓ Confirmado por: ${escapeHtml(p.usuario_confirmacion_nombre)}
+                                  </span>
+                                ` : ''}
                                 ${huboAjuste ? `
                                   <span class="px-2 py-0.5 bg-amber-100 text-amber-800 font-semibold rounded text-[10px]">
                                     ⚠️ Ajustado de $${Number(p.total_original).toLocaleString('es-CO')}
@@ -3013,8 +3586,17 @@ async guardarAjusteTotal(pedidoId) {
         ` : `
           <div class="space-y-2.5">
             ${pendientes.map(p => {
+              const total = Number(p.total || 0);
+              const montoAbono = Number(p.monto_abono || 0);
+              const saldoPend = Number(p.saldo_pendiente > 0 ? p.saldo_pendiente : Math.max(0, total - montoAbono));
+              const tieneAbono = montoAbono > 0;
+              const valorACobrar = tieneAbono ? saldoPend : total;
+
               const celLimpio = (p.telefono || '').replace(/\D/g, '');
-              const textoWa = encodeURIComponent(`Hola ${p.cliente || ''}, te saludamos de la tienda respecto a tu pedido #${p.codigo_pedido || p.id} por valor de $${Number(p.total || 0).toLocaleString('es-CO')}. ¿Nos confirmas por favor el soporte de pago? ¡Muchas gracias!`);
+              const textoMsg = tieneAbono
+                ? `Hola ${p.cliente || ''}, te saludamos respecto a tu pedido #${p.codigo_pedido || p.id}. Se registró un abono inicial de $${montoAbono.toLocaleString('es-CO')}. ¿Nos confirmas por favor el soporte del saldo pendiente de $${saldoPend.toLocaleString('es-CO')}? (Total: $${total.toLocaleString('es-CO')}). ¡Muchas gracias!`
+                : `Hola ${p.cliente || ''}, te saludamos de la tienda respecto a tu pedido #${p.codigo_pedido || p.id} por valor de $${total.toLocaleString('es-CO')}. ¿Nos confirmas por favor el soporte de pago? ¡Muchas gracias!`;
+              const textoWa = encodeURIComponent(textoMsg);
               const waLink = celLimpio ? `https://wa.me/${celLimpio.startsWith('57') ? celLimpio : '57' + celLimpio}?text=${textoWa}` : null;
               const fechaDisplay = p.fecha_pedido_ruta || (p.fecha_creacion ? p.fecha_creacion.slice(0, 10) : 'Sin fecha');
 
@@ -3022,33 +3604,59 @@ async guardarAjusteTotal(pedidoId) {
                 <div class="bg-white p-3.5 rounded-xl border border-rose-200/80 shadow-xs space-y-2">
                   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
-                      <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-2 flex-wrap">
                         <span class="font-mono font-bold text-indigo-700 text-xs">#${p.codigo_pedido || p.id}</span>
-                        <span class="font-bold text-slate-900 text-sm">${p.cliente || 'Cliente'}</span>
+                        <span class="font-bold text-slate-900 text-sm">${escapeHtml(p.cliente || 'Cliente')}</span>
                         <span class="bg-rose-100 text-rose-800 text-[10px] px-2 py-0.5 rounded font-semibold">
                           ${p.metodo_pago_final === 'TRANSFERENCIA_PENDIENTE' ? 'Transferencia por verificar' : (p.metodo_pago_final === 'CREDITO' ? 'Crédito cliente' : 'Pago pendiente')}
                         </span>
+                        ${tieneAbono ? `
+                          <span class="bg-amber-100 text-amber-900 text-[10px] px-2 py-0.5 rounded font-bold border border-amber-300">
+                            🛵 Con Abono Previo
+                          </span>
+                        ` : ''}
                       </div>
                       <p class="text-[11px] text-slate-500 mt-0.5">
-                        📅 Fecha: <strong>${fechaDisplay}</strong> · Domiciliario: <strong>${p.domiciliario_nombre || 'Sin asignar'}</strong> ${p.ruta_id ? `(Ruta #${p.ruta_id})` : ''}
+                        📅 Fecha: <strong>${fechaDisplay}</strong> · Domiciliario: <strong>${escapeHtml(p.domiciliario_nombre || 'Sin asignar')}</strong> ${p.ruta_id ? `(Ruta #${p.ruta_id})` : ''}
                       </p>
                     </div>
 
-                    <div class="flex items-center gap-2">
-                      <span class="text-base font-extrabold text-rose-600">
-                        $${Number(p.total || 0).toLocaleString('es-CO')}
-                      </span>
-                      <button onclick="ModuloDomicilios.abrirModalConfirmarPago(${p.id}, '${(p.cliente || '').replace(/'/g, "\\'")}', ${p.total || 0}, '${p.codigo_pedido || ''}')"
-                        class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition">
+                    <div class="flex items-center gap-3">
+                      <div class="text-right">
+                        ${tieneAbono ? `
+                          <span class="text-[10px] text-slate-500 line-through block">Total: $${total.toLocaleString('es-CO')}</span>
+                          <span class="text-[10px] text-amber-800 font-semibold block">Abonó: $${montoAbono.toLocaleString('es-CO')} (${escapeHtml(p.metodo_abono || 'EFECTIVO')})</span>
+                          <span class="text-base font-extrabold text-rose-600 block">
+                            Saldo: $${saldoPend.toLocaleString('es-CO')}
+                          </span>
+                        ` : `
+                          <span class="text-base font-extrabold text-rose-600 block">
+                            $${total.toLocaleString('es-CO')}
+                          </span>
+                        `}
+                      </div>
+                      <button onclick="ModuloDomicilios.abrirModalConfirmarPago(${p.id}, '${(p.cliente || '').replace(/'/g, "\\'")}', ${valorACobrar}, '${p.codigo_pedido || ''}', ${montoAbono}, ${total})"
+                        class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition shrink-0">
                         ✅ Confirmar Pago
                       </button>
                     </div>
                   </div>
 
+                  ${tieneAbono ? `
+                    <div class="bg-amber-50/80 border border-amber-200 rounded-lg p-2 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        🛵 <strong>Abono recibido al domicilio:</strong> $${montoAbono.toLocaleString('es-CO')} (${escapeHtml(p.metodo_abono || 'EFECTIVO')})
+                      </div>
+                      <div>
+                        ⏳ <strong>Saldo por confirmar:</strong> <span class="font-extrabold text-rose-700">$${saldoPend.toLocaleString('es-CO')}</span>
+                      </div>
+                    </div>
+                  ` : ''}
+
                   <div class="text-[11px] text-slate-600 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-1.5">
                     <div>
-                      📍 ${p.direccion || 'Sin dirección'}${p.municipio ? `, ${p.municipio}` : ''}
-                      ${p.telefono ? ` · 📞 ${p.telefono}` : ''}
+                      📍 ${escapeHtml(p.direccion || 'Sin dirección')}${p.municipio ? `, ${escapeHtml(p.municipio)}` : ''}
+                      ${p.telefono ? ` · 📞 ${escapeHtml(p.telefono)}` : ''}
                     </div>
                     ${waLink ? `
                       <a href="${waLink}" target="_blank"
@@ -3060,7 +3668,148 @@ async guardarAjusteTotal(pedidoId) {
 
                   ${p.observacion ? `
                     <div class="bg-amber-50/70 border border-amber-200/50 p-2 rounded text-[11px] text-amber-900 italic">
-                      Observación: ${p.observacion}
+                      Observación: ${escapeHtml(p.observacion)}
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+      </div>
+    `;
+  },
+
+  renderSubseccionConfirmados(confirmados, todosCount, diaCount) {
+    const esVistaTodos = this.vistaConfirmadosAuditoria === 'todos';
+
+    return `
+      <div class="space-y-3">
+        <!-- SELECTOR DE VISTA: DEL DÍA VS TODA LA HISTORIA -->
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
+          <span class="font-bold text-slate-700">Alcance de pagos confirmados:</span>
+          <div class="flex items-center gap-1.5">
+            <button onclick="ModuloDomicilios.setVistaConfirmadosAuditoria('dia')"
+              class="px-2.5 py-1 rounded-md text-xs font-semibold transition ${!esVistaTodos ? 'bg-slate-900 text-white' : 'bg-white border text-slate-700'}">
+              De la fecha seleccionada (${diaCount})
+            </button>
+            <button onclick="ModuloDomicilios.setVistaConfirmadosAuditoria('todos')"
+              class="px-2.5 py-1 rounded-md text-xs font-semibold transition ${esVistaTodos ? 'bg-slate-900 text-white' : 'bg-white border text-slate-700'}">
+              Todo el histórico confirmado (${todosCount})
+            </button>
+          </div>
+        </div>
+
+        ${(!confirmados || confirmados.length === 0) ? `
+          <div class="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs">
+            <p class="text-2xl mb-1">🔍</p>
+            <p class="font-semibold text-slate-700">No hay pagos confirmados en esta vista.</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Los pagos pendientes confirmados o transferencias verificadas aparecerán aquí.</p>
+          </div>
+        ` : `
+          <div class="space-y-2.5">
+            ${confirmados.map(p => {
+              const total = Number(p.total || 0);
+              const montoAbono = Number(p.monto_abono || 0);
+              const saldoRestante = Math.max(0, total - montoAbono);
+              const tieneAbono = montoAbono > 0;
+
+              const celLimpio = (p.telefono || '').replace(/\D/g, '');
+              const textoMsg = tieneAbono
+                ? `Hola ${p.cliente || ''}, te confirmamos que tu abono de $${montoAbono.toLocaleString('es-CO')} y el pago restante de $${saldoRestante.toLocaleString('es-CO')} del pedido #${p.codigo_pedido || p.id} (Total: $${total.toLocaleString('es-CO')}) han sido verificados y liquidados correctamente. ¡Muchas gracias!`
+                : `Hola ${p.cliente || ''}, te confirmamos que tu pago del pedido #${p.codigo_pedido || p.id} por valor de $${total.toLocaleString('es-CO')} ha sido verificado y liquidado correctamente. ¡Muchas gracias!`;
+              const textoWa = encodeURIComponent(textoMsg);
+              const waLink = celLimpio ? `https://wa.me/${celLimpio.startsWith('57') ? celLimpio : '57' + celLimpio}?text=${textoWa}` : null;
+              const fechaDisplay = p.fecha_pedido_ruta || (p.fecha_creacion ? p.fecha_creacion.slice(0, 10) : 'Sin fecha');
+              const horaDisplay = p.hora_confirmacion_pago || (p.fecha_confirmacion_pago ? new Date(p.fecha_confirmacion_pago).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+              return `
+                <div class="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-xs space-y-2.5">
+                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-mono font-bold text-indigo-700 text-xs">#${p.codigo_pedido || p.id}</span>
+                        <span class="font-bold text-slate-900 text-sm">${escapeHtml(p.cliente || 'Cliente')}</span>
+                        ${tieneAbono ? `
+                          <span class="bg-indigo-100 text-indigo-900 text-[10px] px-2 py-0.5 rounded font-bold border border-indigo-300">
+                            ✓ Abono + Saldo Confirmado
+                          </span>
+                        ` : `
+                          <span class="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-bold border border-emerald-300">
+                            ✓ Pago Total Confirmado
+                          </span>
+                        `}
+                        ${p.usuario_confirmacion_nombre ? `
+                          <span class="bg-slate-100 text-slate-800 text-[11px] px-2 py-0.5 rounded font-semibold border border-slate-300 flex items-center gap-1">
+                            👤 Confirmado por: <strong class="text-indigo-900">${escapeHtml(p.usuario_confirmacion_nombre)}</strong>
+                          </span>
+                        ` : ''}
+                      </div>
+                      <p class="text-[11px] text-slate-500 mt-0.5">
+                        📅 Fecha: <strong>${fechaDisplay}</strong> ${horaDisplay ? `· ⏰ ${horaDisplay}` : ''} · Domiciliario: <strong>${escapeHtml(p.domiciliario_nombre || 'Sin asignar')}</strong> ${p.ruta_id ? `(Ruta #${p.ruta_id})` : ''}
+                      </p>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <div class="text-right">
+                        <span class="text-base font-extrabold text-emerald-700 block">
+                          $${total.toLocaleString('es-CO')}
+                        </span>
+                        <p class="text-[10px] text-slate-500 font-medium">
+                          ${p.metodo_pago_final === 'TRANSFERENCIA' ? '📱 Transferencia' : '💵 Efectivo'}
+                          ${p.comprobante_transf ? ` (#${escapeHtml(p.comprobante_transf)})` : ''}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  ${tieneAbono ? `
+                    <!-- DETALLE EXPLICITO DE ABONO + RESTANTE CONFIRMADO -->
+                    <div class="bg-gradient-to-r from-amber-50/90 to-emerald-50/90 border border-amber-200/80 rounded-lg p-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div class="border-b sm:border-b-0 sm:border-r border-amber-200/60 pb-1.5 sm:pb-0 sm:pr-2">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-wider font-bold block">💵 Total Pedido</span>
+                        <span class="text-sm font-extrabold text-slate-900">$${total.toLocaleString('es-CO')}</span>
+                      </div>
+                      <div class="border-b sm:border-b-0 sm:border-r border-amber-200/60 pb-1.5 sm:pb-0 sm:pr-2">
+                        <span class="text-[10px] text-amber-800 uppercase tracking-wider font-bold block">🛵 1. Abono al Domicilio</span>
+                        <span class="text-sm font-extrabold text-amber-900">$${montoAbono.toLocaleString('es-CO')}</span>
+                        <span class="text-[10px] text-amber-700 block">Medio: <strong>${escapeHtml(p.metodo_abono || 'EFECTIVO')}</strong></span>
+                      </div>
+                      <div>
+                        <span class="text-[10px] text-emerald-800 uppercase tracking-wider font-bold block">✅ 2. Pago Restante Confirmado</span>
+                        <span class="text-sm font-extrabold text-emerald-700">$${saldoRestante.toLocaleString('es-CO')}</span>
+                        <span class="text-[10px] text-emerald-800 block">
+                          Medio: <strong>${p.metodo_pago_final === 'TRANSFERENCIA' ? '📱 Transferencia' : '💵 Efectivo'}</strong>
+                          ${p.comprobante_transf ? `(Comp: #${escapeHtml(p.comprobante_transf)})` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  ` : `
+                    <div class="bg-emerald-50/60 border border-emerald-100 rounded-lg px-3 py-1.5 text-xs text-emerald-900 flex items-center justify-between">
+                      <span>✓ <strong>Pago confirmado por el total:</strong> $${total.toLocaleString('es-CO')}</span>
+                      <span class="font-medium text-[11px] text-emerald-800">
+                        ${p.metodo_pago_final === 'TRANSFERENCIA' ? '📱 Transferencia' : '💵 Efectivo'}
+                        ${p.comprobante_transf ? `· Comprobante: #${escapeHtml(p.comprobante_transf)}` : ''}
+                      </span>
+                    </div>
+                  `}
+
+                  <div class="text-[11px] text-slate-600 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-1.5">
+                    <div>
+                      📍 ${escapeHtml(p.direccion || 'Sin dirección')}${p.municipio ? `, ${escapeHtml(p.municipio)}` : ''}
+                      ${p.telefono ? ` · 📞 ${escapeHtml(p.telefono)}` : ''}
+                    </div>
+                    ${waLink ? `
+                      <a href="${waLink}" target="_blank"
+                        class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-semibold flex items-center gap-1">
+                        💬 Notificar por WhatsApp
+                      </a>
+                    ` : ''}
+                  </div>
+
+                  ${p.observacion ? `
+                    <div class="bg-slate-50 border border-slate-200 p-2 rounded text-[11px] text-slate-700">
+                      <strong>Detalle de auditoría:</strong> ${escapeHtml(p.observacion)}
                     </div>
                   ` : ''}
                 </div>
@@ -3119,10 +3868,11 @@ async guardarAjusteTotal(pedidoId) {
     `;
   },
 
-  abrirModalConfirmarPago(pedidoId, cliente, total, codigoPedido) {
+  abrirModalConfirmarPago(pedidoId, cliente, totalACobrar, codigoPedido, montoAbono = 0, totalFactura = 0) {
     const modalExistente = document.getElementById('modal-confirmar-pago');
     if (modalExistente) modalExistente.remove();
 
+    const tieneAbono = Number(montoAbono) > 0;
     const modal = document.createElement('div');
     modal.id = 'modal-confirmar-pago';
     modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4';
@@ -3131,15 +3881,32 @@ async guardarAjusteTotal(pedidoId) {
         <div class="flex justify-between items-start border-b pb-3">
           <div>
             <h3 class="text-sm font-bold text-slate-900">✅ Confirmar Pago de Cartera</h3>
-            <p class="text-xs text-slate-500">Pedido #${codigoPedido || pedidoId} - ${cliente || 'Cliente'}</p>
+            <p class="text-xs text-slate-500">Pedido #${codigoPedido || pedidoId} - ${escapeHtml(cliente || 'Cliente')}</p>
           </div>
           <button onclick="ModuloDomicilios.cerrarModalConfirmarPago()" class="text-slate-400 hover:text-slate-600 text-lg leading-none">&times;</button>
         </div>
 
-        <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex justify-between items-center">
-          <span>Valor a Registrar / Cobrar:</span>
-          <span class="text-base font-extrabold text-amber-950">$${Number(total || 0).toLocaleString('es-CO')}</span>
-        </div>
+        ${tieneAbono ? `
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-950 space-y-1.5">
+            <div class="flex justify-between items-center text-slate-600">
+              <span>Total Pedido:</span>
+              <span class="font-bold">$${Number(totalFactura || totalACobrar).toLocaleString('es-CO')}</span>
+            </div>
+            <div class="flex justify-between items-center text-amber-800">
+              <span>🛵 Abono Inicial Recibido:</span>
+              <span class="font-bold">-$${Number(montoAbono).toLocaleString('es-CO')}</span>
+            </div>
+            <div class="flex justify-between items-center pt-1 border-t border-amber-200/80 font-bold text-slate-900">
+              <span>Saldo Restante a Liquidar:</span>
+              <span class="text-base text-rose-700 font-extrabold">$${Number(totalACobrar).toLocaleString('es-CO')}</span>
+            </div>
+          </div>
+        ` : `
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex justify-between items-center">
+            <span>Valor Total a Confirmar / Liquidar:</span>
+            <span class="text-base font-extrabold text-amber-950">$${Number(totalACobrar || 0).toLocaleString('es-CO')}</span>
+          </div>
+        `}
 
         <div class="space-y-3 text-xs">
           <div>
@@ -3494,11 +4261,62 @@ async guardarAjusteTotal(pedidoId) {
     }
   },
 
-  imprimirTicketRuta80mm(rutaId) {
-    const ruta = (this.auditoriaData?.rutas || []).find(r => r.id === rutaId);
+  imprimirTicketRuta80mm(arg1, arg2) {
+    let ruta = null;
+    let pedidos = null;
+
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      ruta = { ...arg1 };
+      pedidos = Array.isArray(arg2) ? [...arg2] : (ruta.pedidos || []);
+    } else {
+      const rutaId = Number(arg1);
+      ruta = (this.auditoriaData?.rutas || []).find(r => r.id === rutaId);
+      if (!ruta && this._cuadreRuta && this._cuadreRuta.id === rutaId) {
+        ruta = { ...this._cuadreRuta };
+        pedidos = this._cuadrePedidos ? [...this._cuadrePedidos] : [];
+      }
+      if (ruta && !pedidos) {
+        pedidos = ruta.pedidos || [];
+      }
+    }
+
     if (!ruta) {
       showToast('Ruta no encontrada para imprimir', 'error');
       return;
+    }
+
+    if (pedidos) {
+      ruta.pedidos = pedidos;
+      let ef = 0, tr = 0, pend = 0, entr = 0, dev = 0;
+      pedidos.forEach(p => {
+        const met = p.metodo_pago_final || 'EFECTIVO';
+        const tot = Number(p.total) || 0;
+        const abono = Number(p.monto_abono) || 0;
+        const metAbono = p.metodo_abono || 'EFECTIVO';
+        const saldo = (p.saldo_pendiente !== undefined && p.saldo_pendiente !== null) ? Number(p.saldo_pendiente) : (abono > 0 ? Math.max(0, tot - abono) : 0);
+
+        if (p.estado_entrega === 'ENTREGADO') {
+          entr++;
+          if (abono > 0) {
+            if (metAbono === 'EFECTIVO') ef += abono;
+            else tr += abono;
+            pend += saldo;
+          } else if (met === 'EFECTIVO') {
+            ef += tot;
+          } else if (met === 'TRANSFERENCIA') {
+            tr += tot;
+          } else if (met === 'TRANSFERENCIA_PENDIENTE' || met === 'CREDITO') {
+            pend += tot;
+          }
+        } else if (p.estado_entrega === 'NO_ENTREGADO') {
+          dev++;
+        }
+      });
+      if (ruta.efectivo === undefined) ruta.efectivo = ef;
+      if (ruta.transferencia === undefined) ruta.transferencia = tr;
+      if (ruta.pendiente === undefined) ruta.pendiente = pend;
+      if (ruta.entregados === undefined) ruta.entregados = entr;
+      if (ruta.no_entregados === undefined) ruta.no_entregados = dev;
     }
 
     const ahora = new Date();
@@ -3511,12 +4329,17 @@ async guardarAjusteTotal(pedidoId) {
     let filasPedidos = '';
     (ruta.pedidos || []).forEach(p => {
       const estadoTxt = p.estado_entrega === 'ENTREGADO' ? 'ENTREGADO' : (p.estado_entrega === 'NO_ENTREGADO' ? 'DEVUELTO' : 'PENDIENTE');
+      const montoAbono = Number(p.monto_abono) || 0;
+      const hayAbono = montoAbono > 0;
+      const saldoPend = Number(p.saldo_pendiente || 0);
+
       filasPedidos += `
         <div style="margin-bottom: 5px; border-bottom: 1px dotted #ccc; padding-bottom: 3px;">
           <div class="bold">#${escapeHtml(p.codigo_pedido || String(p.id))} - ${escapeHtml(p.cliente || 'Cliente')}</div>
           <div style="font-size: 9px; color: #222;">
             ${escapeHtml(p.direccion || 'Sin dirección')}<br>
-            Estado: <b>${estadoTxt}</b> | Pago: <b>${escapeHtml(p.metodo_pago_final || 'Por liquidar')}</b>
+            Estado: <b>${estadoTxt}</b>
+            ${hayAbono ? ` | Abono: <b>$${montoAbono.toLocaleString('es-CO')} (${p.metodo_abono || 'EFECTIVO'})</b><br>Saldo: <b>$${saldoPend.toLocaleString('es-CO')} (${p.tipo_saldo === 'TRANSFERENCIA_PENDIENTE' ? 'Transf Pend' : 'Crédito'})</b>` : ` | Pago: <b>${escapeHtml(p.metodo_pago_final || 'Por liquidar')}</b>`}
             ${p.comprobante_transf ? ` (Comp: ${escapeHtml(p.comprobante_transf)})` : ''}
           </div>
           <div class="text-right bold" style="font-size: 10.5px;">

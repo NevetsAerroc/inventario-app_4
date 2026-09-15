@@ -86,17 +86,6 @@ router.post('/', (req, res) => {
     }
 
     let finalDomiId = domiciliario_id ? Number(domiciliario_id) : null;
-    // Si el rol es domiciliario o incluye domicilios_en_curso y no hay id seleccionado:
-    if ((rolValido === 'domiciliario' || arrayPermisos.includes('domicilios_en_curso')) && (!finalDomiId || finalDomiId === 0)) {
-      // Verificar si ya existe un domiciliario con el mismo nombre o crear uno
-      const domiExistente = db.prepare("SELECT id FROM domiciliarios WHERE LOWER(nombre) = LOWER(?)").get(nombre.trim());
-      if (domiExistente) {
-        finalDomiId = domiExistente.id;
-      } else {
-        const info = db.prepare("INSERT INTO domiciliarios (nombre, telefono) VALUES (?, '')").run(nombre.trim());
-        finalDomiId = info.lastInsertRowid;
-      }
-    }
 
     const passwordHash = db.hashPassword(password);
 

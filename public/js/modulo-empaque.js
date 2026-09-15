@@ -523,6 +523,23 @@ const ModuloEmpaque = (() => {
           </tr>
         </table>
 
+        ${(() => {
+          const itemsFaltantes = (pedido.items || []).filter(it => it.es_faltante);
+          if (itemsFaltantes.length === 0) return '';
+          return `
+            <div class="divider"></div>
+            <div style="background: #fffbeb; border: 1px dashed #d97706; padding: 5px; margin: 4px 0;">
+              <p class="bold text-center" style="color: #92400e; margin: 0 0 3px 0; font-size: 10px;">⚠️ PRODUCTOS FALTANTES (COMPRA/RECOLECCIÓN)</p>
+              ${itemsFaltantes.map(it => `
+                <div style="font-size: 9px; margin-bottom: 3px; border-bottom: 1px dotted #e5e7eb; padding-bottom: 2px;">
+                  <b>• ${escapeHtml(it.nombre_producto || it.nombre)}</b> (Cant: ${it.cantidad_solicitada || 1})<br>
+                  <span style="color: #78350f;">Nota: ${escapeHtml(it.nota_faltante || 'Sin nota')}</span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        })()}
+
         <div class="divider"></div>
 
         <div class="text-center bold" style="margin-top: 8px;">
@@ -653,19 +670,32 @@ const ModuloEmpaque = (() => {
     }
 
     cont.innerHTML = itemsManual.map((it, idx) => `
-      <div class="px-3 py-2.5 flex justify-between items-center text-sm hover:bg-slate-50 transition-colors">
-        <div class="min-w-0 flex-1 pr-2">
-          <p class="font-bold text-slate-800 truncate">${escapeHtml(it.nombre)}</p>
-          <p class="text-xs text-slate-400 font-mono">SKU ${escapeHtml(it.sku || 'N/A')}</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <div class="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
-            <button type="button" class="btn-restar-cant-manual px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold text-xs" data-idx="${idx}">-</button>
-            <span class="px-2 py-1 font-extrabold text-xs text-slate-800 min-w-[28px] text-center">${it.cantidad}</span>
-            <button type="button" class="btn-sumar-cant-manual px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold text-xs" data-idx="${idx}">+</button>
+      <div class="px-3 py-2.5 flex flex-col gap-1 text-sm hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0">
+        <div class="flex justify-between items-center">
+          <div class="min-w-0 flex-1 pr-2">
+            <p class="font-bold text-slate-800 truncate flex items-center gap-1.5">
+              <span>${escapeHtml(it.nombre)}</span>
+              ${it.es_faltante ? `<span class="bg-amber-100 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-bold border border-amber-300">⚠️ Faltante</span>` : ''}
+            </p>
+            <p class="text-xs text-slate-400 font-mono">SKU ${escapeHtml(it.sku || 'N/A')}</p>
           </div>
-          <button type="button" data-idx="${idx}" class="btn-quitar-item-manual text-rose-500 hover:text-rose-700 text-xs font-semibold px-2 py-1 rounded hover:bg-rose-50" title="Quitar producto">✕</button>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
+              <button type="button" class="btn-restar-cant-manual px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold text-xs" data-idx="${idx}">-</button>
+              <span class="px-2 py-1 font-extrabold text-xs text-slate-800 min-w-[28px] text-center">${it.cantidad}</span>
+              <button type="button" class="btn-sumar-cant-manual px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold text-xs" data-idx="${idx}">+</button>
+            </div>
+            <button type="button" data-idx="${idx}" class="btn-toggle-faltante-manual text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${it.es_faltante ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+              ${it.es_faltante ? '⚠️ Faltante' : 'Marcar Faltante'}
+            </button>
+            <button type="button" data-idx="${idx}" class="btn-quitar-item-manual text-rose-500 hover:text-rose-700 text-xs font-semibold px-2 py-1 rounded hover:bg-rose-50" title="Quitar producto">✕</button>
+          </div>
         </div>
+        ${it.es_faltante ? `
+          <div class="mt-1">
+            <input type="text" class="input-nota-faltante w-full border border-amber-300 rounded-lg px-2.5 py-1 text-xs bg-amber-50/60 text-amber-900 placeholder-amber-700/60 focus:ring-1 focus:ring-amber-500" data-idx="${idx}" value="${escapeHtml(it.nota_faltante || '')}" placeholder="Nota para el domiciliario (Ej: Comprar en farmacia X / Recoger en otro punto)..." />
+          </div>
+        ` : ''}
       </div>
     `).join('');
 
@@ -686,6 +716,24 @@ const ModuloEmpaque = (() => {
           itemsManual.splice(idx, 1);
         }
         renderItemsManual();
+      });
+    });
+
+    cont.querySelectorAll('.btn-toggle-faltante-manual').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.idx);
+        itemsManual[idx].es_faltante = !itemsManual[idx].es_faltante;
+        if (itemsManual[idx].es_faltante && !itemsManual[idx].nota_faltante) {
+          itemsManual[idx].nota_faltante = '';
+        }
+        renderItemsManual();
+      });
+    });
+
+    cont.querySelectorAll('.input-nota-faltante').forEach(input => {
+      input.addEventListener('input', () => {
+        const idx = Number(input.dataset.idx);
+        itemsManual[idx].nota_faltante = input.value;
       });
     });
 
@@ -744,7 +792,9 @@ const ModuloEmpaque = (() => {
             producto_id: i.producto_id,
             sku: i.sku,
             nombre: i.nombre,
-            cantidad: i.cantidad
+            cantidad: i.cantidad,
+            es_faltante: i.es_faltante ? 1 : 0,
+            nota_faltante: i.nota_faltante || ''
           })),
           tipo_entrega: 'DOMICILIO'
         })
@@ -895,20 +945,28 @@ const ModuloEmpaque = (() => {
       cont.innerHTML = '<p class="text-xs text-slate-400 py-3 text-center">Sin ítems en este pedido.</p>';
     } else {
       cont.innerHTML = pedidoActual.items.map(it => `
-        <div class="py-2.5 flex justify-between items-center text-sm border-b border-slate-100 last:border-b-0">
-          <div>
-            <p class="font-medium text-slate-800">${escapeHtml(it.nombre_producto)}</p>
-            <p class="text-xs text-slate-400">SKU ${escapeHtml(it.sku)}</p>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="font-bold ${it.verificado ? 'text-emerald-600' : 'text-slate-600'}">
-              ${it.cantidad_verificada || 0}/${it.cantidad_solicitada}
-            </span>
-            ${!yaEmpacado ? `
-              <button class="btn-eliminar-item text-rose-500 hover:text-rose-700 font-bold px-1" data-id="${it.id}">
-                🗑️
-              </button>
-            ` : ''}
+        <div class="py-2.5 flex flex-col gap-1 text-sm border-b border-slate-100 last:border-b-0 ${it.es_faltante ? 'bg-amber-50/50 px-2 rounded' : ''}">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="font-medium text-slate-800 flex items-center gap-1.5">
+                <span>${escapeHtml(it.nombre_producto)}</span>
+                ${it.es_faltante ? `<span class="bg-amber-100 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-bold border border-amber-300">⚠️ Faltante</span>` : ''}
+              </p>
+              <p class="text-xs text-slate-400 font-mono">SKU ${escapeHtml(it.sku)} ${it.nota_faltante ? `· <span class="text-amber-800 font-semibold">${escapeHtml(it.nota_faltante)}</span>` : ''}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs ${it.es_faltante ? 'text-amber-800' : (it.verificado ? 'text-emerald-600' : 'text-slate-600')}">
+                ${it.es_faltante ? 'Faltante' : `${it.cantidad_verificada || it.cantidad_empacada || 0}/${it.cantidad_solicitada}`}
+              </span>
+              ${!yaEmpacado ? `
+                <button class="btn-toggle-faltante text-xs px-2 py-1 rounded font-semibold transition ${it.es_faltante ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}" data-id="${it.id}" data-faltante="${it.es_faltante ? 1 : 0}" title="Marcar como faltante para compra/recolección">
+                  ${it.es_faltante ? 'Quitar Faltante' : '⚠️ Marcar Faltante'}
+                </button>
+                <button class="btn-eliminar-item text-rose-500 hover:text-rose-700 font-bold px-1" data-id="${it.id}" title="Eliminar ítem">
+                  🗑️
+                </button>
+              ` : ''}
+            </div>
           </div>
         </div>
       `).join('');
@@ -950,6 +1008,31 @@ const ModuloEmpaque = (() => {
           renderTrabajo();
         } else {
           showToast(res.error, 'error');
+        }
+      };
+    });
+
+    cont.querySelectorAll('.btn-toggle-faltante').forEach(btn => {
+      btn.onclick = async () => {
+        const itemId = btn.dataset.id;
+        const actualFaltante = Number(btn.dataset.faltante);
+        const nuevoFaltante = actualFaltante ? 0 : 1;
+        let nota = '';
+        if (nuevoFaltante) {
+          nota = prompt('Nota o instrucción para el domiciliario (Ej: Comprar en farmacia X / Recoger en otro punto):', '') || '';
+        }
+
+        const res = await apiFetch(`/pedidos/${pedidoActual.id}/items/${itemId}/faltante`, {
+          method: 'POST',
+          body: JSON.stringify({ es_faltante: nuevoFaltante, nota_faltante: nota })
+        });
+        if (res.ok) {
+          showToast(res.mensaje, 'success');
+          const refreshed = await apiFetch(`/pedidos/${pedidoActual.id}`);
+          pedidoActual = refreshed.data;
+          renderTrabajo();
+        } else {
+          showToast(res.error || 'Error al actualizar faltante', 'error');
         }
       };
     });
@@ -1043,9 +1126,84 @@ const ModuloEmpaque = (() => {
     }
   }
 
+  function mostrarModalFaltantesDespacho(pedido, onConfirm) {
+    const faltantes = (pedido.items || []).filter(it => it.es_faltante);
+    if (faltantes.length === 0) {
+      onConfirm();
+      return;
+    }
+
+    const existing = document.getElementById('modal-faltantes-despacho');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-faltantes-despacho';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs';
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div class="flex items-center gap-2">
+            <span class="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg font-bold">⚠️</span>
+            <div>
+              <h3 class="text-base font-bold text-slate-900">Productos Faltantes en Despacho</h3>
+              <p class="text-xs text-slate-500">El pedido ${escapeHtml(pedido.codigo_pedido)} tiene ítems pendientes de compra o recolección.</p>
+            </div>
+          </div>
+          <button type="button" id="btn-cerrar-modal-faltantes-despacho" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 font-bold transition">✕</button>
+        </div>
+
+        <div class="py-4 space-y-3">
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950">
+            <p class="font-semibold mb-2">Listado de ítems faltantes para este pedido:</p>
+            <div class="max-h-60 overflow-y-auto space-y-2 pr-1">
+              ${faltantes.map(it => `
+                <div class="bg-white p-2.5 rounded-lg border border-amber-300 shadow-2xs space-y-1">
+                  <div class="flex justify-between items-start">
+                    <p class="font-bold text-slate-800">${escapeHtml(it.nombre_producto || it.nombre)}</p>
+                    <span class="bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-extrabold text-xs">Cant: ${it.cantidad_solicitada || 1}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 font-mono">SKU: ${escapeHtml(it.sku || 'N/A')}</p>
+                  ${it.nota_faltante ? `<p class="text-[11px] text-amber-900 bg-amber-50 p-1.5 rounded font-medium mt-1">📝 <b>Nota:</b> ${escapeHtml(it.nota_faltante)}</p>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <p class="text-xs text-slate-600">Al continuar con el cierre y despacho, este listado se incluirá en el ticket POS y estará visible para el domiciliario.</p>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+          <button type="button" id="btn-cancelar-faltantes" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancelar</button>
+          <button type="button" id="btn-confirmar-faltantes-despacho" class="px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md transition flex items-center gap-1.5">
+            <span>✅ Confirmar Despacho e Imprimir</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#btn-cerrar-modal-faltantes-despacho').onclick = () => modal.remove();
+    modal.querySelector('#btn-cancelar-faltantes').onclick = () => modal.remove();
+    modal.querySelector('#btn-confirmar-faltantes-despacho').onclick = () => {
+      modal.remove();
+      onConfirm();
+    };
+  }
+
   async function cerrarPedido() {
-    if (!confirm('¿Cerrar el pedido y descontar el inventario? Esta accion no se puede deshacer.')) return;
-    
+    if (!pedidoActual) return;
+    const faltantes = (pedidoActual.items || []).filter(i => i.es_faltante);
+    if (faltantes.length > 0) {
+      mostrarModalFaltantesDespacho(pedidoActual, async () => {
+        await ejecutarCierrePedido();
+      });
+    } else {
+      if (!confirm('¿Cerrar el pedido y descontar el inventario? Esta accion no se puede deshacer.')) return;
+      await ejecutarCierrePedido();
+    }
+  }
+
+  async function ejecutarCierrePedido() {
     const data = await apiFetch(`/pedidos/${pedidoActual.id}/cerrar`, { method: 'POST' });
     if (!data.ok) { showToast(data.error, 'error'); return; }
 
