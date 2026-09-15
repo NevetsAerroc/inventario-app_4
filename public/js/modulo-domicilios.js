@@ -541,29 +541,34 @@ const ModuloDomicilios = {
                            data-paga-con="${pagaCon}"
                            data-devuelta="${devuelta}"
                            data-sin-devuelta="0"
-                           class="chk-pedido mt-0.5"
+                           class="chk-pedido mt-1"
                            onchange="ModuloDomicilios.calcularBaseEfectivo()">
-                    <div class="flex-1 min-w-0">
-                      <div class="flex justify-between gap-2">
+                    <div class="flex-1 min-w-0 space-y-1.5">
+                      <div class="flex items-center justify-between gap-2 flex-wrap">
                         <span class="font-bold text-slate-900">${infoNegrita}</span>
-                        <span class="flex items-center gap-1 whitespace-nowrap">
-                          <b id="total-txt-${p.id}" class="font-semibold text-emerald-600">$${total.toLocaleString('es-CO')}</b>
-                          <button type="button" onclick="event.preventDefault(); ModuloDomicilios.abrirModalEditarPedido(${p.id})"
-                                  class="px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-bold text-[10px]"
-                                  title="Editar pedido y modificar sus productos">✏️</button>
-                        </span>
+                        <!-- Entrada directa del valor total del pedido -->
+                        <div class="flex items-center gap-1.5 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-300 shadow-2xs" onclick="event.stopPropagation()">
+                          <label class="text-[11px] font-bold text-emerald-900 flex items-center gap-1 cursor-pointer" for="precio-directo-${p.id}">
+                            <span>💵</span> Total $
+                          </label>
+                          <input type="number" id="precio-directo-${p.id}" min="0" step="500" value="${total}"
+                                 class="w-28 px-2 py-0.5 text-xs font-black text-emerald-800 bg-white border border-emerald-400 rounded-md focus:ring-2 focus:ring-emerald-500 focus:outline-none text-right font-mono"
+                                 title="Escribe o modifica directamente aquí el precio a cobrar por este pedido"
+                                 oninput="ModuloDomicilios.actualizarTotalDirecto(${p.id}, this.value)"
+                                 onchange="ModuloDomicilios.actualizarTotalDirecto(${p.id}, this.value)" />
+                        </div>
                       </div>
                       <p class="text-slate-500">${p.codigo_pedido ? p.codigo_pedido : 'Pedido #' + p.id}</p>
                       ${p.observacion || p.observacion_liquidacion ? `<p class="text-[10px] text-amber-700 font-medium italic">Nota: ${p.observacion || p.observacion_liquidacion}</p>` : ''}
                     </div>
                   </label>
 
-                  <!-- Botón destacado de edición de pedido (quitar o cambiar productos) -->
+                  <!-- Botón de modificación completa de pedido (quitar o cambiar productos) -->
                   <div class="pl-5 pt-1 flex items-center justify-between border-t border-slate-100">
                     <span class="text-[10px] text-slate-400 font-medium">📦 ${p.estado || 'EMPACADO'}</span>
                     <button type="button" onclick="ModuloDomicilios.abrirModalEditarPedido(${p.id})"
                             class="px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] flex items-center gap-1 transition-colors"
-                            title="Quitar o cambiar productos, ajustar cantidades o editar datos del pedido">
+                            title="Quitar o cambiar productos, ajustar cantidades o editar datos del cliente">
                       <span>✏️</span> <span>Modificar Pedido / Quitar Productos</span>
                     </button>
                   </div>
@@ -821,6 +826,45 @@ const ModuloDomicilios = {
     this.guardarPagaCon(pedidoId);
   },
 
+  /**
+   * Actualiza el valor total del pedido directamente desde la tarjeta de despacho sin necesidad de abrir modales.
+   * Recalcula en tiempo real el 'paga con', la devuelta y la base de efectivo de la ruta.
+   */
+  actualizarTotalDirecto(pedidoId, val) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    if (!chk) return;
+
+    let nuevoTotal = parseFloat(val);
+    if (isNaN(nuevoTotal) || nuevoTotal < 0) nuevoTotal = 0;
+    nuevoTotal = Math.round(nuevoTotal);
+    chk.dataset.total = String(nuevoTotal);
+
+    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const sinDev = chk.dataset.sinDevuelta === '1';
+    let pagaCon, devuelta;
+    if (sinDev) {
+      pagaCon = nuevoTotal;
+      devuelta = 0;
+    } else {
+      pagaCon = this.pagaConSugerido(nuevoTotal);
+      devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - nuevoTotal));
+    }
+    chk.dataset.pagaCon = String(pagaCon);
+    chk.dataset.devuelta = String(devuelta);
+
+    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
+    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
+    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
+    if (elPaga) elPaga.innerText = fmt(pagaCon);
+    if (elDev) elDev.innerText = fmt(devuelta);
+    if (elEnt) elEnt.innerText = fmt(pagaCon);
+
+    const inpPaga = document.getElementById(`paga-input-${pedidoId}`);
+    if (inpPaga) inpPaga.value = String(pagaCon);
+
+    this.calcularBaseEfectivo();
+  },
+
   /** Abre el campo para editar el precio (total) del pedido antes de despachar. */
   editarPrecioPedido(pedidoId) {
     const box = document.getElementById(`precio-edit-${pedidoId}`);
@@ -843,6 +887,9 @@ const ModuloDomicilios = {
     }
     nuevoTotal = Math.round(nuevoTotal);
     chk.dataset.total = String(nuevoTotal);
+
+    const inpDirecto = document.getElementById(`precio-directo-${pedidoId}`);
+    if (inpDirecto) inpDirecto.value = String(nuevoTotal);
 
     const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
     const elTotal = document.getElementById(`total-txt-${pedidoId}`);
@@ -885,14 +932,19 @@ const ModuloDomicilios = {
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.remove('flex');
   },
 
+  /** Cierra de forma segura e inmediata el modal de edición de pedidos. */
+  cerrarModalEditarPedido() {
+    const modalPrevio = document.getElementById('modal-editar-pedido-completo');
+    if (modalPrevio) modalPrevio.remove();
+  },
+
   /**
    * Modal interactivo para que la Central de Domicilios modifique un pedido antes de despachar:
    * permite quitar productos, cambiar cantidades, agregar nuevos productos desde el catálogo,
    * y ajustar datos de cliente/entrega. Ajusta el inventario de bodega en tiempo real.
    */
   async abrirModalEditarPedido(pedidoId) {
-    const modalPrevio = document.getElementById('modal-editar-pedido-completo');
-    if (modalPrevio) modalPrevio.remove();
+    this.cerrarModalEditarPedido();
 
     showToast('Cargando información del pedido...', 'info');
     const res = await apiFetch(`/pedidos/${pedidoId}`);
@@ -916,6 +968,12 @@ const ModuloDomicilios = {
     const modal = document.createElement('div');
     modal.id = 'modal-editar-pedido-completo';
     modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 overflow-y-auto';
+    modal.onclick = (e) => {
+      if (e.target === modal) ModuloDomicilios.cerrarModalEditarPedido();
+    };
+
+    // Añadir al DOM de inmediato para que los selectores y eventos funcionen
+    document.body.appendChild(modal);
 
     const renderModalContenido = () => {
       const totalCalc = itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
@@ -931,7 +989,9 @@ const ModuloDomicilios = {
               </h3>
               <p class="text-xs text-slate-300">Central de Domicilios · Quitar/cambiar productos, cantidades y entrega</p>
             </div>
-            <button type="button" id="btn-cerrar-modal-edit" class="text-slate-400 hover:text-white text-xl font-bold p-1 leading-none">&times;</button>
+            <button type="button" id="btn-cerrar-modal-edit" onclick="ModuloDomicilios.cerrarModalEditarPedido()"
+                    class="text-slate-400 hover:text-white text-2xl font-bold p-1 leading-none hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                    title="Cerrar">&times;</button>
           </div>
 
           <!-- Cuerpo con Scroll -->
@@ -1006,9 +1066,9 @@ const ModuloDomicilios = {
                         </td>
                         <td class="py-2.5 px-2 text-center">
                           <div class="inline-flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white">
-                            <button type="button" class="btn-medit-restar px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold" data-idx="${idx}">-</button>
+                            <button type="button" class="btn-medit-restar px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold cursor-pointer" data-idx="${idx}">-</button>
                             <span class="px-2 py-1 font-bold text-xs text-slate-800 min-w-[26px] text-center">${it.cantidad}</span>
-                            <button type="button" class="btn-medit-sumar px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold" data-idx="${idx}">+</button>
+                            <button type="button" class="btn-medit-sumar px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold cursor-pointer" data-idx="${idx}">+</button>
                           </div>
                         </td>
                         <td class="py-2.5 px-2 text-right font-medium text-slate-600">
@@ -1018,7 +1078,7 @@ const ModuloDomicilios = {
                           $${(Number(it.precio || 0) * it.cantidad).toLocaleString('es-CO')}
                         </td>
                         <td class="py-2.5 px-2 text-center">
-                          <button type="button" class="btn-medit-quitar p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded text-xs font-bold" data-idx="${idx}" title="Quitar este producto">
+                          <button type="button" class="btn-medit-quitar p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded text-xs font-bold cursor-pointer" data-idx="${idx}" title="Quitar este producto">
                             🗑️
                           </button>
                         </td>
@@ -1047,7 +1107,7 @@ const ModuloDomicilios = {
                          class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white font-bold text-center" />
                 </div>
                 <div class="sm:col-span-2">
-                  <button type="button" id="btn-medit-agregar-item" class="w-full py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs disabled:opacity-40" disabled>
+                  <button type="button" id="btn-medit-agregar-item" class="w-full py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs disabled:opacity-40 cursor-pointer" disabled>
                     ➕ Agregar
                   </button>
                 </div>
@@ -1071,19 +1131,17 @@ const ModuloDomicilios = {
 
           <!-- Pie con Acciones -->
           <div class="px-5 py-3.5 bg-slate-100 border-t border-slate-200 flex justify-end gap-2.5 shrink-0">
-            <button type="button" id="btn-cancelar-modal-edit" class="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50">
+            <button type="button" id="btn-cancelar-modal-edit" onclick="ModuloDomicilios.cerrarModalEditarPedido()"
+                    class="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
               Cancelar
             </button>
-            <button type="button" id="btn-guardar-modal-edit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md">
+            <button type="button" id="btn-guardar-modal-edit"
+                    class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md cursor-pointer">
               <span>💾</span> Guardar Cambios en Pedido
             </button>
           </div>
         </div>
       `;
-
-      // Enlazar eventos del modal
-      document.getElementById('btn-cerrar-modal-edit')?.addEventListener('click', () => modal.remove());
-      document.getElementById('btn-cancelar-modal-edit')?.addEventListener('click', () => modal.remove());
 
       // Eventos de botones sumar/restar/quitar
       modal.querySelectorAll('.btn-medit-sumar').forEach(btn => {
@@ -1121,10 +1179,10 @@ const ModuloDomicilios = {
       });
 
       // Autocomplete de productos para agregar más
-      const inpBusqueda = document.getElementById('medit-buscar-producto');
-      const dropBusqueda = document.getElementById('medit-autocomplete-productos');
-      const btnAdd = document.getElementById('btn-medit-agregar-item');
-      const boxPrev = document.getElementById('medit-producto-preview');
+      const inpBusqueda = modal.querySelector('#medit-buscar-producto');
+      const dropBusqueda = modal.querySelector('#medit-autocomplete-productos');
+      const btnAdd = modal.querySelector('#btn-medit-agregar-item');
+      const boxPrev = modal.querySelector('#medit-producto-preview');
 
       if (inpBusqueda && dropBusqueda && typeof attachAutocompleteProductos === 'function') {
         attachAutocompleteProductos(inpBusqueda, dropBusqueda, (p) => {
@@ -1149,7 +1207,7 @@ const ModuloDomicilios = {
       if (btnAdd) {
         btnAdd.addEventListener('click', () => {
           if (!prodSeleccionadoParaAgregar) return;
-          const cantInp = document.getElementById('medit-cantidad-agregar');
+          const cantInp = modal.querySelector('#medit-cantidad-agregar');
           const cant = Math.max(1, parseInt(cantInp?.value, 10) || 1);
 
           const exist = itemsEdit.find(i => (prodSeleccionadoParaAgregar.id && i.producto_id === prodSeleccionadoParaAgregar.id) || i.sku === prodSeleccionadoParaAgregar.sku);
@@ -1171,20 +1229,20 @@ const ModuloDomicilios = {
       }
 
       // Guardar Cambios
-      document.getElementById('btn-guardar-modal-edit')?.addEventListener('click', async () => {
+      modal.querySelector('#btn-guardar-modal-edit')?.addEventListener('click', async () => {
         if (itemsEdit.length === 0) {
           alert('El pedido no puede quedar sin productos. Si deseas cancelarlo, utiliza la opción de anulación o deja al menos un producto.');
           return;
         }
 
-        const nuevoCliente = document.getElementById('medit-cliente')?.value.trim();
-        const nuevoTel = document.getElementById('medit-telefono')?.value.trim();
-        const nuevaDir = document.getElementById('medit-direccion')?.value.trim();
-        const nuevoMun = document.getElementById('medit-municipio')?.value.trim();
-        const nuevaObs = document.getElementById('medit-observacion')?.value.trim();
-        const totalFinal = parseFloat(document.getElementById('medit-total-final')?.value) || 0;
+        const nuevoCliente = modal.querySelector('#medit-cliente')?.value.trim();
+        const nuevoTel = modal.querySelector('#medit-telefono')?.value.trim();
+        const nuevaDir = modal.querySelector('#medit-direccion')?.value.trim();
+        const nuevoMun = modal.querySelector('#medit-municipio')?.value.trim();
+        const nuevaObs = modal.querySelector('#medit-observacion')?.value.trim();
+        const totalFinal = parseFloat(modal.querySelector('#medit-total-final')?.value) || 0;
 
-        const btnGuardar = document.getElementById('btn-guardar-modal-edit');
+        const btnGuardar = modal.querySelector('#btn-guardar-modal-edit');
         if (btnGuardar) {
           btnGuardar.disabled = true;
           btnGuardar.innerHTML = '<span>⏳</span> Guardando...';
@@ -1220,7 +1278,7 @@ const ModuloDomicilios = {
           }
 
           showToast(`✅ Pedido ${pedido.codigo_pedido || '#' + pedidoId} actualizado con éxito.`, 'success');
-          modal.remove();
+          ModuloDomicilios.cerrarModalEditarPedido();
 
           // Refrescar la vista de despachos
           if (typeof ModuloDomicilios.renderTabDespachar === 'function') {
@@ -1237,7 +1295,6 @@ const ModuloDomicilios = {
     };
 
     renderModalContenido();
-    document.body.appendChild(modal);
   },
 
   /** Marca/desmarca "sin devuelta": pago exacto, sin cambio (valores pequeños o exactos). */
