@@ -70,21 +70,20 @@ router.post('/manual', (req, res) => {
       cliente_id,
       telefono,
       direccion,
-      municipio,   // en lugar de municipio || ''
+      municipio,
       total,
       observacion,
       items,
       tipo_entrega
     } = req.body;
 
-    if (!total || Number(total) <= 0) {
-      return res.status(400).json({ ok: false, error: 'El valor total del pedido es obligatorio' });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Debes agregar al menos un producto al pedido.' });
     }
 
     const tx = db.transaction(() => {
       let finalClienteId = cliente_id || null;
-
-            const municipioFinal = (municipio && String(municipio).trim()) || '';
+      const municipioFinal = (municipio && String(municipio).trim()) || '';
 
       if (!finalClienteId && telefono) {
         const clienteExistente = db.prepare('SELECT id FROM clientes WHERE telefono = ?').get(telefono);
@@ -103,21 +102,35 @@ router.post('/manual', (req, res) => {
         }
       }
 
-      // Si hay cliente y escribieron municipio, guardarlo en la ficha
-      // (actualiza si estaba vacío O si trajeron uno nuevo)
-      if (finalClienteId && municipioFinal) {
+      // Si hay cliente y escribieron municipio o dirección, actualizarlo en la ficha
+      if (finalClienteId && (municipioFinal || direccion || telefono)) {
         db.prepare(`
           UPDATE clientes
-          SET ciudad = ?,
+          SET ciudad = CASE WHEN ? != '' THEN ? ELSE ciudad END,
               direccion = CASE WHEN ? != '' THEN ? ELSE direccion END,
               telefono = CASE WHEN ? != '' THEN ? ELSE telefono END
           WHERE id = ?
         `).run(
-          municipioFinal,
+          municipioFinal, municipioFinal,
           direccion || '', direccion || '',
           telefono || '', telefono || '',
           finalClienteId
         );
+      }
+
+      const buscarProducto = db.prepare('SELECT * FROM productos WHERE sku = ?');
+      const buscarProductoPorId = db.prepare('SELECT * FROM productos WHERE id = ?');
+
+      // Calcular total automáticamente si el empacador no lo envió
+      let totalFinal = Number(total) || 0;
+      if (totalFinal <= 0) {
+        totalFinal = 0;
+        for (const item of items) {
+          const cant = Number(item.cantidad) || 1;
+          const prod = item.producto_id ? buscarProductoPorId.get(item.producto_id) : (item.sku ? buscarProducto.get(item.sku) : null);
+          const precioUnit = (prod && Number(prod.precio)) || Number(item.precio) || 0;
+          totalFinal += (precioUnit * cant);
+        }
       }
 
       const stmtPedido = db.prepare(`
@@ -135,42 +148,232 @@ router.post('/manual', (req, res) => {
         telefono || '',
         direccion || '',
         municipioFinal,
-        Number(total),
+        totalFinal,
         observacion || '',
         tipo_entrega || 'DOMICILIO'
       );
 
       const pedidoId = info.lastInsertRowid;
-      const buscarProducto = db.prepare('SELECT * FROM productos WHERE sku = ?');
       const stmtItem = db.prepare(`
         INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada, cantidad_empacada, verificado)
         VALUES (?, ?, ?, ?, ?, ?, 1)
       `);
 
-      if (items && Array.isArray(items) && items.length > 0) {
-        for (const item of items) {
-          const cant = Number(item.cantidad) || 1;
-          const prod = item.sku ? buscarProducto.get(item.sku) : null;
-          stmtItem.run(
-            pedidoId,
-            prod ? prod.id : null,
-            item.sku || '',
-            (prod && prod.nombre) || item.nombre || 'Producto',
-            cant,
-            cant
-          );
-        }
-        db.descontarStockDePedido(pedidoId, `Pedido domicilio ${codigo_pedido || pedidoId}`);
+      for (const item of items) {
+        const cant = Number(item.cantidad) || 1;
+        const prod = item.producto_id ? buscarProductoPorId.get(item.producto_id) : (item.sku ? buscarProducto.get(item.sku) : null);
+        stmtItem.run(
+          pedidoId,
+          prod ? prod.id : null,
+          (prod && prod.sku) || item.sku || '',
+          (prod && prod.nombre) || item.nombre || 'Producto',
+          cant,
+          cant
+        );
       }
 
+      db.descontarStockDePedido(pedidoId, `Empaque directo ${codigo_pedido || pedidoId}`);
       return pedidoId;
     });
 
     const pedidoId = tx();
     res.json({ ok: true, pedidoId });
   } catch (err) {
-    console.error('Error al guardar pedido manual:', err);
+    console.error('Error al guardar pedido manual/empaque:', err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
+// PUT /api/pedidos/:id — Edición de pedido e ítems (desde Central de Domicilios o Gestión)
+// ------------------------------------------------------------------
+router.put('/:id', (req, res) => {
+  const pedidoId = Number(req.params.id);
+  if (!pedidoId) return res.status(400).json({ ok: false, error: 'ID de pedido no válido' });
+
+  const {
+    cliente,
+    cliente_id,
+    telefono,
+    direccion,
+    municipio,
+    observacion,
+    tipo_entrega,
+    total,
+    items
+  } = req.body;
+
+  try {
+    const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
+    if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
+
+    if (pedido.estado_liquidacion === 'LIQUIDADA') {
+      return res.status(400).json({ ok: false, error: 'No se puede editar un pedido que ya fue liquidado en ruta.' });
+    }
+
+    const tx = db.transaction(() => {
+      // 1. Obtener ítems actuales para conciliar inventario
+      const itemsPrevios = db.prepare(`
+        SELECT d.*, COALESCE(p.precio, 0) AS precio, p.id AS prod_id_real
+        FROM detalle_pedidos d
+        LEFT JOIN productos p ON p.id = d.producto_id OR (d.producto_id IS NULL AND p.sku = d.sku)
+        WHERE d.pedido_id = ?
+      `).all(pedidoId);
+
+      // Mapear cantidades previas por producto_id (o sku)
+      const mapaPrevio = new Map();
+      itemsPrevios.forEach(it => {
+        const prodKey = it.producto_id || it.prod_id_real;
+        const cant = Number(it.cantidad_empacada || it.cantidad_solicitada || 0);
+        if (prodKey) {
+          mapaPrevio.set(prodKey, (mapaPrevio.get(prodKey) || 0) + cant);
+        }
+      });
+
+      // 2. Procesar nuevos ítems si fueron enviados
+      let nuevosItems = [];
+      const mapaNuevo = new Map();
+      const getProdById = db.prepare('SELECT id, sku, nombre, precio, stock FROM productos WHERE id = ?');
+      const getProdBySku = db.prepare('SELECT id, sku, nombre, precio, stock FROM productos WHERE sku = ?');
+
+      if (Array.isArray(items)) {
+        if (items.length === 0) {
+          throw new Error('El pedido debe tener al menos un producto.');
+        }
+
+        nuevosItems = items.map(item => {
+          let prod = null;
+          if (item.producto_id) prod = getProdById.get(item.producto_id);
+          if (!prod && item.sku) prod = getProdBySku.get(item.sku);
+
+          const cant = Math.max(1, Number(item.cantidad) || 1);
+          const precio = (prod && Number(prod.precio)) || Number(item.precio) || 0;
+          const prodId = prod ? prod.id : (item.producto_id || null);
+          const sku = prod ? prod.sku : (item.sku || '');
+          const nombre = prod ? prod.nombre : (item.nombre_producto || item.nombre || 'Producto');
+
+          if (prodId) {
+            mapaNuevo.set(prodId, (mapaNuevo.get(prodId) || 0) + cant);
+          }
+
+          return {
+            producto_id: prodId,
+            sku,
+            nombre_producto: nombre,
+            cantidad_solicitada: cant,
+            cantidad_empacada: cant,
+            precio
+          };
+        });
+
+        // 3. Ajustar diferencias de stock de inventario
+        // a) Reponer productos eliminados o que redujeron cantidad
+        mapaPrevio.forEach((cantPrevia, prodId) => {
+          const cantNueva = mapaNuevo.get(prodId) || 0;
+          if (cantNueva < cantPrevia) {
+            const diferencia = cantPrevia - cantNueva;
+            db.reponerStockItem(prodId, diferencia, `Edición pedido ${pedido.codigo_pedido}: reducción de producto`, pedidoId);
+          }
+        });
+
+        // b) Descontar productos que aumentaron cantidad o son nuevos
+        mapaNuevo.forEach((cantNueva, prodId) => {
+          const cantPrevia = mapaPrevio.get(prodId) || 0;
+          if (cantNueva > cantPrevia) {
+            const diferencia = cantNueva - cantPrevia;
+            db.descontarStockItem(prodId, diferencia, `Edición pedido ${pedido.codigo_pedido}: incremento de producto`, pedidoId);
+          }
+        });
+
+        // 4. Reemplazar detalle_pedidos
+        db.prepare('DELETE FROM detalle_pedidos WHERE pedido_id = ?').run(pedidoId);
+        const insertDetalle = db.prepare(`
+          INSERT INTO detalle_pedidos (pedido_id, producto_id, sku, nombre_producto, cantidad_solicitada, cantidad_empacada, verificado)
+          VALUES (?, ?, ?, ?, ?, ?, 1)
+        `);
+        nuevosItems.forEach(it => {
+          insertDetalle.run(
+            pedidoId,
+            it.producto_id,
+            it.sku,
+            it.nombre_producto,
+            it.cantidad_solicitada,
+            it.cantidad_empacada
+          );
+        });
+      }
+
+      // 5. Calcular nuevo total si no fue enviado explícitamente
+      let totalCalculado = total !== undefined && total !== null ? Number(total) : null;
+      if (totalCalculado === null || isNaN(totalCalculado)) {
+        if (nuevosItems.length > 0) {
+          totalCalculado = nuevosItems.reduce((acc, it) => acc + (it.precio * it.cantidad_solicitada), 0);
+        } else {
+          totalCalculado = db.totalPedidoDesdeItems(pedidoId);
+        }
+      }
+
+      // 6. Actualizar tabla pedidos
+      db.prepare(`
+        UPDATE pedidos
+        SET cliente = COALESCE(?, cliente),
+            cliente_id = COALESCE(?, cliente_id),
+            telefono = COALESCE(?, telefono),
+            direccion = COALESCE(?, direccion),
+            municipio = COALESCE(?, municipio),
+            observacion = COALESCE(?, observacion),
+            tipo_entrega = COALESCE(?, tipo_entrega),
+            total = ?
+        WHERE id = ?
+      `).run(
+        cliente !== undefined ? cliente : null,
+        cliente_id !== undefined ? cliente_id : null,
+        telefono !== undefined ? telefono : null,
+        direccion !== undefined ? direccion : null,
+        municipio !== undefined ? municipio : null,
+        observacion !== undefined ? observacion : null,
+        tipo_entrega !== undefined ? tipo_entrega : null,
+        totalCalculado,
+        pedidoId
+      );
+
+      // Si se especificó cliente y teléfono/dirección, actualizar la ficha del cliente
+      const finalClienteId = cliente_id || pedido.cliente_id;
+      if (finalClienteId && (telefono || direccion || municipio)) {
+        db.prepare(`
+          UPDATE clientes
+          SET telefono = CASE WHEN ? != '' THEN ? ELSE telefono END,
+              direccion = CASE WHEN ? != '' THEN ? ELSE direccion END,
+              ciudad = CASE WHEN ? != '' THEN ? ELSE ciudad END
+          WHERE id = ?
+        `).run(
+          telefono || '', telefono || '',
+          direccion || '', direccion || '',
+          municipio || '', municipio || '',
+          finalClienteId
+        );
+      }
+
+      return { totalCalculado };
+    });
+
+    const resultado = tx();
+    const pedidoActualizado = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
+    const itemsActualizados = db.prepare(`
+      SELECT d.*, COALESCE(p.precio, 0) AS precio
+      FROM detalle_pedidos d
+      LEFT JOIN productos p ON p.id = d.producto_id OR (d.producto_id IS NULL AND p.sku = d.sku)
+      WHERE d.pedido_id = ?
+    `).all(pedidoId);
+
+    res.json({
+      ok: true,
+      mensaje: 'Pedido actualizado correctamente',
+      data: { ...pedidoActualizado, items: itemsActualizados }
+    });
+  } catch (err) {
+    console.error('Error al actualizar pedido:', err);
+    res.status(400).json({ ok: false, error: err.message });
   }
 });
 

@@ -6,10 +6,19 @@ const API_BASE = '/api';
 
 async function apiFetch(url, options = {}) {
   let res;
+  const token = localStorage.getItem('jispi_token');
+  const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
+
   try {
     res = await fetch(API_BASE + url, {
-      headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
       ...options,
+      headers,
     });
   } catch (e) {
     // fetch() lanza cuando no hay red o el servidor esta caido (no cuando responde con error HTTP)
@@ -19,6 +28,14 @@ async function apiFetch(url, options = {}) {
   let data;
   try { data = await res.json(); } catch (e) { data = { ok: false, error: 'Respuesta invalida del servidor.' }; }
   if (!res.ok && data.ok !== false) data.ok = false;
+
+  // Si la sesión expiró o es inválida, invocar cierre automático
+  if (res.status === 401 && !url.includes('/auth/login')) {
+    if (typeof Auth !== 'undefined' && typeof Auth.handleUnauthorized === 'function') {
+      Auth.handleUnauthorized();
+    }
+  }
+
   return data;
 }
 

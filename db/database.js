@@ -84,6 +84,86 @@ db.exec(`
   );
 `);
 
+// ==========================================
+// MIGRACIONES: USUARIOS, SESIONES Y ROLES (RBAC)
+// ==========================================
+const crypto = require('crypto');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS usuarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    nombre TEXT NOT NULL,
+    rol TEXT NOT NULL DEFAULT 'domiciliario', -- 'superadmin', 'admin_domicilios', 'domiciliario', 'operador'
+    domiciliario_id INTEGER,
+    permisos TEXT DEFAULT '[]',
+    activo INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ultimo_login DATETIME,
+    FOREIGN KEY (domiciliario_id) REFERENCES domiciliarios(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS sesiones (
+    token TEXT PRIMARY KEY,
+    usuario_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_usuarios_username ON usuarios(username);
+  CREATE INDEX IF NOT EXISTS idx_sesiones_token ON sesiones(token);
+`);
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored) return false;
+  const [salt, key] = stored.split(':');
+  if (!salt || !key) return false;
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return key === hash;
+}
+
+// Inicializar usuarios semilla si la tabla está vacía
+try {
+  const conteo = db.prepare("SELECT COUNT(*) as total FROM usuarios").get();
+  if (!conteo || conteo.total === 0) {
+    console.log('[auth] Inicializando usuarios semilla...');
+    const superadminHash = hashPassword('admin123');
+    db.prepare(`
+      INSERT INTO usuarios (username, password_hash, nombre, rol, permisos)
+      VALUES ('superadmin', ?, 'Super Administrador (Programador)', 'superadmin', '["carga","inventario","empaque","domicilios_todos","usuarios"]')
+    `).run(superadminHash);
+
+    const adminHash = hashPassword('admin123');
+    db.prepare(`
+      INSERT INTO usuarios (username, password_hash, nombre, rol, permisos)
+      VALUES ('admin', ?, 'Administrador (Dueño del Local)', 'admin', '["carga","inventario","empaque","domicilios_todos","usuarios"]')
+    `).run(adminHash);
+
+    const primerDomi = db.prepare("SELECT * FROM domiciliarios WHERE activo = 1 LIMIT 1").get();
+    if (primerDomi) {
+      const domiHash = hashPassword('domi123');
+      db.prepare(`
+        INSERT INTO usuarios (username, password_hash, nombre, rol, domiciliario_id, permisos)
+        VALUES ('domiciliario1', ?, ?, 'domiciliario', ?, '["domicilios_en_curso"]')
+      `).run(domiHash, primerDomi.nombre, primerDomi.id);
+    }
+    console.log('[auth] Usuarios creados: superadmin, admin, domiciliario1');
+  }
+} catch (e) {
+  console.error('[auth] Error al sembrar usuarios:', e);
+}
+
+db.hashPassword = hashPassword;
+db.verifyPassword = verifyPassword;
+
 agregarColumnaSiNoExiste('pedidos', 'ruta_id', 'INTEGER');
 agregarColumnaSiNoExiste('pedidos', 'monto_efectivo_recibido', 'REAL DEFAULT 0');
 agregarColumnaSiNoExiste('pedidos', 'devuelta_calculada', 'REAL DEFAULT 0');
@@ -170,6 +250,32 @@ db.totalPedidoDesdeItems = function totalPedidoDesdeItems(pedidoId) {
     WHERE d.pedido_id = ?
   `).get(pedidoId);
   return row ? Number(row.total) || 0 : 0;
+};
+
+db.reponerStockItem = function(productoId, cantidad, motivo, pedidoId) {
+  if (!productoId || Number(cantidad) <= 0) return;
+  const prod = db.prepare('SELECT id, stock FROM productos WHERE id = ?').get(productoId);
+  if (!prod) return;
+  const cant = Number(cantidad);
+  const nuevoStock = prod.stock + cant;
+  db.prepare("UPDATE productos SET stock = ?, updated_at = datetime('now') WHERE id = ?").run(nuevoStock, productoId);
+  db.prepare(`
+    INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo, pedido_id)
+    VALUES (?, 'ajuste', ?, ?, ?, ?)
+  `).run(productoId, cant, nuevoStock, motivo || 'Reposición por edición de pedido', pedidoId || null);
+};
+
+db.descontarStockItem = function(productoId, cantidad, motivo, pedidoId) {
+  if (!productoId || Number(cantidad) <= 0) return;
+  const prod = db.prepare('SELECT id, stock FROM productos WHERE id = ?').get(productoId);
+  if (!prod) return;
+  const cant = Number(cantidad);
+  const nuevoStock = Math.max(0, prod.stock - cant);
+  db.prepare("UPDATE productos SET stock = ?, updated_at = datetime('now') WHERE id = ?").run(nuevoStock, productoId);
+  db.prepare(`
+    INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_resultante, motivo, pedido_id)
+    VALUES (?, 'empaque', ?, ?, ?, ?)
+  `).run(productoId, cant, nuevoStock, motivo || 'Descuento por edición de pedido', pedidoId || null);
 };
 
 module.exports = db;

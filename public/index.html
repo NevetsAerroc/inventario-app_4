@@ -14,11 +14,14 @@
 
   <!-- ============ HEADER ============ -->
   <header class="bg-slate-900 text-white sticky top-0 z-40 shadow-md">
-    <div class="px-4 py-3 flex items-center justify-between">
-      <h1 class="text-lg font-bold flex items-center gap-2">
-        📦 <span>Inventario &amp; Empaque</span>
-      </h1>
-      <span id="conn-status" class="text-xs px-2 py-1 rounded-full bg-emerald-600">conectado</span>
+    <div class="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
+      <div class="flex items-center gap-2">
+        <h1 class="text-base sm:text-lg font-bold flex items-center gap-1.5">
+          📦 <span>Jispiplast Express</span>
+        </h1>
+        <span id="conn-status" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 font-medium">online</span>
+      </div>
+      <div id="header-user-badge" class="flex items-center gap-2"></div>
     </div>
   </header>
 
@@ -44,24 +47,28 @@
 
   <!-- ============ NAV INFERIOR (mobile-first) ============ -->
   <nav class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] z-40">
-    <div class="max-w-2xl mx-auto grid grid-cols-4">
-      <button data-tab="carga" class="tab-btn flex flex-col items-center py-3 gap-1 text-slate-500">
+    <div id="nav-tabs-container" class="max-w-2xl mx-auto flex items-center justify-around">
+      <button data-tab="carga" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">📥</span><span class="text-xs font-medium">Carga</span>
       </button>
-      <button data-tab="inventario" class="tab-btn flex flex-col items-center py-3 gap-1 text-slate-500">
+      <button data-tab="inventario" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">🔍</span><span class="text-xs font-medium">Inventario</span>
       </button>
-      <button data-tab="empaque" class="tab-btn flex flex-col items-center py-3 gap-1 text-slate-500">
+      <button data-tab="empaque" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">✅</span><span class="text-xs font-medium">Empaque</span>
       </button>
-      <button data-tab="domicilios" class="tab-btn flex flex-col items-center py-3 gap-1 text-slate-500">
+      <button data-tab="domicilios" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">🚚</span><span class="text-xs font-medium">Domicilios</span>
+      </button>
+      <button id="nav-btn-usuarios" onclick="Auth.abrirModalUsuarios()" class="flex-1 flex flex-col items-center py-3 gap-1 text-slate-500 hidden hover:text-indigo-600 transition-colors">
+        <span class="text-xl">👥</span><span class="text-xs font-medium">Usuarios</span>
       </button>
     </div>
   </nav>
 
   <!-- ============ SCRIPTS ============ -->
   <script src="js/utils.js?v=1.2"></script>
+  <script src="js/auth.js?v=1.5"></script>
   <script src="js/sound.js?v=1.2"></script>
   <script src="js/scanner.js?v=1.2"></script>
   <script src="js/recortador.js?v=1.2"></script>

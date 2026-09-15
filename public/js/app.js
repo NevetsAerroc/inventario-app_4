@@ -11,6 +11,10 @@ const App = (() => {
   const montado = {};
 
   function switchTab(nombre) {
+    if (typeof Auth !== 'undefined' && !Auth.tienePermiso(nombre)) {
+      showToast('No tienes permisos para acceder a este módulo', 'error');
+      return;
+    }
     if (!tabs[nombre]) return;
     if (tabActual === nombre) return;
 
@@ -61,16 +65,38 @@ const App = (() => {
     }
   }
 
-  function init() {
+  async function init() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
-    switchTab('carga');
+
     checkConnection();
     setInterval(checkConnection, 15000);
+
+    // Inicializar autenticación antes de seleccionar tab
+    if (typeof Auth !== 'undefined') {
+      const autenticado = await Auth.init();
+      if (autenticado) {
+        if (Auth.isDomiciliario()) {
+          switchTab('domicilios');
+        } else if (Auth.tienePermiso('carga')) {
+          switchTab('carga');
+        } else if (Auth.tienePermiso('inventario')) {
+          switchTab('inventario');
+        } else if (Auth.tienePermiso('empaque')) {
+          switchTab('empaque');
+        } else if (Auth.tienePermiso('domicilios')) {
+          switchTab('domicilios');
+        } else {
+          switchTab('carga');
+        }
+      }
+    } else {
+      switchTab('carga');
+    }
   }
 
-  return { init };
+  return { init, switchTab };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);

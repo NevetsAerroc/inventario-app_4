@@ -7,6 +7,8 @@ const http = require('http');
 const https = require('https');
 const db = require('./db/database'); // <-- Apunta a database.js
 
+const { router: authRouter, authMiddleware } = require('./routes/auth');
+const usuariosRouter = require('./routes/usuarios');
 const productosRouter = require('./routes/productos');
 const pedidosRouter = require('./routes/pedidos');
 const clientesRouter = require('./routes/clientes');
@@ -20,10 +22,15 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Middleware global de autenticación (valida token si viene en cabeceras)
+app.use(authMiddleware);
+
 // Frontend estático
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API Base
+app.use('/api/auth', authRouter);
+app.use('/api/usuarios', usuariosRouter);
 app.use('/api/productos', productosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/clientes', clientesRouter);
@@ -46,8 +53,20 @@ app.post('/api/domiciliarios', (req, res) => {
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
+// Helper para determinar si el usuario es un domiciliario de calle (solo ve sus rutas en curso)
+function esDomiDeCalle(user) {
+  if (!user) return false;
+  if (user.rol === 'superadmin' || user.rol === 'admin' || user.rol === 'admin_domicilios') return false;
+  const perms = Array.isArray(user.permisos) ? user.permisos : [];
+  if (perms.includes('domicilios_todos')) return false;
+  return user.rol === 'domiciliario' || perms.includes('domicilios_en_curso');
+}
+
 app.get('/api/domicilios/pendientes', (req, res) => {
   try {
+    if (esDomiDeCalle(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Acceso no permitido para domiciliarios' });
+    }
     // ?fecha=YYYY-MM-DD filtra por el dia en que el pedido quedo EMPACADO
     // (o, si no tiene fecha_cierre, por el dia en que se creo). Sin el
     // parametro, se devuelven todos los pendientes sin filtrar por fecha.
@@ -74,7 +93,14 @@ app.get('/api/domicilios/pendientes', (req, res) => {
 
 app.post('/api/rutas/despachar', (req, res) => {
   try {
+    if (esDomiDeCalle(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Solo los administradores pueden despachar rutas' });
+    }
     const { domiciliarioId, pedidos, pedidoIds, baseEfectivo } = req.body;
+
+    if (!domiciliarioId || Number(domiciliarioId) === 0) {
+      return res.status(400).json({ ok: false, error: 'Debes seleccionar y asignar obligatoriamente un domiciliario para despachar la ruta.' });
+    }
 
     // Acepta formato nuevo (array de objetos) o el viejo (solo ids)
     let lista = [];
@@ -89,8 +115,8 @@ app.post('/api/rutas/despachar', (req, res) => {
     }
 
     const tx = db.transaction(() => {
-      const domiciliario = db.prepare('SELECT id FROM domiciliarios WHERE id = ? AND activo = 1').get(domiciliarioId);
-      if (!domiciliario) throw new Error('Domiciliario no válido');
+      const domiciliario = db.prepare('SELECT id, nombre FROM domiciliarios WHERE id = ? AND activo = 1').get(domiciliarioId);
+      if (!domiciliario) throw new Error('El domiciliario seleccionado no es válido o no está activo.');
 
       const getPedido = db.prepare('SELECT * FROM pedidos WHERE id = ?');
       for (const item of lista) {
@@ -189,6 +215,16 @@ app.get('/api/rutas', (req, res) => {
       WHERE r.estado = ?
     `;
     const params = [estado];
+
+    // Si el usuario autenticado es domiciliario de calle, sólo puede ver SUS rutas
+    if (esDomiDeCalle(req.user)) {
+      sql += ` AND r.domiciliario_id = ?`;
+      params.push(req.user.domiciliario_id || 0);
+    } else if (req.query.domiciliario_id) {
+      sql += ` AND r.domiciliario_id = ?`;
+      params.push(Number(req.query.domiciliario_id));
+    }
+
     if (fecha) {
       sql += ` AND date(COALESCE(${columnaFecha}, r.fecha_creacion), 'localtime') = ?`;
       params.push(fecha);
@@ -203,6 +239,12 @@ app.get('/api/rutas', (req, res) => {
 app.get('/api/rutas/:id', (req, res) => {
   try {
     const ruta = db.prepare("SELECT r.*, d.nombre as domiciliario_nombre FROM rutas_domicilio r LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id WHERE r.id = ?").get(req.params.id);
+    if (!ruta) return res.status(404).json({ ok: false, error: 'Ruta no encontrada' });
+
+    if (esDomiDeCalle(req.user) && ruta.domiciliario_id !== req.user.domiciliario_id) {
+      return res.status(403).json({ ok: false, error: 'No tienes autorización para ver esta ruta' });
+    }
+
     const pedidos = db.prepare("SELECT * FROM pedidos WHERE ruta_id = ?").all(req.params.id);
     for (const p of pedidos) {
       const items = db.prepare("SELECT * FROM detalle_pedidos WHERE pedido_id = ?").all(p.id);
@@ -260,6 +302,9 @@ app.put('/api/rutas/pedido/:id', (req, res) => {
 
 app.post('/api/rutas/liquidar', (req, res) => {
   try {
+    if (esDomiDeCalle(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Solo administradores pueden liquidar rutas' });
+    }
     const { rutaId, pedidosLiquidacion, totalEfectivoEntregado } = req.body;
     const tx = db.transaction(() => {
       const updatePedido = db.prepare(`
@@ -295,6 +340,227 @@ app.post('/api/rutas/liquidar', (req, res) => {
     });
     tx();
     res.json({ ok: true, mensaje: 'Ruta liquidada' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ==================================================================
+// AUDITORÍA DE DOMICILIOS, RUTAS Y PAGOS PENDIENTES
+// ==================================================================
+app.get('/api/domicilios/auditoria', (req, res) => {
+  try {
+    if (esDomiDeCalle(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Acceso denegado a auditoría' });
+    }
+    const fecha = (req.query.fecha || '').trim(); // YYYY-MM-DD o vacío
+
+    // 1. Obtener todas las rutas que coincidan con la fecha
+    let sqlRutas = `
+      SELECT r.*, d.nombre as domiciliario_nombre, d.telefono as domiciliario_telefono,
+             (SELECT COUNT(*) FROM pedidos p WHERE p.ruta_id = r.id) as cantidad_pedidos,
+             (SELECT SUM(total) FROM pedidos p WHERE p.ruta_id = r.id) as total_dinero
+      FROM rutas_domicilio r
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
+    `;
+    const paramsRutas = [];
+    if (fecha) {
+      sqlRutas += ` WHERE date(r.fecha_creacion, 'localtime') = ? OR date(r.fecha_liquidacion, 'localtime') = ?`;
+      paramsRutas.push(fecha, fecha);
+    }
+    sqlRutas += ` ORDER BY r.id DESC`;
+
+    const rutas = db.prepare(sqlRutas).all(...paramsRutas);
+
+    // Para cada ruta, cargamos sus pedidos con sus ítems
+    for (const ruta of rutas) {
+      const pedidos = db.prepare(`
+        SELECT p.*
+        FROM pedidos p
+        WHERE p.ruta_id = ?
+        ORDER BY p.id ASC
+      `).all(ruta.id);
+
+      for (const p of pedidos) {
+        p.items = db.prepare('SELECT * FROM detalle_pedidos WHERE pedido_id = ?').all(p.id);
+      }
+      ruta.pedidos = pedidos;
+
+      // Calcular totales desglosados de la ruta
+      ruta.efectivo = pedidos.reduce((acc, p) => acc + (p.metodo_pago_final === 'EFECTIVO' ? (Number(p.total) || 0) : 0), 0);
+      ruta.transferencia = pedidos.reduce((acc, p) => acc + (p.metodo_pago_final === 'TRANSFERENCIA' ? (Number(p.total) || 0) : 0), 0);
+      ruta.pendiente = pedidos.reduce((acc, p) => acc + (p.estado_liquidacion === 'PAGO_PENDIENTE' || p.metodo_pago_final === 'TRANSFERENCIA_PENDIENTE' || p.metodo_pago_final === 'CREDITO' ? (Number(p.total) || 0) : 0), 0);
+      ruta.entregados = pedidos.filter(p => p.estado_entrega === 'ENTREGADO').length;
+      ruta.no_entregados = pedidos.filter(p => p.estado_entrega === 'NO_ENTREGADO').length;
+    }
+
+    // 2. Resumen por domiciliario (agrupado)
+    const domMap = new Map();
+    for (const r of rutas) {
+      const dId = r.domiciliario_id || 0;
+      const dNombre = r.domiciliario_nombre || 'Sin asignar';
+      const dTel = r.domiciliario_telefono || '';
+      if (!domMap.has(dId)) {
+        domMap.set(dId, {
+          domiciliario_id: dId,
+          nombre: dNombre,
+          telefono: dTel,
+          rutas_count: 0,
+          pedidos_totales: 0,
+          pedidos_entregados: 0,
+          pedidos_no_entregados: 0,
+          total_facturado: 0,
+          total_efectivo: 0,
+          total_transferencia: 0,
+          total_pendiente: 0,
+          total_bases: 0,
+          total_recolectado: 0
+        });
+      }
+      const item = domMap.get(dId);
+      item.rutas_count += 1;
+      item.total_bases += Number(r.base_efectivo || 0);
+      item.total_recolectado += Number(r.total_recolectado || 0);
+
+      for (const p of r.pedidos) {
+        item.pedidos_totales += 1;
+        if (p.estado_entrega === 'ENTREGADO') item.pedidos_entregados += 1;
+        if (p.estado_entrega === 'NO_ENTREGADO') item.pedidos_no_entregados += 1;
+        item.total_facturado += Number(p.total || 0);
+        if (p.metodo_pago_final === 'EFECTIVO') item.total_efectivo += Number(p.total || 0);
+        else if (p.metodo_pago_final === 'TRANSFERENCIA') item.total_transferencia += Number(p.total || 0);
+        if (p.estado_liquidacion === 'PAGO_PENDIENTE' || p.metodo_pago_final === 'TRANSFERENCIA_PENDIENTE' || p.metodo_pago_final === 'CREDITO') {
+          item.total_pendiente += Number(p.total || 0);
+        }
+      }
+    }
+    const resumenDomiciliarios = Array.from(domMap.values());
+
+    // 3. Pagos pendientes (cartera / transferencias por verificar)
+    let sqlPendientes = `
+      SELECT p.*, d.nombre as domiciliario_nombre, r.id as ruta_id, r.estado as ruta_estado,
+             date(COALESCE(r.fecha_liquidacion, r.fecha_creacion, p.fecha_creacion), 'localtime') as fecha_pedido_ruta
+      FROM pedidos p
+      LEFT JOIN rutas_domicilio r ON p.ruta_id = r.id
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
+      WHERE (p.estado_liquidacion = 'PAGO_PENDIENTE' 
+             OR p.metodo_pago_final = 'TRANSFERENCIA_PENDIENTE'
+             OR p.metodo_pago_final = 'CREDITO')
+    `;
+    const paramsPendientes = [];
+    if (fecha) {
+      sqlPendientes += ` AND date(COALESCE(r.fecha_liquidacion, r.fecha_creacion, p.fecha_creacion), 'localtime') = ?`;
+      paramsPendientes.push(fecha);
+    }
+    sqlPendientes += ` ORDER BY p.id DESC`;
+
+    const pagosPendientes = db.prepare(sqlPendientes).all(...paramsPendientes);
+
+    // Todos los pagos pendientes históricos (acumulados para cartera global)
+    const todosPagosPendientes = db.prepare(`
+      SELECT p.*, d.nombre as domiciliario_nombre, r.id as ruta_id,
+             date(COALESCE(r.fecha_liquidacion, r.fecha_creacion, p.fecha_creacion), 'localtime') as fecha_pedido_ruta
+      FROM pedidos p
+      LEFT JOIN rutas_domicilio r ON p.ruta_id = r.id
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
+      WHERE (p.estado_liquidacion = 'PAGO_PENDIENTE' 
+             OR p.metodo_pago_final = 'TRANSFERENCIA_PENDIENTE'
+             OR p.metodo_pago_final = 'CREDITO')
+      ORDER BY p.id DESC
+    `).all();
+
+    // 4. Novedades y Ajustes de precio en las rutas del día
+    const novedadesAjustes = [];
+    for (const r of rutas) {
+      for (const p of r.pedidos) {
+        if (p.total_original != null && Number(p.total_original) > 0 && Number(p.total_original) !== Number(p.total)) {
+          novedadesAjustes.push({
+            pedido_id: p.id,
+            codigo_pedido: p.codigo_pedido,
+            cliente: p.cliente,
+            total_original: Number(p.total_original),
+            total_final: Number(p.total),
+            diferencia: Number(p.total) - Number(p.total_original),
+            observacion: p.observacion || '',
+            ruta_id: r.id,
+            domiciliario_nombre: r.domiciliario_nombre
+          });
+        }
+      }
+    }
+
+    // 5. Totales generales del día
+    let totalFacturado = 0;
+    let totalEfectivo = 0;
+    let totalTransferencia = 0;
+    let totalPendiente = 0;
+    let totalBases = 0;
+    let totalRecolectadoRutas = 0;
+    let totalPedidos = 0;
+    let totalEntregados = 0;
+
+    for (const r of rutas) {
+      totalBases += Number(r.base_efectivo || 0);
+      totalRecolectadoRutas += Number(r.total_recolectado || 0);
+      for (const p of r.pedidos) {
+        totalPedidos += 1;
+        if (p.estado_entrega === 'ENTREGADO') totalEntregados += 1;
+        totalFacturado += Number(p.total || 0);
+        if (p.metodo_pago_final === 'EFECTIVO') totalEfectivo += Number(p.total || 0);
+        else if (p.metodo_pago_final === 'TRANSFERENCIA') totalTransferencia += Number(p.total || 0);
+        if (p.estado_liquidacion === 'PAGO_PENDIENTE' || p.metodo_pago_final === 'TRANSFERENCIA_PENDIENTE' || p.metodo_pago_final === 'CREDITO') {
+          totalPendiente += Number(p.total || 0);
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      fecha,
+      totales: {
+        totalFacturado,
+        totalEfectivo,
+        totalTransferencia,
+        totalPendiente,
+        totalBases,
+        totalRecolectadoRutas,
+        totalPedidos,
+        totalEntregados,
+        rutasCount: rutas.length,
+        novedadesCount: novedadesAjustes.length
+      },
+      rutas,
+      resumenDomiciliarios,
+      pagosPendientes,
+      todosPagosPendientes,
+      novedadesAjustes
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/domicilios/confirmar-pago-pendiente', (req, res) => {
+  try {
+    const { pedidoId, metodoPago, comprobante, nota } = req.body;
+    if (!pedidoId) return res.status(400).json({ ok: false, error: 'ID de pedido requerido' });
+    const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
+    if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
+
+    let observacion = pedido.observacion || '';
+    const detalleNota = nota ? ` | Confirmado: ${nota}` : ` | Pago confirmado`;
+    observacion += detalleNota;
+
+    db.prepare(`
+      UPDATE pedidos
+      SET estado_liquidacion = 'LIQUIDADO',
+          metodo_pago_final = ?,
+          comprobante_transf = ?,
+          observacion = ?
+      WHERE id = ?
+    `).run(metodoPago || 'EFECTIVO', comprobante || '', observacion, pedidoId);
+
+    res.json({ ok: true, mensaje: 'Pago confirmado y liquidado con éxito' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

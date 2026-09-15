@@ -1,0 +1,10 @@
+{
+  "name": "Inventario & Empaque",
+  "description": "Aplicación web de Inventarios, Empaque, Domicilios y Control de Usuarios con asignación granular de módulos para Dueño del Local (Admin), Programador (Superadmin) y Domiciliarios de Calle enlazados.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
