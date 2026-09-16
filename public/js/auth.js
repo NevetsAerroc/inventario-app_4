@@ -222,7 +222,7 @@ const Auth = (() => {
             <div class="relative">
               <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">👤</span>
               <input id="login-input-user" type="text" required autocomplete="username"
-                     placeholder="Ej: admin, superadmin, domiciliario1"
+                     placeholder="Tu nombre de usuario..."
                      class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-50 focus:bg-white" />
             </div>
           </div>
@@ -241,25 +241,6 @@ const Auth = (() => {
                   class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-sm font-semibold shadow-md transition-all">
             Iniciar Sesión
           </button>
-
-          <!-- ACCESOS RÁPIDOS DEMO -->
-          <div class="pt-2 border-t border-slate-100">
-            <p class="text-[11px] font-semibold text-slate-500 mb-2 text-center uppercase tracking-wider">Cuentas configuradas:</p>
-            <div class="grid grid-cols-3 gap-1.5 text-center">
-              <button type="button" onclick="Auth.setCredencialesPrueba('superadmin', 'admin123')"
-                      class="p-2 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 text-[11px] font-medium leading-tight">
-                💻 <b>Programador</b><br><span class="text-[10px] text-purple-700 opacity-90">Super Admin</span>
-              </button>
-              <button type="button" onclick="Auth.setCredencialesPrueba('admin', 'admin123')"
-                      class="p-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 text-[11px] font-medium leading-tight">
-                🏢 <b>Dueño Local</b><br><span class="text-[10px] text-blue-700 opacity-90">Administrador</span>
-              </button>
-              <button type="button" onclick="Auth.setCredencialesPrueba('domiciliario1', 'domi123')"
-                      class="p-2 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-[11px] font-medium leading-tight">
-                🛵 <b>Domiciliario</b><br><span class="text-[10px] text-emerald-700 opacity-90">Rutas en calle</span>
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     `;
@@ -338,6 +319,10 @@ const Auth = (() => {
             <span>👥</span> <span class="hidden sm:inline">Usuarios</span>
           </button>
         ` : ''}
+        <button onclick="Auth.abrirModalCambiarPassword()" title="Cambiar mi contraseña"
+                class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs flex items-center font-medium transition-colors">
+          🔑 <span class="hidden sm:inline ml-1">Contraseña</span>
+        </button>
         <button onclick="Auth.logout()" title="Cerrar sesión"
                 class="px-2 py-1 rounded-lg bg-rose-600/90 hover:bg-rose-600 text-white text-xs flex items-center font-medium transition-colors">
           🚪 <span class="hidden sm:inline ml-1">Salir</span>
@@ -1103,6 +1088,75 @@ const Auth = (() => {
     }
   }
 
+  // --- Cambio de contraseña del propio usuario ---
+  function abrirModalCambiarPassword() {
+    let modal = document.getElementById('modal-cambiar-password');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'modal-cambiar-password';
+      modal.className = 'fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4';
+      document.body.appendChild(modal);
+    }
+    
+    modal.classList.remove('hidden');
+    modal.innerHTML = `
+      <div class="bg-white w-full max-w-sm rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+        <div class="bg-slate-900 p-4 text-white flex justify-between items-center">
+          <h3 class="font-bold">Cambiar mi contraseña</h3>
+          <button type="button" onclick="Auth.cerrarModalCambiarPassword()" class="text-slate-400 hover:text-white transition">✕</button>
+        </div>
+        <form class="p-5 space-y-4" onsubmit="event.preventDefault(); Auth.guardarCambioPassword();">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Contraseña Actual</label>
+            <input type="password" id="input-current-pass" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nueva Contraseña</label>
+            <input type="password" id="input-new-pass" required minlength="4" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Confirmar Nueva Contraseña</label>
+            <input type="password" id="input-new-pass-confirm" required minlength="4" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          </div>
+          <div class="pt-2">
+            <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow transition">Actualizar Contraseña</button>
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
+  function cerrarModalCambiarPassword() {
+    const modal = document.getElementById('modal-cambiar-password');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function guardarCambioPassword() {
+    const current = document.getElementById('input-current-pass').value;
+    const newPass = document.getElementById('input-new-pass').value;
+    const confirmPass = document.getElementById('input-new-pass-confirm').value;
+
+    if (newPass !== confirmPass) {
+      showToast('Las contraseñas nuevas no coinciden', 'error');
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/auth/me/password', {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword: current, newPassword: newPass })
+      });
+      if (res.ok) {
+        showToast('Contraseña actualizada correctamente', 'success');
+        cerrarModalCambiarPassword();
+      } else {
+        showToast(res.error || 'Error al cambiar contraseña', 'error');
+      }
+    } catch (e) {
+      showToast('Error de conexión', 'error');
+    }
+  }
+
   return {
     init: verificarSesion,
     verificarSesion,
@@ -1131,7 +1185,10 @@ const Auth = (() => {
     confirmarCrearDomiciliarioRapido,
     guardarUsuario,
     toggleEstadoUsuario,
-    eliminarUsuario
+    eliminarUsuario,
+    abrirModalCambiarPassword,
+    cerrarModalCambiarPassword,
+    guardarCambioPassword
   };
 })();
 

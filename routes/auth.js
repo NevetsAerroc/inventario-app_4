@@ -144,6 +144,35 @@ router.post('/logout', (req, res) => {
   }
 });
 
+// PUT /api/auth/me/password
+router.put('/me/password', (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ ok: false, error: 'No autenticado' });
+    }
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ ok: false, error: 'Faltan datos' });
+    }
+
+    const user = db.prepare('SELECT password_hash FROM usuarios WHERE id = ?').get(req.user.id);
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    }
+
+    if (!db.verifyPassword(currentPassword, user.password_hash)) {
+      return res.status(401).json({ ok: false, error: 'La contraseña actual es incorrecta' });
+    }
+
+    const hash = db.hashPassword(newPassword);
+    db.prepare('UPDATE usuarios SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = {
   router,
   authMiddleware
