@@ -56,7 +56,7 @@ const ModuloDomicilios = {
               <button onclick="abrirModalNuevoCliente('', () => showToast('Cliente guardado con éxito', 'success'))" class="px-2 py-1 text-xs bg-teal-600 hover:bg-teal-700 text-white rounded-md font-medium">
                 + Cliente
               </button>
-              <button onclick="ModuloDomicilios.toggleFormularioNuevoPedido()" class="px-2 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium">
+              <button onclick="ModuloDomicilios.abrirModalCrearPedido()" class="px-2 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium">
                 + Crear Pedido
               </button>
             ` : ''}
@@ -84,103 +84,6 @@ const ModuloDomicilios = {
           </div>
         </div>
 
-        <!-- FORMULARIO INTEGRADO (ESTILO EMPAQUE) -->
-        <div id="form-nuevo-pedido-domicilio" class="hidden space-y-3 border border-slate-200 rounded-xl p-3 bg-slate-50">
-          <p class="text-xs font-bold text-slate-800">📦 Crear Nuevo Pedido de Domicilio</p>
-
-          <div class="grid grid-cols-2 gap-2">
-            <!-- CÓDIGO GENERADO AUTOMÁTICAMENTE -->
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">Código Pedido</label>
-              <input id="dom-codigo" type="text" placeholder="EMP-XXXXXX" readonly
-                     class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-slate-100 font-semibold text-slate-700 cursor-not-allowed" />
-            </div>
-            
-            <!-- BÚSQUEDA Y CREACIÓN DE CLIENTES (AUTOCOMPLETE) -->
-            <div class="relative">
-              <label class="block text-[10px] text-slate-500 mb-0.5">Cliente</label>
-              <div class="flex gap-1">
-                <input id="dom-cliente" type="text" placeholder="Buscar o crear cliente..." autocomplete="off"
-                       class="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
-                <button type="button" onclick="abrirModalNuevoCliente('', (c) => {
-                  ModuloDomicilios.clienteSeleccionadoId = c.id;
-                  document.getElementById('dom-cliente').value = c.nombre || '';
-                  if (c.telefono) document.getElementById('dom-telefono').value = c.telefono;
-                  if (c.direccion) document.getElementById('dom-direccion').value = c.direccion;
-                  if (c.ciudad) document.getElementById('dom-municipio').value = c.ciudad;
-                  showToast('Cliente creado y seleccionado', 'success');
-                })" class="px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold" title="Agregar cliente nuevo">➕</button>
-              </div>
-              <div id="dom-autocomplete-cliente" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto"></div>
-            </div>
-          </div>
-
-                    <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">Municipio *</label>
-              <input id="dom-municipio" type="text" placeholder="Ej: Pereira, Dosquebradas..." autocomplete="off"
-                     class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
-            </div>
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">Teléfono</label>
-              <input id="dom-telefono" type="text" placeholder="Teléfono" autocomplete="off"
-                     class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-[10px] text-slate-500 mb-0.5">Dirección de Entrega *</label>
-            <input id="dom-direccion" type="text" placeholder="Ej: Calle 10 # 15-20" autocomplete="off"
-                   class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
-          </div>
-
-          <hr class="border-slate-200 my-1" />
-
-          <!-- SECCIÓN AGREGAR PRODUCTOS (OPCIONAL) -->
-          <div>
-            <p class="text-[11px] font-semibold text-slate-600 mb-1">Agregar Productos (Opcional)</p>
-            <div class="relative mb-2">
-              <input id="dom-buscar-producto" type="text" placeholder="Buscar producto por nombre o SKU..." autocomplete="off"
-                     class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
-              <div id="dom-autocomplete-producto" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto"></div>
-            </div>
-            <div id="dom-producto-seleccionado" class="hidden bg-white border border-slate-200 rounded-lg p-2 text-xs mb-2"></div>
-
-            <div class="flex gap-2">
-              <input id="dom-cantidad-prod" type="number" min="1" value="1" placeholder="Cant."
-                     class="w-20 border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
-              <button id="btn-add-item-dom" type="button" class="flex-1 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-semibold disabled:opacity-40" disabled>
-                + Agregar producto
-              </button>
-            </div>
-          </div>
-
-          <div id="dom-lista-items" class="divide-y divide-slate-200 max-h-36 overflow-y-auto bg-white rounded-lg border px-2"></div>
-
-          <!-- TOTAL Y OBSERVACIONES -->
-          <div class="grid grid-cols-2 gap-2 pt-1">
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">Valor Total del Pedido ($) *</label>
-              <input id="dom-total" type="number" step="50" min="0" placeholder="0" autocomplete="off"
-                     class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white font-bold text-emerald-700" />
-            </div>
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">Observaciones / Notas</label>
-              <input id="dom-observaciones" type="text" placeholder="Devueltas de $50k, etc." autocomplete="off"
-                     class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white" />
-            </div>
-          </div>
-
-          <div class="flex gap-2 pt-2">
-            <button onclick="ModuloDomicilios.toggleFormularioNuevoPedido(false)" class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-700 font-semibold text-xs">
-              Cancelar
-            </button>
-            <button onclick="ModuloDomicilios.guardarPedidoManualInline()" class="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs">
-              Guardar Pedido
-            </button>
-          </div>
-        </div>
-
         <!-- NAVEGACIÓN DE PESTAÑAS INTERNAS -->
         ${esDomi ? `
           <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5 text-center flex items-center justify-between">
@@ -203,7 +106,6 @@ const ModuloDomicilios = {
     `;
 
     this.bindEvents();
-    this.initAutocompletes();
     await this.cargarInicial();
   },
 
@@ -222,54 +124,6 @@ const ModuloDomicilios = {
 
     const btnAuditoria = document.getElementById('subtab-auditoria');
     if (btnAuditoria) btnAuditoria.onclick = () => this.cambiarSubTab('auditoria');
-
-    document.getElementById('btn-add-item-dom')?.addEventListener('click', () => this.agregarItemManual());
-
-    document.getElementById('dom-buscar-producto')?.addEventListener('input', (e) => {
-      if (this.productoSeleccionado && e.target.value !== this.productoSeleccionado.nombre) {
-        this.productoSeleccionado = null;
-        document.getElementById('dom-producto-seleccionado')?.classList.add('hidden');
-        document.getElementById('btn-add-item-dom').disabled = true;
-      }
-    });
-  },
-
-  initAutocompletes() {
-    if (typeof attachAutocompleteClientes === 'function') {
-      attachAutocompleteClientes(
-        document.getElementById('dom-cliente'),
-        document.getElementById('dom-autocomplete-cliente'),
-        (cliente) => {
-          this.clienteSeleccionadoId = cliente.id;
-          document.getElementById('dom-cliente').value = cliente.nombre || cliente.cliente || '';
-          if (cliente.telefono) document.getElementById('dom-telefono').value = cliente.telefono;
-          if (cliente.direccion) document.getElementById('dom-direccion').value = cliente.direccion;
-          if (cliente.ciudad) document.getElementById('dom-municipio').value = cliente.ciudad;
-        },
-        (clienteNuevo) => {
-          this.clienteSeleccionadoId = clienteNuevo.id;
-          document.getElementById('dom-cliente').value = clienteNuevo.nombre || clienteNuevo.cliente || '';
-          if (clienteNuevo.telefono) document.getElementById('dom-telefono').value = clienteNuevo.telefono;
-          if (clienteNuevo.direccion) document.getElementById('dom-direccion').value = clienteNuevo.direccion;
-          if (clienteNuevo.ciudad) document.getElementById('dom-municipio').value = clienteNuevo.ciudad;
-        }
-      );
-    }
-
-    if (typeof attachAutocompleteProductos === 'function') {
-      attachAutocompleteProductos(
-        document.getElementById('dom-buscar-producto'),
-        document.getElementById('dom-autocomplete-producto'),
-        (prod) => {
-          this.productoSeleccionado = prod;
-          document.getElementById('dom-buscar-producto').value = prod.nombre;
-          const box = document.getElementById('dom-producto-seleccionado');
-          box.classList.remove('hidden');
-          box.innerHTML = `<b>${escapeHtml(prod.nombre)}</b> — SKU ${escapeHtml(prod.sku)}`;
-          document.getElementById('btn-add-item-dom').disabled = false;
-        }
-      );
-    }
   },
 
   generarCodigoPedidoAuto() {
@@ -286,19 +140,243 @@ const ModuloDomicilios = {
     if (el) el.value = codigo;
   },
 
-  toggleFormularioNuevoPedido(mostrar = null) {
-    const form = document.getElementById('form-nuevo-pedido-domicilio');
-    if (!form) return;
+  abrirModalCrearPedido() {
+    let modal = document.getElementById('modal-crear-pedido-domicilio');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'modal-crear-pedido-domicilio';
+      modal.className = 'fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4';
+      document.body.appendChild(modal);
+    }
 
-    const visibilidad = mostrar !== null ? mostrar : form.classList.contains('hidden');
-    if (visibilidad) {
-      this.resetFormulario();
-      this.generarCodigoPedidoAuto();
-      form.classList.remove('hidden');
-      document.getElementById('dom-cliente')?.focus();
+    modal.classList.remove('hidden');
+    modal.innerHTML = `
+      <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+        <!-- HEADER MODAL -->
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">📦</span>
+            <div>
+              <h3 class="text-sm font-bold text-slate-800">Crear Nuevo Pedido de Domicilio</h3>
+              <p class="text-[11px] text-slate-500">Ingresa los datos del cliente y entrega. Los productos son opcionales.</p>
+            </div>
+          </div>
+          <button onclick="ModuloDomicilios.cerrarModalCrearPedido()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <!-- CUERPO SCROLLABLE -->
+        <div class="p-5 overflow-y-auto space-y-4">
+          <!-- FILA 1: CÓDIGO Y CLIENTE -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Código de Pedido</label>
+              <input id="dom-codigo" type="text" placeholder="EMP-XXXXXX" readonly
+                     class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-100 font-semibold text-slate-700 cursor-not-allowed" />
+            </div>
+
+            <div class="relative">
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Cliente</label>
+              <div class="flex gap-1.5">
+                <input id="dom-cliente" type="text" placeholder="Buscar o escribir cliente..." autocomplete="off"
+                       class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                <button type="button" onclick="abrirModalNuevoCliente('', (c) => {
+                  ModuloDomicilios.clienteSeleccionadoId = c.id;
+                  document.getElementById('dom-cliente').value = c.nombre || '';
+                  if (c.empresa) document.getElementById('dom-empresa').value = c.empresa;
+                  if (c.telefono) document.getElementById('dom-telefono').value = c.telefono;
+                  if (c.direccion) document.getElementById('dom-direccion').value = c.direccion;
+                  if (c.ciudad) document.getElementById('dom-municipio').value = c.ciudad;
+                  showToast('Cliente creado y seleccionado', 'success');
+                })" class="px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors" title="Crear cliente nuevo">➕</button>
+              </div>
+              <div id="dom-autocomplete-cliente" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-48 overflow-y-auto"></div>
+            </div>
+          </div>
+
+          <!-- FILA 2: EMPRESA Y TELÉFONO -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Empresa</label>
+              <input id="dom-empresa" type="text" placeholder="Ej: Distribuidora, Empresa o Negocio..." autocomplete="off"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono</label>
+              <input id="dom-telefono" type="text" placeholder="Ej: 3101234567" autocomplete="off"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- FILA 3: MUNICIPIO Y DIRECCIÓN DE ENTREGA -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Municipio / Ciudad *</label>
+              <input id="dom-municipio" type="text" placeholder="Ej: Pereira, Dosquebradas..." autocomplete="off"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Dirección de Entrega *</label>
+              <input id="dom-direccion" type="text" placeholder="Ej: Calle 10 # 15-20, Apto 201" autocomplete="off"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- SECCIÓN DE PRODUCTOS OPCIONALES -->
+          <div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50/50 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-700">Productos del Pedido</span>
+              <span class="text-[10px] font-semibold text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded-full">Opcional</span>
+            </div>
+
+            <div class="relative">
+              <input id="dom-buscar-producto" type="text" placeholder="Buscar producto por nombre o SKU..." autocomplete="off"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              <div id="dom-autocomplete-producto" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-48 overflow-y-auto"></div>
+            </div>
+
+            <div id="dom-producto-seleccionado" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-2 text-xs"></div>
+
+            <div class="flex gap-2">
+              <input id="dom-cantidad-prod" type="number" min="1" value="1" placeholder="Cant."
+                     class="w-20 border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white text-center font-semibold" />
+              <button id="btn-add-item-dom" type="button" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold disabled:opacity-40 transition-colors" disabled>
+                + Agregar Producto
+              </button>
+            </div>
+
+            <div id="dom-lista-items" class="divide-y divide-slate-100 max-h-36 overflow-y-auto bg-white rounded-lg border border-slate-200 px-3 py-1"></div>
+          </div>
+
+          <!-- VALOR TOTAL Y OBSERVACIONES -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Valor Total del Pedido ($) *</label>
+              <input id="dom-total" type="number" step="50" min="0" placeholder="0" autocomplete="off"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white font-bold text-emerald-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones / Notas</label>
+              <input id="dom-observaciones" type="text" placeholder="Devueltas de $50k, timbre no sirve..." autocomplete="off"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- FOOTER ACCIONES -->
+        <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button type="button" onclick="ModuloDomicilios.cerrarModalCrearPedido()" class="px-4 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors">
+            Cancelar
+          </button>
+          <button type="button" onclick="ModuloDomicilios.guardarPedidoManualInline()" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm transition-colors">
+            Guardar Pedido
+          </button>
+        </div>
+      </div>
+    `;
+
+    this.resetFormulario();
+    this.generarCodigoPedidoAuto();
+    this.initModalEventListeners();
+    setTimeout(() => document.getElementById('dom-cliente')?.focus(), 100);
+  },
+
+  cerrarModalCrearPedido() {
+    const modal = document.getElementById('modal-crear-pedido-domicilio');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.innerHTML = '';
+    }
+    this.resetFormulario();
+  },
+
+  initModalEventListeners() {
+    document.getElementById('btn-add-item-dom')?.addEventListener('click', () => this.agregarItemManual());
+
+    document.getElementById('dom-buscar-producto')?.addEventListener('input', (e) => {
+      if (this.productoSeleccionado && e.target.value !== this.productoSeleccionado.nombre) {
+        this.productoSeleccionado = null;
+        document.getElementById('dom-producto-seleccionado')?.classList.add('hidden');
+        const btn = document.getElementById('btn-add-item-dom');
+        if (btn) btn.disabled = true;
+      }
+    });
+
+    if (typeof attachAutocompleteClientes === 'function') {
+      attachAutocompleteClientes(
+        document.getElementById('dom-cliente'),
+        document.getElementById('dom-autocomplete-cliente'),
+        (cliente) => {
+          this.clienteSeleccionadoId = cliente.id;
+          const cliInput = document.getElementById('dom-cliente');
+          if (cliInput) cliInput.value = cliente.nombre || cliente.cliente || '';
+          if (cliente.empresa) {
+            const e = document.getElementById('dom-empresa');
+            if (e) e.value = cliente.empresa;
+          }
+          if (cliente.telefono) {
+            const t = document.getElementById('dom-telefono');
+            if (t) t.value = cliente.telefono;
+          }
+          if (cliente.direccion) {
+            const d = document.getElementById('dom-direccion');
+            if (d) d.value = cliente.direccion;
+          }
+          if (cliente.ciudad) {
+            const m = document.getElementById('dom-municipio');
+            if (m) m.value = cliente.ciudad;
+          }
+        },
+        (clienteNuevo) => {
+          this.clienteSeleccionadoId = clienteNuevo.id;
+          const cliInput = document.getElementById('dom-cliente');
+          if (cliInput) cliInput.value = clienteNuevo.nombre || clienteNuevo.cliente || '';
+          if (clienteNuevo.empresa) {
+            const e = document.getElementById('dom-empresa');
+            if (e) e.value = clienteNuevo.empresa;
+          }
+          if (clienteNuevo.telefono) {
+            const t = document.getElementById('dom-telefono');
+            if (t) t.value = clienteNuevo.telefono;
+          }
+          if (clienteNuevo.direccion) {
+            const d = document.getElementById('dom-direccion');
+            if (d) d.value = clienteNuevo.direccion;
+          }
+          if (clienteNuevo.ciudad) {
+            const m = document.getElementById('dom-municipio');
+            if (m) m.value = clienteNuevo.ciudad;
+          }
+        }
+      );
+    }
+
+    if (typeof attachAutocompleteProductos === 'function') {
+      attachAutocompleteProductos(
+        document.getElementById('dom-buscar-producto'),
+        document.getElementById('dom-autocomplete-producto'),
+        (prod) => {
+          this.productoSeleccionado = prod;
+          const inp = document.getElementById('dom-buscar-producto');
+          if (inp) inp.value = prod.nombre;
+          const box = document.getElementById('dom-producto-seleccionado');
+          if (box) {
+            box.classList.remove('hidden');
+            box.innerHTML = `<b>${escapeHtml(prod.nombre)}</b> — SKU ${escapeHtml(prod.sku)}`;
+          }
+          const btn = document.getElementById('btn-add-item-dom');
+          if (btn) btn.disabled = false;
+        }
+      );
+    }
+  },
+
+  toggleFormularioNuevoPedido(mostrar = null) {
+    if (mostrar === false) {
+      this.cerrarModalCrearPedido();
     } else {
-      form.classList.add('hidden');
-      this.resetFormulario();
+      this.abrirModalCrearPedido();
     }
   },
 
@@ -307,7 +385,7 @@ const ModuloDomicilios = {
     this.productoSeleccionado = null;
     this.clienteSeleccionadoId = null;
 
-        ['dom-codigo', 'dom-cliente', 'dom-telefono', 'dom-direccion', 'dom-municipio', 'dom-total', 'dom-observaciones', 'dom-buscar-producto'].forEach(id => {
+    ['dom-codigo', 'dom-cliente', 'dom-empresa', 'dom-telefono', 'dom-direccion', 'dom-municipio', 'dom-total', 'dom-observaciones', 'dom-buscar-producto'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -338,10 +416,14 @@ const ModuloDomicilios = {
     }
 
     this.productoSeleccionado = null;
-    document.getElementById('dom-buscar-producto').value = '';
-    document.getElementById('dom-cantidad-prod').value = '1';
-    document.getElementById('dom-producto-seleccionado').classList.add('hidden');
-    document.getElementById('btn-add-item-dom').disabled = true;
+    const inpProd = document.getElementById('dom-buscar-producto');
+    if (inpProd) inpProd.value = '';
+    const inpCant = document.getElementById('dom-cantidad-prod');
+    if (inpCant) inpCant.value = '1';
+    const boxProd = document.getElementById('dom-producto-seleccionado');
+    if (boxProd) boxProd.classList.add('hidden');
+    const btnAdd = document.getElementById('btn-add-item-dom');
+    if (btnAdd) btnAdd.disabled = true;
 
     this.renderItemsManual();
   },
@@ -374,9 +456,10 @@ const ModuloDomicilios = {
     this.renderItemsManual();
   },
 
-    async guardarPedidoManualInline() {
+  async guardarPedidoManualInline() {
     const codigo_pedido = document.getElementById('dom-codigo')?.value.trim();
     const cliente_nombre = document.getElementById('dom-cliente')?.value.trim() || 'Cliente General';
+    const empresa = document.getElementById('dom-empresa')?.value.trim() || '';
     const municipio = document.getElementById('dom-municipio')?.value.trim();
     const direccion = document.getElementById('dom-direccion')?.value.trim();
     const telefono = document.getElementById('dom-telefono')?.value.trim() || '';
@@ -399,6 +482,7 @@ const ModuloDomicilios = {
           codigo_pedido,
           cliente_nombre,
           cliente_id: this.clienteSeleccionadoId,
+          empresa,
           municipio,
           direccion,
           telefono,
@@ -411,7 +495,7 @@ const ModuloDomicilios = {
 
       if (res && res.ok) {
         showToast(`Pedido #${res.pedidoId} creado exitosamente`);
-        this.toggleFormularioNuevoPedido(false);
+        this.cerrarModalCrearPedido();
         await this.cargarTabActual();
       } else {
         alert((res && res.error) || 'Error al guardar el pedido');
@@ -616,158 +700,162 @@ const ModuloDomicilios = {
           </div>
 
           <div class="border-t pt-2">
-            <label class="block text-xs font-bold text-slate-800 mb-2">Pedidos Disponibles para Despacho (Empacados y Directos)</label>
-            <div id="lista-check-pedidos" class="space-y-2 max-h-72 overflow-y-auto border p-2 rounded-md bg-slate-50">
-              ${this.pedidosPendientes.length === 0 ? `<p class="text-xs text-slate-400 text-center py-3">No hay pedidos pendientes${this.fechaFiltro ? ' para la fecha seleccionada' : ''}</p>` : ''}
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-xs font-bold text-slate-800">Pedidos Disponibles para Despacho (Empacados y Directos)</label>
+              ${this.pedidosPendientes.length > 0 ? `<span class="text-[11px] font-semibold text-slate-500">${this.pedidosPendientes.length} pedido(s)</span>` : ''}
+            </div>
+            <div id="lista-check-pedidos" class="max-h-[60vh] overflow-y-auto border border-slate-200 p-2.5 rounded-xl bg-slate-50">
+              ${this.pedidosPendientes.length === 0 ? `<p class="text-xs text-slate-400 text-center py-6">No hay pedidos pendientes${this.fechaFiltro ? ' para la fecha seleccionada' : ''}</p>` : ''}
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
               ${this.pedidosPendientes.map(p => {
                 const total = Number(p.total) || 0;
-                const pagaCon = this.pagaConSugerido(total);      // ej. 37400 → 50000
-                const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total)); // redondeado a $50
+                const totalCobroEfectivo = this.redondearCaja50(total);
+                const pagaCon = this.pagaConSugerido(totalCobroEfectivo > 0 ? totalCobroEfectivo : total); // ej. 37400 → 50000
+                const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - totalCobroEfectivo)); // redondeado a $50
                 const nombreCliente = p.cliente || p.cliente_nombre || 'Cliente General';
-                const local = p.direccion || '';
-                const municipio = p.municipio || '';
-                const infoNegrita = [nombreCliente, local, municipio].filter(Boolean).join(' | ');
+                const empresa = (p.empresa || '').trim();
+                const direccion = (p.direccion || '').trim();
+                const municipio = (p.municipio || '').trim();
+                const telefono = (p.telefono || '').trim();
+                const direccionCompleta = [direccion, municipio].filter(Boolean).join(', ');
                 return `
-                <div class="bg-white p-2.5 rounded border space-y-1.5" data-pedido-card="${p.id}">
-                  <label class="flex items-start gap-2 text-xs cursor-pointer">
+                <div class="relative bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 hover:border-slate-300 transition-colors" data-pedido-card="${p.id}">
+                  <!-- Botón lápiz en la esquina superior derecha -->
+                  <button type="button" onclick="event.stopPropagation(); ModuloDomicilios.abrirModalEditarPedido(${p.id})"
+                          class="absolute top-2 right-2 p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md border border-transparent hover:border-amber-200 transition-colors"
+                          title="Modificar pedido y productos">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+
+                  <label class="flex items-start gap-2 text-xs cursor-pointer pr-6">
                     <input type="checkbox" value="${p.id}"
                            data-total="${total}"
                            data-paga-con="${pagaCon}"
                            data-devuelta="${devuelta}"
                            data-sin-devuelta="0"
-                           class="chk-pedido mt-1"
+                           class="chk-pedido mt-0.5 accent-indigo-600 w-4 h-4 rounded shrink-0"
                            onchange="ModuloDomicilios.calcularBaseEfectivo()">
-                    <div class="flex-1 min-w-0 space-y-1.5">
-                      <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <span class="font-bold text-slate-900">${infoNegrita}</span>
-                        <!-- Entrada directa del valor total del pedido -->
-                        <div class="flex items-center gap-1.5 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-300 shadow-2xs" onclick="event.stopPropagation()">
-                          <label class="text-[11px] font-bold text-emerald-900 flex items-center gap-1 cursor-pointer" for="precio-directo-${p.id}">
-                            <span>💵</span> Total $
-                          </label>
-                          <input type="number" id="precio-directo-${p.id}" min="0" step="500" value="${total}"
-                                 class="w-28 px-2 py-0.5 text-xs font-black text-emerald-800 bg-white border border-emerald-400 rounded-md focus:ring-2 focus:ring-emerald-500 focus:outline-none text-right font-mono"
-                                 title="Escribe o modifica directamente aquí el precio a cobrar por este pedido"
-                                 oninput="ModuloDomicilios.actualizarTotalDirecto(${p.id}, this.value)"
-                                 onchange="ModuloDomicilios.actualizarTotalDirecto(${p.id}, this.value)" />
+                    <div class="flex-1 min-w-0 space-y-1">
+                      <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span class="text-xs font-extrabold text-slate-900">${escapeHtml(nombreCliente)}</span>
+                        ${empresa ? `<span class="bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.2 rounded border border-indigo-200 text-[10px]" title="Empresa">🏢 ${escapeHtml(empresa)}</span>` : ''}
+                        ${telefono ? `<span class="bg-emerald-50 text-emerald-800 font-bold px-1.5 py-0.2 rounded border border-emerald-200 text-[10px]" title="Teléfono">📞 ${escapeHtml(telefono)}</span>` : ''}
+                      </div>
+                      ${direccionCompleta ? `<p class="text-[11px] text-slate-600 truncate" title="${escapeHtml(direccionCompleta)}">📍 ${escapeHtml(direccionCompleta)}</p>` : ''}
+                      <div class="flex items-center justify-between gap-2 pt-0.5">
+                        <span class="text-slate-400 text-[10px] font-mono">${p.codigo_pedido ? p.codigo_pedido : 'Pedido #' + p.id}</span>
+                        <!-- Campo Total más pequeño con formato de miles -->
+                        <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+                          <span class="text-[11px] font-bold text-slate-700">Total $</span>
+                          <input type="text" id="precio-directo-${p.id}"
+                                 value="${total > 0 ? total.toLocaleString('es-CO') : '0'}"
+                                 class="w-20 px-1.5 py-0.5 text-xs font-black text-emerald-700 bg-white border border-emerald-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none text-right font-mono"
+                                 title="Escribe o modifica directamente aquí el precio del pedido"
+                                 onfocus="this.select()"
+                                 oninput="ModuloDomicilios.onTotalDirectoInput(${p.id}, this)"
+                                 onchange="ModuloDomicilios.onTotalDirectoChange(${p.id}, this)"
+                                 onblur="ModuloDomicilios.onTotalDirectoBlur(${p.id}, this)" />
                         </div>
                       </div>
-                      <p class="text-slate-500">${p.codigo_pedido ? p.codigo_pedido : 'Pedido #' + p.id}</p>
-                      ${p.observacion || p.observacion_liquidacion ? `<p class="text-[10px] text-amber-700 font-medium italic">Nota: ${p.observacion || p.observacion_liquidacion}</p>` : ''}
+                      ${p.observacion || p.observacion_liquidacion ? `<p class="text-[10px] text-amber-700 italic truncate">Nota: ${escapeHtml(p.observacion || p.observacion_liquidacion)}</p>` : ''}
                     </div>
                   </label>
 
-                  <!-- Botón de modificación completa de pedido (quitar o cambiar productos) -->
-                  <div class="pl-5 pt-1 flex items-center justify-between border-t border-slate-100">
-                    <span class="text-[10px] text-slate-400 font-medium">📦 ${p.estado || 'EMPACADO'}</span>
-                    <button type="button" onclick="ModuloDomicilios.abrirModalEditarPedido(${p.id})"
-                            class="px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] flex items-center gap-1 transition-colors"
-                            title="Quitar o cambiar productos, ajustar cantidades o editar datos del cliente">
-                      <span>✏️</span> <span>Modificar Pedido / Quitar Productos</span>
-                    </button>
-                  </div>
-
-                  <!-- Edición del precio del pedido -->
-                  <div id="precio-edit-${p.id}" class="hidden pl-5 flex flex-wrap items-center gap-1.5">
-                    <span class="text-slate-600 font-medium">Nuevo valor del pedido $</span>
-                    <input type="number" id="precio-input-${p.id}" min="0" step="500" value="${total}"
-                           class="w-28 border border-sky-300 rounded px-1.5 py-0.5 text-[11px] font-bold" />
-                    <button type="button" onclick="ModuloDomicilios.guardarPrecioPedido(${p.id})"
-                            class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold">OK</button>
-                    <button type="button" onclick="ModuloDomicilios.cancelarPrecioPedido(${p.id})"
-                            class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
-                  </div>
-
-                   <div class="pl-5 space-y-1.5 text-[11px]">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <label class="flex items-center gap-1.5 text-emerald-800 font-bold cursor-pointer bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        <input type="checkbox" id="chk-yapago-${p.id}" class="chk-ya-pago rounded text-emerald-600 focus:ring-emerald-500"
+                  <!-- Opciones inferiores de pago compactas -->
+                  <div class="pl-6 pt-1.5 border-t border-slate-100 space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between gap-2">
+                      <!-- Opción Ya pagó con chulo -->
+                      <label class="inline-flex items-center gap-1.5 cursor-pointer font-bold text-emerald-800 select-none text-[11px]">
+                        <input type="checkbox" id="chk-yapago-${p.id}" class="chk-ya-pago rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
                                onchange="ModuloDomicilios.toggleYaPago(${p.id})">
-                        <span>✅ Ya pagó (Cobro $0)</span>
+                        <span>Ya pagó</span>
                       </label>
 
-                      <select class="sel-metodo-despacho border rounded px-1.5 py-0.5 bg-slate-50 text-[11px] font-medium"
+                      <!-- Selección Efectivo o Transferencia -->
+                      <select id="sel-metodo-${p.id}" class="sel-metodo-despacho border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50 text-[11px] font-medium text-slate-700 focus:ring-1 focus:ring-indigo-500"
                               data-id="${p.id}" onchange="ModuloDomicilios.cambiarMetodoDespacho(${p.id})">
                         <option value="EFECTIVO">💵 Efectivo</option>
                         <option value="TRANSFERENCIA">🏦 Transferencia</option>
-                        <option value="YA_PAGO">✅ Ya pagó (No cobrar)</option>
                       </select>
                     </div>
 
-                    <p id="pago-transfer-note-${p.id}" class="hidden text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-200">
-                      🏦 Transferencia: no aplica devuelta de efectivo.
-                    </p>
-
-                    <p id="pago-yapago-note-${p.id}" class="hidden text-emerald-800 font-semibold bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                      ✅ El cliente ya pagó previamente: Cobro $0 · Devuelta $0 para el repartidor.
-                    </p>
-
-                    <div id="pago-efectivo-box-${p.id}" class="space-y-1">
-                      <!-- Lectura -->
-                      <div id="pago-view-${p.id}" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span class="text-slate-600">
-                          Paga con:
-                          <b id="paga-txt-${p.id}" class="text-slate-900">$${pagaCon.toLocaleString('es-CO')}</b>
-                        </span>
-                        <button type="button" onclick="ModuloDomicilios.editarPagaCon(${p.id})"
-                                class="px-1.5 py-0.5 rounded border border-amber-300 bg-white text-amber-900 hover:bg-amber-50"
-                                title="Cambiar con cuánto paga">✏️</button>
-                        <span class="text-amber-800">
-                          Devuelta:
-                          <b id="dev-txt-${p.id}">$${devuelta.toLocaleString('es-CO')}</b>
-                        </span>
-                        <span class="text-emerald-800 font-semibold">
-                          A entregar:
-                          <b id="ent-txt-${p.id}">$${pagaCon.toLocaleString('es-CO')}</b>
-                        </span>
-                      </div>
-
-                      <!-- Opción: no dar devuelta (pago exacto o valores muy pequeños) -->
-                      <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
-                        <input type="checkbox" id="chk-sindev-${p.id}" class="chk-sin-devuelta"
+                    <div class="flex items-center justify-between gap-2">
+                      <!-- Opción Sin devuelta -->
+                      <label class="inline-flex items-center gap-1.5 cursor-pointer text-slate-600 select-none text-[11px]" id="lbl-sindev-${p.id}">
+                        <input type="checkbox" id="chk-sindev-${p.id}" class="chk-sin-devuelta rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
                                onchange="ModuloDomicilios.toggleSinDevuelta(${p.id})">
-                        Sin devuelta (pago exacto / valor muy pequeño)
+                        <span>Sin devuelta</span>
                       </label>
 
-                      <!-- Edición: solo "paga con" -->
-                      <div id="pago-edit-${p.id}" class="hidden flex flex-wrap items-center gap-1.5">
-                        <span class="text-slate-600 font-medium">Cliente paga con $</span>
-                        <input type="number" id="paga-input-${p.id}" min="0" step="1000" value="${pagaCon}"
-                               class="w-28 border border-amber-300 rounded px-1.5 py-0.5 text-[11px] font-bold" />
-                        <button type="button" onclick="ModuloDomicilios.guardarPagaCon(${p.id})"
-                                class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold">OK</button>
-                        <button type="button" onclick="ModuloDomicilios.cancelarPagaCon(${p.id})"
-                                class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">✕</button>
-                        <button type="button" onclick="ModuloDomicilios.restaurarPagaConSugerido(${p.id})"
-                                class="px-2 py-0.5 rounded border border-amber-300 text-amber-900 text-[10px] font-bold">$50.000</button>
+                      <!-- Devuelta con lápiz antes para editar si pagan con 50.000, 60.000, 100.000, etc. -->
+                      <div id="dev-info-${p.id}" class="flex items-center gap-1 text-[11px] text-slate-600 font-mono">
+                        <button type="button" onclick="event.stopPropagation(); ModuloDomicilios.toggleEditarDevuelta(${p.id})"
+                                class="p-0.5 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors"
+                                title="Editar con cuánto paga el cliente (ej: $50.000, $60.000, $100.000)">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <span>Devuelta:</span>
+                        <b id="dev-txt-${p.id}" class="text-amber-800 font-bold">$${devuelta.toLocaleString('es-CO')}</b>
                       </div>
+                    </div>
+
+                    <!-- Panel desplegable para editar con cuánto paga el cliente -->
+                    <div id="pago-edit-${p.id}" class="hidden flex-col gap-1.5 bg-amber-50/90 p-2 rounded-lg border border-amber-200" onclick="event.stopPropagation()">
+                      <div class="flex items-center justify-between gap-1 text-[11px] font-semibold text-slate-700">
+                        <span>Paga con:</span>
+                        <div class="flex items-center gap-1">
+                          <input type="text" id="paga-input-${p.id}"
+                                 value="${pagaCon > 0 ? pagaCon.toLocaleString('es-CO') : ''}"
+                                 placeholder="Monto"
+                                 class="w-24 px-1.5 py-0.5 text-xs font-mono font-bold text-slate-800 bg-white border border-amber-300 rounded focus:ring-1 focus:ring-amber-500 focus:outline-none text-right"
+                                 onfocus="this.select()"
+                                 oninput="ModuloDomicilios.onPagaInputFormat(this)"
+                                 onkeydown="if(event.key==='Enter') ModuloDomicilios.guardarPagaCon(${p.id})" />
+                          <button type="button" onclick="ModuloDomicilios.guardarPagaCon(${p.id})"
+                                  class="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold">OK</button>
+                          <button type="button" onclick="ModuloDomicilios.cancelarPagaCon(${p.id})"
+                                  class="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold">✕</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Valor a Entregar -->
+                    <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+                      <span class="text-[11px] font-semibold text-slate-600">Valor a Entregar:</span>
+                      <b id="ent-txt-${p.id}" class="text-emerald-800 font-mono font-bold text-xs">$${pagaCon.toLocaleString('es-CO')}</b>
                     </div>
                   </div>
                 </div>
               `}).join('')}
+              </div>
             </div>
           </div>
 
           <!-- Resumen simple (sin editar la base a mano) -->
-          <div class="bg-slate-50 border border-slate-200 rounded-md p-3 text-xs space-y-1.5">
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1.5 shadow-2xs">
             <div class="flex justify-between text-slate-600">
-              <span>Base de cambio (suma de devueltas):</span>
-              <b id="txt-base-cambio" class="text-amber-900">$0</b>
+              <span class="font-medium">Base de cambio (suma de devueltas):</span>
+              <b id="txt-base-cambio" class="text-amber-900 font-mono text-sm">$0</b>
             </div>
             <div class="flex justify-between text-slate-600">
-              <span>Total a entregar (lo que pagan):</span>
-              <b id="txt-total-entregar" class="text-emerald-800">$0</b>
+              <span class="font-medium">Total a entregar (lo que pagan):</span>
+              <b id="txt-total-entregar" class="text-emerald-800 font-mono text-sm">$0</b>
             </div>
-            <p class="text-[10px] text-slate-400">
-              Por defecto paga con múltiplos de $50.000 y la devuelta se redondea a múltiplos de $50 (no hay monedas más pequeñas).
-              Con el ✏️ junto al precio editas el valor del pedido; con el ✏️ junto a "Paga con" cambias con cuánto paga.
-              Marca "Sin devuelta" si el valor es exacto o muy pequeño.
-            </p>
           </div>
 
-          <button id="btn-despachar-accion" onclick="ModuloDomicilios.despacharRuta()" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg shadow active:scale-[0.99] transition-all">
-            🚚 Despachar Ruta
-          </button>
+          <!-- Botones de Acción para Despacho -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <button id="btn-despachar-accion" onclick="ModuloDomicilios.despacharRuta()" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg shadow active:scale-[0.99] transition-all flex items-center justify-center gap-1.5">
+              <span>🚚</span> <span>Despachar Ruta</span>
+            </button>
+            <button id="btn-agregar-ruta-accion" onclick="ModuloDomicilios.abrirModalAgregarARutaEnCurso()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow active:scale-[0.99] transition-all flex items-center justify-center gap-1.5" title="Agregar pedidos seleccionados a una ruta ya despachada en curso">
+              <span>➕</span> <span>Agregar Pedido a Ruta</span>
+            </button>
+          </div>
         </div>
       `;
     } catch (err) {
@@ -782,7 +870,7 @@ const ModuloDomicilios = {
     if (selectEl.value) {
       if (btnDespacho) {
         btnDespacho.innerHTML = `🚚 Despachar Ruta a: <b class="underline ml-1">${escapeHtml(domNombre)}</b>`;
-        btnDespacho.className = "w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow transition-all active:scale-[0.99]";
+        btnDespacho.className = "w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow transition-all active:scale-[0.99] flex items-center justify-center gap-1.5";
       }
       if (txtAviso) {
         txtAviso.innerHTML = `✅ Domiciliario asignado: <b class="text-emerald-900">${escapeHtml(domNombre)}</b>`;
@@ -790,8 +878,8 @@ const ModuloDomicilios = {
       }
     } else {
       if (btnDespacho) {
-        btnDespacho.innerHTML = `🚚 Despachar Ruta`;
-        btnDespacho.className = "w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg shadow active:scale-[0.99] transition-all";
+        btnDespacho.innerHTML = `<span>🚚</span> <span>Despachar Ruta</span>`;
+        btnDespacho.className = "w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg shadow active:scale-[0.99] transition-all flex items-center justify-center gap-1.5";
       }
       if (txtAviso) {
         txtAviso.innerHTML = `⚠️ Selecciona explícitamente el repartidor para evitar asignaciones automáticas equivocadas.`;
@@ -861,15 +949,74 @@ const ModuloDomicilios = {
     return this.redondearDevuelta50(Math.max(0, pagaCon - t));
   },
 
-  editarPagaCon(pedidoId) {
-    document.getElementById(`pago-view-${pedidoId}`)?.classList.add('hidden');
+  toggleEditarDevuelta(pedidoId) {
     const box = document.getElementById(`pago-edit-${pedidoId}`);
-    if (box) {
+    if (!box) return;
+    const isHidden = box.classList.contains('hidden');
+    if (isHidden) {
       box.classList.remove('hidden');
       box.classList.add('flex');
+      const inp = document.getElementById(`paga-input-${pedidoId}`);
+      if (inp) {
+        const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+        const cur = chk ? parseInt(chk.dataset.pagaCon, 10) || 0 : 0;
+        inp.value = cur > 0 ? cur.toLocaleString('es-CO') : '';
+        inp.focus();
+        inp.select();
+      }
+    } else {
+      box.classList.add('hidden');
+      box.classList.remove('flex');
     }
+  },
+
+  onPagaInputFormat(inputEl) {
+    if (!inputEl) return;
+    const raw = inputEl.value.replace(/\D/g, '');
+    const num = raw ? parseInt(raw, 10) : 0;
+    inputEl.value = num > 0 ? num.toLocaleString('es-CO') : '';
+  },
+
+  fijarPagaCon(pedidoId, monto) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    if (!chk) return;
+    const total = parseFloat(chk.dataset.total) || 0;
     const inp = document.getElementById(`paga-input-${pedidoId}`);
-    if (inp) { inp.focus(); inp.select(); }
+    if (inp) inp.value = monto.toLocaleString('es-CO');
+    if (monto < total) {
+      showToast(`⚠️ $${monto.toLocaleString('es-CO')} es menor al total del pedido ($${total.toLocaleString('es-CO')})`, 'warning');
+      return;
+    }
+    this.aplicarPagaCon(pedidoId, monto);
+  },
+
+  aplicarPagaCon(pedidoId, pagaCon) {
+    const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
+    if (!chk) return;
+
+    const total = parseFloat(chk.dataset.total) || 0;
+    pagaCon = Math.round(pagaCon);
+    const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
+
+    chk.dataset.pagaCon = String(pagaCon);
+    chk.dataset.devuelta = String(devuelta);
+    chk.dataset.sinDevuelta = '0';
+    const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+    if (chkSinDev) chkSinDev.checked = false;
+
+    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
+    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
+    if (elDev) elDev.innerText = fmt(devuelta);
+    if (elEnt) elEnt.innerText = fmt(pagaCon);
+
+    const box = document.getElementById(`pago-edit-${pedidoId}`);
+    if (box) {
+      box.classList.add('hidden');
+      box.classList.remove('flex');
+    }
+
+    this.calcularBaseEfectivo();
   },
 
   guardarPagaCon(pedidoId) {
@@ -877,48 +1024,32 @@ const ModuloDomicilios = {
     if (!chk) return;
 
     const total = parseFloat(chk.dataset.total) || 0;
-    let pagaCon = parseFloat(document.getElementById(`paga-input-${pedidoId}`)?.value);
+    const rawVal = (document.getElementById(`paga-input-${pedidoId}`)?.value || '').replace(/\D/g, '');
+    let pagaCon = rawVal ? parseInt(rawVal, 10) : 0;
 
-    if (isNaN(pagaCon) || pagaCon < 0) {
-      return alert('Ingresa con cuánto paga el cliente (ej. 40000 o 100000)');
+    if (!pagaCon || pagaCon <= 0) {
+      showToast('⚠️ Ingresa un monto válido con el que paga el cliente', 'warning');
+      return;
     }
     if (pagaCon < total) {
-      return alert(`"Paga con" no puede ser menor al total del pedido ($${total.toLocaleString('es-CO')})`);
+      showToast(`⚠️ "Paga con" no puede ser menor al total del pedido ($${total.toLocaleString('es-CO')})`, 'warning');
+      return;
     }
-    pagaCon = Math.round(pagaCon);
-    const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
 
-    chk.dataset.pagaCon = String(pagaCon);
-    chk.dataset.devuelta = String(devuelta);
-    // Editar manualmente "paga con" desactiva la opción "sin devuelta".
-    chk.dataset.sinDevuelta = '0';
-    const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
-    if (chkSinDev) chkSinDev.checked = false;
-
-    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
-    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
-    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
-    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
-    if (elPaga) elPaga.innerText = fmt(pagaCon);
-    if (elDev) elDev.innerText = fmt(devuelta);
-    if (elEnt) elEnt.innerText = fmt(pagaCon);
-
-    document.getElementById(`pago-edit-${pedidoId}`)?.classList.add('hidden');
-    document.getElementById(`pago-edit-${pedidoId}`)?.classList.remove('flex');
-    document.getElementById(`pago-view-${pedidoId}`)?.classList.remove('hidden');
-
-    this.calcularBaseEfectivo();
+    this.aplicarPagaCon(pedidoId, pagaCon);
   },
 
   cancelarPagaCon(pedidoId) {
     const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
     const actual = parseFloat(chk?.dataset?.pagaCon) || 0;
     const inp = document.getElementById(`paga-input-${pedidoId}`);
-    if (inp) inp.value = String(actual);
+    if (inp) inp.value = actual > 0 ? actual.toLocaleString('es-CO') : '';
 
-    document.getElementById(`pago-edit-${pedidoId}`)?.classList.add('hidden');
-    document.getElementById(`pago-edit-${pedidoId}`)?.classList.remove('flex');
-    document.getElementById(`pago-view-${pedidoId}`)?.classList.remove('hidden');
+    const box = document.getElementById(`pago-edit-${pedidoId}`);
+    if (box) {
+      box.classList.add('hidden');
+      box.classList.remove('flex');
+    }
   },
 
   restaurarPagaConSugerido(pedidoId) {
@@ -926,16 +1057,62 @@ const ModuloDomicilios = {
     if (!chk) return;
     const total = parseFloat(chk.dataset.total) || 0;
     const pagaCon = this.pagaConSugerido(total);
-    const inp = document.getElementById(`paga-input-${pedidoId}`);
-    if (inp) inp.value = String(pagaCon);
-    this.guardarPagaCon(pedidoId);
+    this.aplicarPagaCon(pedidoId, pagaCon);
+  },
+
+  _totalDebounceTimers: {},
+
+  onTotalDirectoInput(pedidoId, inputEl) {
+    if (!inputEl) return;
+    const raw = inputEl.value.replace(/\D/g, '');
+    const num = raw ? parseInt(raw, 10) : 0;
+    inputEl.value = num > 0 ? num.toLocaleString('es-CO') : '';
+    this.actualizarTotalDirecto(pedidoId, num, false);
+
+    if (this._totalDebounceTimers[pedidoId]) {
+      clearTimeout(this._totalDebounceTimers[pedidoId]);
+    }
+    this._totalDebounceTimers[pedidoId] = setTimeout(() => {
+      this.guardarTotalDirectoEnBD(pedidoId, num);
+    }, 600);
+  },
+
+  onTotalDirectoChange(pedidoId, inputEl) {
+    if (!inputEl) return;
+    if (this._totalDebounceTimers[pedidoId]) {
+      clearTimeout(this._totalDebounceTimers[pedidoId]);
+    }
+    const raw = inputEl.value.replace(/\D/g, '');
+    const num = raw ? parseInt(raw, 10) : 0;
+    inputEl.value = num > 0 ? num.toLocaleString('es-CO') : '0';
+    this.actualizarTotalDirecto(pedidoId, num, true);
+  },
+
+  onTotalDirectoBlur(pedidoId, inputEl) {
+    this.onTotalDirectoChange(pedidoId, inputEl);
+  },
+
+  async guardarTotalDirectoEnBD(pedidoId, total) {
+    try {
+      const ped = this.pedidosPendientes.find(x => x.id === pedidoId);
+      if (ped) ped.total = total;
+
+      await apiFetch(`/pedidos/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ total })
+      });
+    } catch (err) {
+      console.error('Error al guardar total de pedido:', err);
+    }
   },
 
   /**
    * Actualiza el valor total del pedido directamente desde la tarjeta de despacho sin necesidad de abrir modales.
    * Recalcula en tiempo real el 'paga con', la devuelta y la base de efectivo de la ruta.
+   * Si guardarEnBD es true, persiste el cambio en SQLite mediante la API.
    */
-  actualizarTotalDirecto(pedidoId, val) {
+  actualizarTotalDirecto(pedidoId, val, guardarEnBD = false) {
     const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
     if (!chk) return;
 
@@ -944,45 +1121,49 @@ const ModuloDomicilios = {
     nuevoTotal = Math.round(nuevoTotal);
     chk.dataset.total = String(nuevoTotal);
 
+    const ped = this.pedidosPendientes.find(x => x.id === pedidoId);
+    if (ped) ped.total = nuevoTotal;
+
+    if (guardarEnBD) {
+      this.guardarTotalDirectoEnBD(pedidoId, nuevoTotal);
+    }
+
     const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const chkYaPago = document.getElementById(`chk-yapago-${pedidoId}`);
     const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
-    const metodo = sel ? sel.value : 'EFECTIVO';
+    const esYaPago = chkYaPago ? chkYaPago.checked : false;
+    const metodo = esYaPago ? 'YA_PAGO' : (sel ? sel.value : 'EFECTIVO');
+
+    let pagaCon = 0;
+    let devuelta = 0;
 
     if (metodo === 'YA_PAGO') {
-      chk.dataset.pagaCon = '0';
-      chk.dataset.devuelta = '0';
-      this.calcularBaseEfectivo();
-      return;
-    }
-
-    if (metodo === 'TRANSFERENCIA') {
-      chk.dataset.pagaCon = String(nuevoTotal);
-      chk.dataset.devuelta = '0';
-      this.calcularBaseEfectivo();
-      return;
-    }
-
-    const sinDev = chk.dataset.sinDevuelta === '1';
-    let pagaCon, devuelta;
-    if (sinDev) {
-      pagaCon = nuevoTotal;
+      pagaCon = 0;
+      devuelta = 0;
+    } else if (metodo === 'TRANSFERENCIA') {
+      pagaCon = 0;
       devuelta = 0;
     } else {
-      pagaCon = this.pagaConSugerido(nuevoTotal);
-      devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - nuevoTotal));
+      const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+      const sinDev = chkSinDev ? chkSinDev.checked : false;
+      const totalRedondeado50 = this.redondearCaja50(nuevoTotal);
+      if (sinDev) {
+        pagaCon = totalRedondeado50;
+        devuelta = 0;
+      } else {
+        pagaCon = this.pagaConSugerido(totalRedondeado50 > 0 ? totalRedondeado50 : nuevoTotal);
+        devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - nuevoTotal));
+      }
     }
+
     chk.dataset.pagaCon = String(pagaCon);
     chk.dataset.devuelta = String(devuelta);
 
-    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
     const elDev = document.getElementById(`dev-txt-${pedidoId}`);
-    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
-    if (elPaga) elPaga.innerText = fmt(pagaCon);
     if (elDev) elDev.innerText = fmt(devuelta);
-    if (elEnt) elEnt.innerText = fmt(pagaCon);
 
-    const inpPaga = document.getElementById(`paga-input-${pedidoId}`);
-    if (inpPaga) inpPaga.value = String(pagaCon);
+    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
+    if (elEnt) elEnt.innerText = fmt(pagaCon);
 
     this.calcularBaseEfectivo();
   },
@@ -1009,14 +1190,10 @@ const ModuloDomicilios = {
     }
     nuevoTotal = Math.round(nuevoTotal);
     
-    this.actualizarTotalDirecto(pedidoId, nuevoTotal);
+    this.actualizarTotalDirecto(pedidoId, nuevoTotal, true);
 
     const inpDirecto = document.getElementById(`precio-directo-${pedidoId}`);
-    if (inpDirecto) inpDirecto.value = String(nuevoTotal);
-
-    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
-    const elTotal = document.getElementById(`total-txt-${pedidoId}`);
-    if (elTotal) elTotal.innerText = fmt(nuevoTotal);
+    if (inpDirecto) inpDirecto.value = nuevoTotal.toLocaleString('es-CO');
 
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.add('hidden');
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.remove('flex');
@@ -1062,6 +1239,12 @@ const ModuloDomicilios = {
       precio: Number(it.precio || 0)
     }));
 
+    // Mantener el total existente del pedido como valor inicial
+    const itemsSumaInicial = itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+    let totalManualUsuario = (pedido.total !== undefined && pedido.total !== null && !isNaN(Number(pedido.total)) && Number(pedido.total) > 0)
+      ? Number(pedido.total)
+      : itemsSumaInicial;
+
     let prodSeleccionadoParaAgregar = null;
 
     const modal = document.createElement('div');
@@ -1075,8 +1258,16 @@ const ModuloDomicilios = {
     document.body.appendChild(modal);
 
     const renderModalContenido = () => {
+      const inputExistente = modal.querySelector('#medit-total-final');
+      if (inputExistente && !isNaN(parseFloat(inputExistente.value))) {
+        totalManualUsuario = parseFloat(inputExistente.value);
+      }
+
       const totalCalc = itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
       const totalUnidades = itemsEdit.reduce((acc, it) => acc + it.cantidad, 0);
+      const valorTotalInput = (totalManualUsuario !== null && !isNaN(totalManualUsuario))
+        ? totalManualUsuario
+        : (totalCalc > 0 ? totalCalc : (Number(pedido.total) || 0));
 
       modal.innerHTML = `
         <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in duration-150 flex flex-col max-h-[90vh]">
@@ -1103,6 +1294,12 @@ const ModuloDomicilios = {
                   <label class="block text-[11px] font-semibold text-slate-600 mb-1">Cliente</label>
                   <input type="text" id="medit-cliente" value="${escapeHtml(pedido.cliente || '')}"
                          class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white font-medium" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-600 mb-1">Empresa</label>
+                  <input type="text" id="medit-empresa" value="${escapeHtml(pedido.empresa || '')}"
+                         placeholder="Ej: Distribuidora, Empresa..."
+                         class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white" />
                 </div>
                 <div>
                   <label class="block text-[11px] font-semibold text-slate-600 mb-1">Teléfono</label>
@@ -1134,8 +1331,8 @@ const ModuloDomicilios = {
                 <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                   <span>📦</span> Productos del Pedido (${itemsEdit.length} productos · ${totalUnidades} unds)
                 </h4>
-                <span class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-medium">
-                  🔄 Stock se ajusta automáticamente
+                <span class="text-[11px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-medium">
+                  ${itemsEdit.length > 0 ? '🔄 Stock se ajusta automáticamente' : 'Opcional'}
                 </span>
               </div>
 
@@ -1153,8 +1350,8 @@ const ModuloDomicilios = {
                   <tbody id="medit-tbody-items" class="divide-y divide-slate-100">
                     ${itemsEdit.length === 0 ? `
                       <tr>
-                        <td colspan="5" class="py-6 text-center text-rose-500 font-medium">
-                          ⚠️ Has quitado todos los productos. Debes tener al menos uno para guardar.
+                        <td colspan="5" class="py-5 px-3 text-center text-slate-400 font-normal">
+                          <span>📦</span> No hay productos específicos agregados al pedido (opcional). Puedes ingresar el total directamente en la casilla inferior.
                         </td>
                       </tr>
                     ` : itemsEdit.map((it, idx) => `
@@ -1217,12 +1414,12 @@ const ModuloDomicilios = {
             <!-- Total y Resumen de Cobro -->
             <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <span class="text-xs text-slate-500 font-semibold block">Total Liquidado del Pedido:</span>
-                <span class="text-xs text-slate-400">Calculado a partir de los productos en lista</span>
+                <span class="text-xs text-slate-700 font-bold block">Total Liquidado del Pedido:</span>
+                <span class="text-[11px] text-slate-500">Valor total del pedido (ajustable manualmente o según productos)</span>
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-xs font-semibold text-slate-600">Total $:</span>
-                <input type="number" id="medit-total-final" min="0" step="500" value="${totalCalc}"
+                <input type="number" id="medit-total-final" min="0" step="500" value="${valorTotalInput}"
                        class="w-36 border-2 border-emerald-500 rounded-lg px-2.5 py-1 text-base font-extrabold text-emerald-700 text-right bg-white" />
               </div>
             </div>
@@ -1255,11 +1452,20 @@ const ModuloDomicilios = {
         ModuloDomicilios.cerrarModalEditarPedido();
       });
 
+      // Evento de cambio en el total final manual
+      modal.querySelector('#medit-total-final')?.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (!isNaN(val)) {
+          totalManualUsuario = val;
+        }
+      });
+
       // Eventos de botones sumar/restar/quitar
       modal.querySelectorAll('.btn-medit-sumar').forEach(btn => {
         btn.addEventListener('click', () => {
           const idx = Number(btn.dataset.idx);
           itemsEdit[idx].cantidad += 1;
+          totalManualUsuario = itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
           renderModalContenido();
         });
       });
@@ -1269,10 +1475,12 @@ const ModuloDomicilios = {
           const idx = Number(btn.dataset.idx);
           if (itemsEdit[idx].cantidad > 1) {
             itemsEdit[idx].cantidad -= 1;
+            totalManualUsuario = itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
             renderModalContenido();
           } else {
             if (confirm(`¿Quitar "${itemsEdit[idx].nombre_producto}" del pedido? Las unidades volverán al inventario.`)) {
               itemsEdit.splice(idx, 1);
+              totalManualUsuario = itemsEdit.length > 0 ? itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0) : (Number(pedido.total) || 0);
               renderModalContenido();
             }
           }
@@ -1285,6 +1493,7 @@ const ModuloDomicilios = {
           const prodNombre = itemsEdit[idx].nombre_producto;
           if (confirm(`¿Eliminar "${prodNombre}" del pedido? Se reintegrarán las unidades a bodega automáticamente.`)) {
             itemsEdit.splice(idx, 1);
+            totalManualUsuario = itemsEdit.length > 0 ? itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0) : (Number(pedido.total) || 0);
             renderModalContenido();
           }
         });
@@ -1335,6 +1544,7 @@ const ModuloDomicilios = {
             });
           }
 
+          totalManualUsuario = itemsEdit.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
           prodSeleccionadoParaAgregar = null;
           renderModalContenido();
         });
@@ -1342,12 +1552,8 @@ const ModuloDomicilios = {
 
       // Guardar Cambios
       modal.querySelector('#btn-guardar-modal-edit')?.addEventListener('click', async () => {
-        if (itemsEdit.length === 0) {
-          alert('El pedido no puede quedar sin productos. Si deseas cancelarlo, utiliza la opción de anulación o deja al menos un producto.');
-          return;
-        }
-
         const nuevoCliente = modal.querySelector('#medit-cliente')?.value.trim();
+        const nuevoEmpresa = modal.querySelector('#medit-empresa')?.value.trim();
         const nuevoTel = modal.querySelector('#medit-telefono')?.value.trim();
         const nuevaDir = modal.querySelector('#medit-direccion')?.value.trim();
         const nuevoMun = modal.querySelector('#medit-municipio')?.value.trim();
@@ -1365,6 +1571,7 @@ const ModuloDomicilios = {
             method: 'PUT',
             body: JSON.stringify({
               cliente: nuevoCliente,
+              empresa: nuevoEmpresa,
               telefono: nuevoTel,
               direccion: nuevaDir,
               municipio: nuevoMun,
@@ -1409,38 +1616,30 @@ const ModuloDomicilios = {
     renderModalContenido();
   },
 
-  /** Marca/desmarca "sin devuelta": pago exacto, sin cambio (valores pequeños o exactos). */
+  /** Marca/desmarca "sin devuelta": pago exacto, sin cambio. */
   toggleSinDevuelta(pedidoId) {
     const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
     const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+    const devInfo = document.getElementById(`dev-info-${pedidoId}`);
     if (!chk || !chkSinDev) return;
 
-    const total = parseFloat(chk.dataset.total) || 0;
-    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
-    const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
-    const elDev = document.getElementById(`dev-txt-${pedidoId}`);
-    const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
-    const btnEditarPaga = document.querySelector(`#pago-view-${pedidoId} button[title="Cambiar con cuánto paga"]`);
+    chk.dataset.sinDevuelta = chkSinDev.checked ? '1' : '0';
 
-    if (chkSinDev.checked) {
-      chk.dataset.sinDevuelta = '1';
-      chk.dataset.pagaCon = String(total);
-      chk.dataset.devuelta = '0';
-      if (btnEditarPaga) btnEditarPaga.classList.add('hidden');
-    } else {
-      chk.dataset.sinDevuelta = '0';
-      const pagaCon = this.pagaConSugerido(total);
-      const devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
-      chk.dataset.pagaCon = String(pagaCon);
-      chk.dataset.devuelta = String(devuelta);
-      if (btnEditarPaga) btnEditarPaga.classList.remove('hidden');
+    if (devInfo) {
+      const boxEdit = document.getElementById(`pago-edit-${pedidoId}`);
+      if (chkSinDev.checked) {
+        devInfo.classList.add('hidden');
+        if (boxEdit) { boxEdit.classList.add('hidden'); boxEdit.classList.remove('flex'); }
+      } else {
+        const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
+        const chkYaPago = document.getElementById(`chk-yapago-${pedidoId}`);
+        if ((!chkYaPago || !chkYaPago.checked) && (!sel || sel.value === 'EFECTIVO')) {
+          devInfo.classList.remove('hidden');
+        }
+      }
     }
 
-    if (elPaga) elPaga.innerText = fmt(Number(chk.dataset.pagaCon));
-    if (elDev) elDev.innerText = fmt(Number(chk.dataset.devuelta));
-    if (elEnt) elEnt.innerText = fmt(Number(chk.dataset.pagaCon));
-
-    this.calcularBaseEfectivo();
+    this.actualizarTotalDirecto(pedidoId, chk.dataset.total || 0, false);
   },
 
   /** Marca o desmarca que el cliente ya pagó previamente (cobro $0 y sin devuelta). */
@@ -1448,78 +1647,77 @@ const ModuloDomicilios = {
     const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
     const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
     const chkYaPago = document.getElementById(`chk-yapago-${pedidoId}`);
+    const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+    const lblSinDev = document.getElementById(`lbl-sindev-${pedidoId}`);
+    const devInfo = document.getElementById(`dev-info-${pedidoId}`);
     if (!chk) return;
 
-    if (chkYaPago && chkYaPago.checked) {
-      if (sel) sel.value = 'YA_PAGO';
-    } else {
-      if (sel && sel.value === 'YA_PAGO') sel.value = 'EFECTIVO';
+    const esYaPago = chkYaPago ? chkYaPago.checked : false;
+    chk.dataset.yaPago = esYaPago ? '1' : '0';
+
+    if (sel) {
+      sel.disabled = esYaPago;
+      if (esYaPago) {
+        sel.classList.add('opacity-40', 'cursor-not-allowed');
+      } else {
+        sel.classList.remove('opacity-40', 'cursor-not-allowed');
+      }
     }
-    this.cambiarMetodoDespacho(pedidoId);
+    if (chkSinDev) {
+      chkSinDev.disabled = esYaPago;
+    }
+    if (lblSinDev) {
+      if (esYaPago) {
+        lblSinDev.classList.add('opacity-40', 'pointer-events-none');
+      } else {
+        lblSinDev.classList.remove('opacity-40', 'pointer-events-none');
+      }
+    }
+    if (devInfo) {
+      const boxEdit = document.getElementById(`pago-edit-${pedidoId}`);
+      if (esYaPago) {
+        devInfo.classList.add('hidden');
+        if (boxEdit) { boxEdit.classList.add('hidden'); boxEdit.classList.remove('flex'); }
+      } else if (sel && sel.value === 'EFECTIVO' && (!chkSinDev || !chkSinDev.checked)) {
+        devInfo.classList.remove('hidden');
+      }
+    }
+
+    this.actualizarTotalDirecto(pedidoId, chk.dataset.total || 0, false);
   },
 
-  /** Cambia el método de pago de un pedido en Despachar: si es Transferencia o Ya Pagó, no aplica devuelta. */
+  /** Cambia el método de pago de un pedido en Despachar: si es Transferencia, no aplica devuelta. */
   cambiarMetodoDespacho(pedidoId) {
     const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
     const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pedidoId}"]`);
+    const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
+    const lblSinDev = document.getElementById(`lbl-sindev-${pedidoId}`);
+    const devInfo = document.getElementById(`dev-info-${pedidoId}`);
     if (!chk || !sel) return;
 
-    const metodo = sel.value;
-    const total = parseFloat(chk.dataset.total) || 0;
-    const boxEfectivo = document.getElementById(`pago-efectivo-box-${pedidoId}`);
-    const notaTransfer = document.getElementById(`pago-transfer-note-${pedidoId}`);
-    const notaYaPago = document.getElementById(`pago-yapago-note-${pedidoId}`);
-    const chkYaPago = document.getElementById(`chk-yapago-${pedidoId}`);
-    const fmt = (n) => `$${n.toLocaleString('es-CO')}`;
+    const esTransferencia = sel.value === 'TRANSFERENCIA';
 
-    if (chkYaPago) {
-      chkYaPago.checked = (metodo === 'YA_PAGO');
+    if (chkSinDev) {
+      chkSinDev.disabled = esTransferencia;
     }
-
-    if (metodo === 'YA_PAGO') {
-      chk.dataset.pagaCon = '0';
-      chk.dataset.devuelta = '0';
-      chk.dataset.sinDevuelta = '1';
-      chk.dataset.yaPago = '1';
-      if (boxEfectivo) boxEfectivo.classList.add('hidden');
-      if (notaTransfer) notaTransfer.classList.add('hidden');
-      if (notaYaPago) notaYaPago.classList.remove('hidden');
-    } else if (metodo === 'TRANSFERENCIA') {
-      chk.dataset.pagaCon = String(total);
-      chk.dataset.devuelta = '0';
-      chk.dataset.sinDevuelta = '0';
-      chk.dataset.yaPago = '0';
-      if (boxEfectivo) boxEfectivo.classList.add('hidden');
-      if (notaTransfer) notaTransfer.classList.remove('hidden');
-      if (notaYaPago) notaYaPago.classList.add('hidden');
-    } else {
-      chk.dataset.yaPago = '0';
-      if (boxEfectivo) boxEfectivo.classList.remove('hidden');
-      if (notaTransfer) notaTransfer.classList.add('hidden');
-      if (notaYaPago) notaYaPago.classList.add('hidden');
-
-      const chkSinDev = document.getElementById(`chk-sindev-${pedidoId}`);
-      const sinDev = chkSinDev?.checked;
-      let pagaCon, devuelta;
-      if (sinDev) {
-        pagaCon = total;
-        devuelta = 0;
+    if (lblSinDev) {
+      if (esTransferencia) {
+        lblSinDev.classList.add('opacity-40', 'pointer-events-none');
       } else {
-        pagaCon = this.pagaConSugerido(total);
-        devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
+        lblSinDev.classList.remove('opacity-40', 'pointer-events-none');
       }
-      chk.dataset.pagaCon = String(pagaCon);
-      chk.dataset.devuelta = String(devuelta);
-
-      const elPaga = document.getElementById(`paga-txt-${pedidoId}`);
-      const elDev = document.getElementById(`dev-txt-${pedidoId}`);
-      const elEnt = document.getElementById(`ent-txt-${pedidoId}`);
-      if (elPaga) elPaga.innerText = fmt(pagaCon);
-      if (elDev) elDev.innerText = fmt(devuelta);
-      if (elEnt) elEnt.innerText = fmt(pagaCon);
+    }
+    if (devInfo) {
+      const boxEdit = document.getElementById(`pago-edit-${pedidoId}`);
+      if (esTransferencia || (chkSinDev && chkSinDev.checked)) {
+        devInfo.classList.add('hidden');
+        if (boxEdit) { boxEdit.classList.add('hidden'); boxEdit.classList.remove('flex'); }
+      } else {
+        devInfo.classList.remove('hidden');
+      }
     }
 
-    this.calcularBaseEfectivo();
+    this.actualizarTotalDirecto(pedidoId, chk.dataset.total || 0, false);
   },
 
   /**
@@ -1539,13 +1737,14 @@ const ModuloDomicilios = {
       if (metodo !== 'EFECTIVO') return;
 
       const total = parseFloat(chk.dataset.total) || 0;
+      const totalRedondeado50 = this.redondearCaja50(total);
       let pagaCon = parseFloat(chk.dataset.pagaCon);
-      if (isNaN(pagaCon)) pagaCon = this.pagaConSugerido(total);
+      if (isNaN(pagaCon)) pagaCon = this.pagaConSugerido(totalRedondeado50 > 0 ? totalRedondeado50 : total);
       let devuelta = parseFloat(chk.dataset.devuelta);
       if (isNaN(devuelta)) devuelta = this.redondearDevuelta50(Math.max(0, pagaCon - total));
 
-      baseCambio += devuelta;
-      totalEntregar += pagaCon;
+      baseCambio += this.redondearDevuelta50(devuelta);
+      totalEntregar += this.redondearCaja50(pagaCon);
     });
 
     const elBase = document.getElementById('txt-base-cambio');
@@ -1585,8 +1784,12 @@ const ModuloDomicilios = {
     // y método de pago) para que el servidor respete lo definido aquí.
     const pedidos = chks.map(chk => {
       const pid = parseInt(chk.value, 10);
+      const chkYaPago = document.getElementById(`chk-yapago-${pid}`);
       const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pid}"]`);
-      const metodo = sel ? sel.value : 'EFECTIVO';
+      let metodo = sel ? sel.value : 'EFECTIVO';
+      if (chkYaPago && chkYaPago.checked) {
+        metodo = 'YA_PAGO';
+      }
       return {
         id: pid,
         metodoPago: metodo,
@@ -1618,6 +1821,221 @@ const ModuloDomicilios = {
     }
   },
 
+  /** Abre el modal para agregar los pedidos seleccionados a una ruta que ya se encuentra en curso (despachada) */
+  async abrirModalAgregarARutaEnCurso() {
+    const chks = Array.from(document.querySelectorAll('.chk-pedido:checked'));
+    if (!chks.length) {
+      showToast('⚠️ Selecciona al menos un pedido de la lista para agregarlo a una ruta en curso.', 'warning');
+      return;
+    }
+
+    const pedidosSeleccionados = chks.map(chk => {
+      const pid = parseInt(chk.value, 10);
+      const chkYaPago = document.getElementById(`chk-yapago-${pid}`);
+      const sel = document.querySelector(`.sel-metodo-despacho[data-id="${pid}"]`);
+      let metodo = sel ? sel.value : 'EFECTIVO';
+      if (chkYaPago && chkYaPago.checked) {
+        metodo = 'YA_PAGO';
+      }
+      const total = parseFloat(chk.dataset.total) || 0;
+      let pagaCon = parseFloat(chk.dataset.pagaCon) || 0;
+      let devuelta = parseFloat(chk.dataset.devuelta) || 0;
+      if (metodo === 'TRANSFERENCIA' || metodo === 'YA_PAGO') {
+        pagaCon = 0;
+        devuelta = 0;
+      }
+      const card = chk.closest('[data-pedido-card]');
+      const cliente = card ? (card.querySelector('.font-extrabold')?.innerText || `Pedido #${pid}`) : `Pedido #${pid}`;
+      return {
+        id: pid,
+        metodoPago: metodo,
+        total,
+        pagaCon,
+        devuelta,
+        cliente
+      };
+    });
+
+    const sumaTotal = pedidosSeleccionados.reduce((acc, p) => acc + p.total, 0);
+    const sumaDevuelta = pedidosSeleccionados.reduce((acc, p) => acc + p.devuelta, 0);
+
+    // Cargar rutas en curso
+    let rutas = [];
+    try {
+      const res = await apiFetch('/rutas?estado=EN_RUTA');
+      rutas = (res && res.rutas) || [];
+    } catch (err) {
+      showToast('Error al consultar rutas en curso: ' + err.message, 'error');
+      return;
+    }
+
+    // Modal
+    const modalExistente = document.getElementById('modal-agregar-a-ruta');
+    if (modalExistente) modalExistente.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-agregar-a-ruta';
+    modal.className = 'fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto animate-fade-in';
+
+    let rutaSeleccionadaId = rutas.length === 1 ? rutas[0].id : (rutas.length > 0 ? rutas[0].id : null);
+
+    const renderContenidoModal = () => {
+      modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200" onclick="event.stopPropagation()">
+          <div class="px-4 py-3 bg-indigo-700 text-white flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">➕🚚</span>
+              <div>
+                <h3 class="font-bold text-sm">Agregar Pedidos a Ruta en Curso</h3>
+                <p class="text-[11px] text-indigo-100">${pedidosSeleccionados.length} pedido(s) seleccionado(s)</p>
+              </div>
+            </div>
+            <button type="button" id="btn-cerrar-modal-ruta" class="text-white/80 hover:text-white p-1 rounded-md text-lg leading-none">✕</button>
+          </div>
+
+          <div class="p-4 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
+            <!-- Resumen de pedidos a agregar -->
+            <div class="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3 space-y-2">
+              <div class="font-bold text-indigo-950 flex items-center justify-between text-xs">
+                <span>📦 Pedidos seleccionados (${pedidosSeleccionados.length}):</span>
+                <span class="font-mono text-emerald-800 font-black">$${sumaTotal.toLocaleString('es-CO')}</span>
+              </div>
+              <div class="max-h-28 overflow-y-auto space-y-1 pr-1">
+                ${pedidosSeleccionados.map(p => `
+                  <div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-indigo-100 text-[11px]">
+                    <span class="font-medium text-slate-800 truncate mr-2">${escapeHtml(p.cliente)}</span>
+                    <div class="flex items-center gap-2 shrink-0 font-mono">
+                      <span class="text-slate-500 font-medium">${p.metodoPago === 'TRANSFERENCIA' ? '🏦 Transf' : (p.metodoPago === 'YA_PAGO' ? '✅ Ya pagó' : '💵 Efec')}</span>
+                      <b class="text-slate-900">$${p.total.toLocaleString('es-CO')}</b>
+                      ${p.devuelta > 0 ? `<span class="text-amber-800 text-[10px]" title="Devuelta">(Dev: $${p.devuelta.toLocaleString('es-CO')})</span>` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              ${sumaDevuelta > 0 ? `
+                <div class="text-[11px] text-amber-900 font-semibold pt-1 border-t border-indigo-100 flex justify-between">
+                  <span>Base de cambio adicional a sumar a la ruta:</span>
+                  <b class="font-mono font-bold">$${sumaDevuelta.toLocaleString('es-CO')}</b>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Listado de rutas en curso -->
+            <div>
+              <label class="block font-bold text-slate-800 mb-2">
+                Selecciona la ruta en curso a la que deseas agregar estos pedidos:
+              </label>
+
+              ${rutas.length === 0 ? `
+                <div class="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-2">
+                  <p class="text-slate-500 font-medium">No hay rutas activas en curso actualmente.</p>
+                  <p class="text-[11px] text-slate-400">Despacha primero una ruta para poder agregarle más pedidos mientras el repartidor está en la calle.</p>
+                </div>
+              ` : `
+                <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  ${rutas.map(r => {
+                    const esSeleccionada = rutaSeleccionadaId === r.id;
+                    const horaSalida = r.fecha_creacion ? (new Date(r.fecha_creacion).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })) : '--:--';
+                    return `
+                      <div onclick="ModuloDomicilios.seleccionarRutaDestinoModal(${r.id})"
+                           class="cursor-pointer p-3 rounded-xl border transition-all ${esSeleccionada ? 'bg-indigo-50/90 border-indigo-600 ring-2 ring-indigo-500 shadow-xs' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'}">
+                        <div class="flex items-center justify-between">
+                          <div class="flex items-center gap-2">
+                            <input type="radio" name="ruta_destino" value="${r.id}" ${esSeleccionada ? 'checked' : ''} class="text-indigo-600 focus:ring-indigo-500 pointer-events-none">
+                            <div>
+                              <b class="text-slate-900 text-xs">🚴‍♂️ ${escapeHtml(r.domiciliario_nombre || 'Domiciliario')}</b>
+                              <p class="text-[10px] text-slate-500">Ruta #${r.id} · Salida: ${horaSalida}</p>
+                            </div>
+                          </div>
+                          <div class="text-right">
+                            <span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px] font-bold">
+                              ${r.cantidad_pedidos || 0} pedido(s)
+                            </span>
+                            <p class="text-[11px] font-mono font-bold text-slate-700 mt-0.5">$${Number(r.total_dinero || 0).toLocaleString('es-CO')}</p>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              `}
+            </div>
+          </div>
+
+          <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+            <button type="button" id="btn-cancelar-modal-ruta" class="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+              Cancelar
+            </button>
+            <button type="button" id="btn-confirmar-agregar-ruta"
+                    ${!rutaSeleccionadaId || rutas.length === 0 ? 'disabled' : ''}
+                    class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:pointer-events-none rounded-lg shadow transition-all active:scale-[0.98] flex items-center gap-1.5">
+              <span>🚀</span> Confirmar y Agregar a Ruta
+            </button>
+          </div>
+        </div>
+      `;
+
+      modal.querySelector('#btn-cerrar-modal-ruta')?.addEventListener('click', () => modal.remove());
+      modal.querySelector('#btn-cancelar-modal-ruta')?.addEventListener('click', () => modal.remove());
+      modal.querySelector('#btn-confirmar-agregar-ruta')?.addEventListener('click', async () => {
+        if (!rutaSeleccionadaId) {
+          showToast('Selecciona una ruta en curso', 'warning');
+          return;
+        }
+        const btnConf = modal.querySelector('#btn-confirmar-agregar-ruta');
+        if (btnConf) {
+          btnConf.disabled = true;
+          btnConf.innerHTML = '⏳ Agregando pedidos...';
+        }
+
+        try {
+          const res = await apiFetch(`/rutas/${rutaSeleccionadaId}/agregar-pedidos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pedidos: pedidosSeleccionados,
+              baseEfectivoAdicional: sumaDevuelta
+            })
+          });
+
+          if (res && res.ok) {
+            modal.remove();
+            showToast(`✅ Se agregaron ${pedidosSeleccionados.length} pedidos a la ruta de ${res.domiciliario || 'domiciliario'}`);
+            await ModuloDomicilios.renderTabDespachar();
+          } else {
+            alert((res && res.error) || 'No se pudieron agregar los pedidos a la ruta');
+            if (btnConf) {
+              btnConf.disabled = false;
+              btnConf.innerHTML = '🚀 Confirmar y Agregar a Ruta';
+            }
+          }
+        } catch (err) {
+          alert(err.message || 'Error de conexión');
+          if (btnConf) {
+            btnConf.disabled = false;
+            btnConf.innerHTML = '🚀 Confirmar y Agregar a Ruta';
+          }
+        }
+      });
+    };
+
+    ModuloDomicilios._modalAgregarRutaState = {
+      setRuta(id) {
+        rutaSeleccionadaId = id;
+        renderContenidoModal();
+      }
+    };
+
+    renderContenidoModal();
+    document.body.appendChild(modal);
+  },
+
+  seleccionarRutaDestinoModal(id) {
+    if (this._modalAgregarRutaState) {
+      this._modalAgregarRutaState.setRuta(id);
+    }
+  },
+
     async renderTabRutas() {
     const cont = document.getElementById('contenedor-subtab');
     cont.innerHTML = `<p class="text-center text-xs text-slate-400 py-4">Cargando rutas...</p>`;
@@ -1632,50 +2050,429 @@ const ModuloDomicilios = {
       const activas = resActivas.rutas || [];
       const liquidadas = resLiquidadas.rutas || [];
 
+      // Cargar pedidos de cada ruta activa para mostrarlos en columnas en escritorio
+      const activasConPedidos = await Promise.all(
+        activas.map(async r => {
+          try {
+            const d = await apiFetch(`/rutas/${r.id}`);
+            return { ...r, pedidos: d.pedidos || [] };
+          } catch(e) {
+            return { ...r, pedidos: [] };
+          }
+        })
+      );
+
+      this._initPersistentState();
+
       cont.innerHTML = `
-        <div class="space-y-4">
+        <div class="space-y-6">
           <div>
-            <p class="text-xs font-bold text-slate-800 mb-2">🚚 Rutas en calle</p>
-            ${activas.length === 0
-              ? `<p class="text-center text-xs text-slate-400 py-4">No hay rutas activas.</p>`
-              : activas.map(r => `
-                <div class="border p-3 rounded-lg bg-slate-50 space-y-2 mb-2">
-                  <div class="flex justify-between items-center">
-                    <span class="font-bold text-sm text-slate-900">Ruta #${r.id} - ${r.domiciliario_nombre}</span>
-                    <span class="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded">En calle</span>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-2">
+                <span>🚚</span> <span>Rutas y Pedidos en Curso</span>
+                <span class="text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">
+                  ${activas.length} activa(s)
+                </span>
+              </h3>
+            </div>
+
+            ${activasConPedidos.length === 0
+              ? `<div class="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-2xl">
+                   <p class="text-2xl mb-1">🛵</p>
+                   <p class="text-xs font-semibold text-slate-600">No hay rutas activas en calle en este momento.</p>
+                   <p class="text-[11px] text-slate-400 mt-1">Despacha una nueva ruta desde la pestaña "1. Despachar".</p>
+                 </div>`
+              : activasConPedidos.map(r => {
+                const abiertaRuta = (this._rutasAbiertasSeguimiento && this._rutasAbiertasSeguimiento[r.id] !== undefined)
+                  ? Boolean(this._rutasAbiertasSeguimiento[r.id])
+                  : true;
+
+                return `
+                <div class="border border-slate-200 rounded-2xl bg-white p-4 shadow-sm mb-4 space-y-3.5">
+                  <!-- Cabecera de la ruta activa -->
+                  <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-lg shrink-0">
+                        🚚
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <h4 class="font-black text-sm text-slate-900">Ruta #${r.id} · ${escapeHtml(r.domiciliario_nombre || 'Sin repartidor')}</h4>
+                          <span class="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded-full">En calle</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                          <span>📦 <b>${r.pedidos?.length || r.cantidad_pedidos || 0}</b> pedidos</span>
+                          <span class="mx-1.5 text-slate-300">•</span>
+                          <span>💵 Total: <b class="text-slate-800 font-mono">$${(r.total_dinero || 0).toLocaleString('es-CO')}</b></span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <button type="button" onclick="ModuloDomicilios.toggleRutaSeguimiento(${r.id}, event)"
+                              class="px-3 py-2 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs border border-slate-200"
+                              title="Plegar o desplegar esta ruta">
+                        <span id="ruta-arrow-${r.id}" class="text-xs font-black">${abiertaRuta ? '▼' : '▶'}</span>
+                        <span id="ruta-btn-text-${r.id}" class="text-[11px] font-semibold">${abiertaRuta ? 'Plegar ruta' : 'Desplegar ruta'}</span>
+                      </button>
+
+                      <button onclick="ModuloDomicilios.seleccionarRutaCuadre(${r.id})"
+                        class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5">
+                        <span>${(typeof Auth !== 'undefined' && Auth.isDomiciliario()) ? '🛵 Mis entregas' : '📦 Gestionar / Liquidar'}</span>
+                      </button>
+                    </div>
                   </div>
-                  <div class="text-xs text-slate-600 flex justify-between">
-                    <span>Pedidos: <strong>${r.cantidad_pedidos}</strong></span>
-                    <span>Total: <strong>$${(r.total_dinero||0).toLocaleString()}</strong></span>
+
+                  <!-- Pedidos organizados por municipio -->
+                  <div id="ruta-body-${r.id}" class="${abiertaRuta ? '' : 'hidden'} space-y-4">
+                    ${(() => {
+                      const porMunicipio = {};
+                      (r.pedidos || []).forEach(p => {
+                        const mun = (p.municipio || 'Sin municipio').trim() || 'Sin municipio';
+                        if (!porMunicipio[mun]) porMunicipio[mun] = [];
+                        porMunicipio[mun].push(p);
+                      });
+                      const municipios = Object.keys(porMunicipio);
+
+                      if (municipios.length === 0) {
+                        return `<p class="text-xs text-slate-400 italic py-2">No hay pedidos asignados a esta ruta.</p>`;
+                      }
+
+                      // Pre-cálculo de estadísticas por municipio
+                      const statsPorMun = {};
+                      let totalCobradoEfectivoRuta = 0;
+                      let totalDevueltasPedidos = 0;
+                      let totalSaldosPendientesRuta = 0;
+
+                      municipios.forEach(mun => {
+                        const lista = porMunicipio[mun];
+                        const entregadosMun = lista.filter(p => p.estado_entrega === 'ENTREGADO').length;
+                        const completadoMun = entregadosMun === lista.length && lista.length > 0;
+
+                        let devueltasMun = 0;
+                        let cobradoEfectivoMun = 0;
+                        let saldosMun = 0;
+
+                        lista.forEach(p => {
+                          const total = Number(p.total) || 0;
+                          const dev = this.redondearDevuelta50(Number(p.devuelta_calculada) || 0);
+                          devueltasMun += dev;
+                          totalDevueltasPedidos += dev;
+
+                          const metodo = p.metodo_pago_final || 'EFECTIVO';
+                          const montoAbono = Number(p.monto_abono) || 0;
+                          const metodoAbono = p.metodo_abono || 'EFECTIVO';
+
+                          let cobro = 0;
+                          let saldo = 0;
+
+                          if (metodo === 'YA_PAGO') {
+                            cobro = 0;
+                          } else if (montoAbono > 0) {
+                            cobro = (metodoAbono === 'TRANSFERENCIA') ? 0 : this.redondearCaja50(montoAbono);
+                            saldo = (p.saldo_pendiente !== undefined && p.saldo_pendiente !== null && Number(p.saldo_pendiente) >= 0)
+                              ? Number(p.saldo_pendiente)
+                              : Math.max(0, total - montoAbono);
+                          } else if (metodo === 'TRANSFERENCIA' || metodo === 'TRANSFERENCIA_PENDIENTE') {
+                            cobro = 0;
+                            if (metodo === 'TRANSFERENCIA_PENDIENTE') {
+                              saldo = total;
+                            }
+                          } else {
+                            cobro = this.redondearCaja50(total);
+                          }
+
+                          cobradoEfectivoMun += cobro;
+                          saldosMun += saldo;
+                        });
+
+                        cobradoEfectivoMun = this.redondearCaja50(cobradoEfectivoMun);
+                        devueltasMun = this.redondearDevuelta50(devueltasMun);
+
+                        totalCobradoEfectivoRuta += cobradoEfectivoMun;
+                        totalSaldosPendientesRuta += saldosMun;
+
+                        const subtotalMun = this.redondearCaja50(cobradoEfectivoMun + devueltasMun);
+
+                        statsPorMun[mun] = {
+                          lista,
+                          entregadosMun,
+                          totalMun: lista.length,
+                          completadoMun,
+                          devueltasMun,
+                          cobradoEfectivoMun,
+                          subtotalMun,
+                          saldosMun
+                        };
+                      });
+
+                      const totalDevueltasRuta = this.redondearDevuelta50((Number(r.base_efectivo) > 0) ? Number(r.base_efectivo) : totalDevueltasPedidos);
+                      totalCobradoEfectivoRuta = this.redondearCaja50(totalCobradoEfectivoRuta);
+                      const totalEntregarCajaRuta = this.redondearCaja50(totalCobradoEfectivoRuta + totalDevueltasRuta);
+
+                      const htmlMunicipios = municipios.map((mun, munIdx) => {
+                        const st = statsPorMun[mun];
+                        const keyMun = `ruta_${r.id}_mun_${mun}`;
+                        const abiertoMun = (this._municipiosAbiertosSeguimiento && this._municipiosAbiertosSeguimiento[keyMun] !== undefined)
+                          ? Boolean(this._municipiosAbiertosSeguimiento[keyMun])
+                          : false;
+
+                        const devueltasPendientesOtros = municipios.reduce((acc, m2) => {
+                          if (m2 === mun) return acc;
+                          const s2 = statsPorMun[m2];
+                          return acc + (s2.completadoMun ? 0 : s2.devueltasMun);
+                        }, 0);
+
+                        return `
+                          <div class="border border-slate-200 rounded-2xl bg-white overflow-hidden shadow-2xs space-y-0 transition-all">
+                            <!-- Cabecera del Municipio Desplegable -->
+                            <div class="bg-indigo-50/90 hover:bg-indigo-100/90 px-4 py-2.5 border-b border-indigo-100 flex flex-wrap items-center justify-between gap-2 cursor-pointer select-none transition-colors"
+                                 onclick="ModuloDomicilios.toggleMunicipioSeguimiento(${r.id}, '${escapeHtml(mun)}', ${munIdx}, event)">
+                              <div class="flex items-center gap-2.5">
+                                <span id="mun-arrow-${r.id}-${munIdx}" class="w-5 h-5 flex items-center justify-center rounded-md bg-indigo-100/80 text-indigo-900 text-xs font-black transition-transform">
+                                  ${abiertoMun ? '▼' : '▶'}
+                                </span>
+                                <span class="text-base">📍</span>
+                                <div>
+                                  <div class="flex items-center gap-2 flex-wrap">
+                                    <h5 class="font-black text-xs sm:text-sm text-indigo-950">${escapeHtml(mun)}</h5>
+                                    <span class="text-[10px] font-semibold text-indigo-700 bg-white/80 border border-indigo-200 px-1.5 py-0.2 rounded-full">
+                                      ${st.totalMun} pedido(s)
+                                    </span>
+                                  </div>
+                                  <p class="text-[10px] text-indigo-700 font-medium">
+                                    ${st.entregadosMun}/${st.totalMun} entregado(s) · 
+                                    ${st.completadoMun 
+                                      ? '<span class="text-emerald-700 font-bold">✓ Completo</span>' 
+                                      : '<span class="text-amber-800 font-semibold">En curso</span>'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div class="text-right flex items-center gap-3">
+                                <div>
+                                  <p class="text-xs sm:text-sm text-indigo-950 font-black font-mono">
+                                    A caja: $${st.subtotalMun.toLocaleString('es-CO')}
+                                  </p>
+                                  <p class="text-[10px] text-slate-500 font-medium">
+                                    (Cobrado $${st.cobradoEfectivoMun.toLocaleString('es-CO')} + Dev $${st.devueltasMun.toLocaleString('es-CO')})
+                                  </p>
+                                </div>
+                                <span id="mun-hint-${r.id}-${munIdx}" class="text-xs font-bold text-indigo-600 bg-indigo-100/60 px-2 py-1 rounded-lg hidden sm:inline-block">
+                                  ${abiertoMun ? 'Ocultar' : 'Ver pedidos'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <!-- Contenido Desplegable: Tarjetas + Resumen del Municipio -->
+                            <div id="mun-body-${r.id}-${munIdx}" class="${abiertoMun ? '' : 'hidden'}">
+                              <!-- Tarjetas de pedidos de este municipio -->
+                              <div class="p-3.5 bg-slate-50/40">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                                ${st.lista.map(p => {
+                                  const entregado = p.estado_entrega === 'ENTREGADO';
+                                  const total = Number(p.total) || 0;
+                                  const devuelta = this.redondearDevuelta50(Number(p.devuelta_calculada) || 0);
+                                  const itemsFaltantes = (p.items || []).filter(i => i.es_faltante);
+                                  const metodoActual = p.metodo_pago_final || 'EFECTIVO';
+                                  const montoAbono = Number(p.monto_abono) || 0;
+                                  const metodoAbono = p.metodo_abono || 'EFECTIVO';
+
+                                  const esTransfer = metodoActual === 'TRANSFERENCIA' || metodoActual === 'TRANSFERENCIA_PENDIENTE';
+                                  const esYaPago = metodoActual === 'YA_PAGO';
+
+                                  let cobradoEfectivo = 0;
+                                  let explicacion = '';
+                                  if (esYaPago) {
+                                    cobradoEfectivo = 0;
+                                    explicacion = devuelta > 0 ? '(solo devolver devuelta base)' : '(ya pagado $0)';
+                                  } else if (montoAbono > 0) {
+                                    cobradoEfectivo = (metodoAbono === 'TRANSFERENCIA') ? 0 : this.redondearCaja50(montoAbono);
+                                    explicacion = (metodoAbono === 'TRANSFERENCIA')
+                                      ? (devuelta > 0 ? '(solo devolver devuelta · abono transf)' : '(abono transf $0)')
+                                      : (devuelta > 0 ? '(abono efectivo + devuelta)' : '(abono efectivo)');
+                                  } else if (esTransfer) {
+                                    cobradoEfectivo = 0;
+                                    explicacion = devuelta > 0 ? '(solo devolver devuelta base)' : '(transferencia $0)';
+                                  } else {
+                                    cobradoEfectivo = this.redondearCaja50(total);
+                                    explicacion = devuelta > 0 ? '(efectivo + devuelta)' : '(solo efectivo)';
+                                  }
+
+                                  const valorAEntregar = this.redondearCaja50(cobradoEfectivo + devuelta);
+
+                                  return `
+                                    <div class="border p-3.5 rounded-xl ${entregado ? 'bg-emerald-50/80 border-emerald-300' : 'bg-white border-slate-200'} shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-2.5">
+                                      <div>
+                                        <!-- 1. Datos del cliente arriba -->
+                                        <div class="flex justify-between items-start gap-1.5 mb-1.5">
+                                          <div class="min-w-0 pr-1">
+                                            <p class="font-bold text-xs text-slate-900 leading-snug">
+                                              ${escapeHtml(p.cliente || p.cliente_nombre || 'Cliente General')}
+                                              ${p.empresa ? ` · <span class="text-indigo-600 font-bold">🏢 ${escapeHtml(p.empresa)}</span>` : ''}
+                                            </p>
+                                            <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+                                              📍 ${escapeHtml(p.direccion || 'Sin dirección')}
+                                              ${p.telefono ? ` · 📞 ${escapeHtml(p.telefono)}` : ''}
+                                            </p>
+                                          </div>
+                                          <span class="text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${entregado ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-900 border border-amber-300'}">
+                                            ${entregado ? '✓ Entregado' : 'En camino'}
+                                          </span>
+                                        </div>
+
+                                        <!-- 2. Abajo (no en negrita) el número de pedido que también diga la devuelta -->
+                                        <div class="flex items-center justify-between text-[11px] text-slate-500 font-normal pt-1.5 border-t border-slate-100">
+                                          <span class="font-normal text-slate-500">${escapeHtml(p.codigo_pedido || ('Pedido #' + p.id))}</span>
+                                          <span class="font-normal text-slate-600">Devuelta: <b class="font-medium text-amber-900 font-mono">$${devuelta.toLocaleString('es-CO')}</b></span>
+                                        </div>
+
+                                        <!-- 3. Abajito el total y el valor a entregar -->
+                                        <div class="pt-1.5 space-y-1 text-xs border-t border-slate-100">
+                                          <div class="flex items-center justify-between">
+                                            <span class="text-[11px] text-slate-500 font-medium">${escapeHtml(metodoActual === 'TRANSFERENCIA' ? '🏦 Transf.' : (metodoActual === 'YA_PAGO' ? '✅ Ya pagó' : (metodoActual === 'TRANSFERENCIA_PENDIENTE' ? '⏳ Transf. Pend.' : '💵 Efectivo')))}</span>
+                                            <div class="text-right">
+                                              <span class="text-[11px] text-slate-400 font-normal">Total:</span>
+                                              <b class="text-slate-800 font-bold font-mono text-xs ml-1">$${total.toLocaleString('es-CO')}</b>
+                                            </div>
+                                          </div>
+                                          <div class="flex items-center justify-between pt-1 border-t border-dashed border-slate-200">
+                                            <div class="flex flex-col">
+                                              <span class="text-[11px] font-bold text-emerald-800">Valor a Entregar:</span>
+                                              <span class="text-[9px] text-slate-400 font-normal leading-tight">${escapeHtml(explicacion)}</span>
+                                            </div>
+                                            <b class="text-emerald-700 font-black font-mono text-sm">$${valorAEntregar.toLocaleString('es-CO')}</b>
+                                          </div>
+                                        </div>
+
+                                        ${itemsFaltantes.length > 0 ? `
+                                          <div class="mt-2 p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-900 font-medium">
+                                            ⚠️ <b>${itemsFaltantes.length} producto(s) faltante(s)</b>
+                                          </div>
+                                        ` : ''}
+                                      </div>
+
+                                      <!-- Acciones: Entrega rápida y Ruedita modal -->
+                                      <div class="pt-2 border-t border-slate-200/70 space-y-2">
+                                        <div class="flex items-center gap-1.5">
+                                          <button type="button" onclick="ModuloDomicilios.marcarEntregaRapida(${p.id}, ${!entregado})"
+                                            class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${entregado ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white shadow-2xs'}">
+                                            ${entregado ? '↩ Deshacer' : '✓ Entregado'}
+                                          </button>
+                                          <button type="button" onclick="ModuloDomicilios.abrirModalDetallePedido(${p.id}, ${r.id})"
+                                            class="p-1.5 px-2.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors shadow-2xs" title="Detalle del pedido / Ajustar valores y correcciones">
+                                            ⚙️
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  `;
+                                }).join('')}
+                              </div>
+                            </div>
+
+                            <!-- Resumen por Municipio estilo exacto de referencia -->
+                            <div class="bg-white border-t border-slate-200 px-4 py-3 text-xs space-y-1.5">
+                              <div class="flex justify-between text-slate-700">
+                                <span>Cobrado en efectivo (${escapeHtml(mun)}):</span>
+                                <b class="font-mono text-slate-900 font-bold">$${st.cobradoEfectivoMun.toLocaleString('es-CO')}</b>
+                              </div>
+                              <div class="flex justify-between text-amber-900">
+                                <span>Devueltas de ${escapeHtml(mun)}:</span>
+                                <b class="font-mono text-amber-950 font-bold">$${st.devueltasMun.toLocaleString('es-CO')}</b>
+                              </div>
+                              <div class="flex justify-between text-emerald-800 font-bold border-t border-slate-100 pt-1.5 text-xs sm:text-sm">
+                                <span>A entregar / guardar (${escapeHtml(mun)}):</span>
+                                <b class="font-mono text-emerald-700 font-black">$${st.subtotalMun.toLocaleString('es-CO')}</b>
+                              </div>
+                              <div class="flex justify-between text-slate-800 font-semibold border-t border-slate-100 pt-1.5">
+                                <span>Devueltas pendientes (otros municipios):</span>
+                                <b class="font-mono text-slate-900 font-bold">$${devueltasPendientesOtros.toLocaleString('es-CO')}</b>
+                              </div>
+                              <p class="text-[11px] text-slate-500 pt-0.5">
+                                ${st.completadoMun
+                                  ? `Terminaste ${escapeHtml(mun)}. Aparta $${st.subtotalMun.toLocaleString('es-CO')} y conserva $${devueltasPendientesOtros.toLocaleString('es-CO')} de cambio para el resto.`
+                                  : `En curso en ${escapeHtml(mun)}. Aparta $${st.subtotalMun.toLocaleString('es-CO')} y conserva $${devueltasPendientesOtros.toLocaleString('es-CO')} de cambio para el resto.`
+                                }
+                              </p>
+                            </div>
+                            </div>
+                          </div>
+                        `;
+                      }).join('');
+
+                      // Resumen final de la ruta completo (Tarjeta oscura de referencia)
+                      const htmlResumenRuta = `
+                        <div class="bg-slate-900 text-white p-4 sm:p-5 rounded-2xl text-xs space-y-2.5 shadow-xl border border-slate-800 mt-3">
+                          <div class="flex justify-between text-slate-300">
+                            <span class="flex items-center gap-1.5"><span>💵</span> (+) Efectivo cobrado (pedidos + abonos):</span>
+                            <b class="font-bold text-white font-mono text-sm sm:text-base">$${totalCobradoEfectivoRuta.toLocaleString('es-CO')}</b>
+                          </div>
+                          <div class="flex justify-between text-slate-300">
+                            <span class="flex items-center gap-1.5"><span>🎒</span> (+) Base devueltas asignada:</span>
+                            <b class="font-bold text-white font-mono text-sm sm:text-base">$${totalDevueltasRuta.toLocaleString('es-CO')}</b>
+                          </div>
+                          <div class="flex justify-between text-amber-400 border-t border-slate-800 pt-1.5">
+                            <span class="flex items-center gap-1.5"><span>⏳</span> Saldos pendientes / Cartera (deuda):</span>
+                            <b class="font-bold text-amber-400 font-mono text-sm sm:text-base">$${totalSaldosPendientesRuta.toLocaleString('es-CO')}</b>
+                          </div>
+                          <div class="flex justify-between font-black text-emerald-400 border-t border-slate-700 pt-2 text-sm sm:text-base">
+                            <span class="flex items-center gap-1.5 text-emerald-400"><span>💰</span> (=) Total a entregar en caja:</span>
+                            <b class="text-emerald-400 font-mono font-black text-base sm:text-lg">$${totalEntregarCajaRuta.toLocaleString('es-CO')}</b>
+                          </div>
+
+                          ${!(typeof Auth !== 'undefined' && Auth.isDomiciliario()) ? `
+                            <div class="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                              <span class="text-slate-400 text-[11px]">¿Ruta terminada y dinero verificado?</span>
+                              <button type="button" onclick="ModuloDomicilios.seleccionarRutaCuadre(${r.id})"
+                                      class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1.5 cursor-pointer">
+                                <span>✅</span> <span>Liquidar Ruta #${r.id}</span>
+                              </button>
+                            </div>
+                          ` : ''}
+                        </div>
+                      `;
+
+                      return htmlMunicipios + htmlResumenRuta;
+                    })()}
                   </div>
-                  <button onclick="ModuloDomicilios.seleccionarRutaCuadre(${r.id})"
-                    class="w-full py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded hover:bg-emerald-700">
-                    ${(typeof Auth !== 'undefined' && Auth.isDomiciliario()) ? '🛵 Ver mis entregas y actualizar estado' : '📦 Gestionar entregas / Liquidar'}
-                  </button>
                 </div>
-              `).join('')}
+              `;
+            }).join('')
+            }
           </div>
 
-          <div>
-            <p class="text-xs font-bold text-slate-800 mb-2">✅ Rutas liquidadas</p>
+          <!-- Rutas liquidadas -->
+          <div class="border-t border-slate-200 pt-4">
+            <p class="text-xs font-bold text-slate-800 mb-2.5">✅ Rutas liquidadas</p>
             ${liquidadas.length === 0
-              ? `<p class="text-center text-xs text-slate-400 py-3">Aún no hay rutas liquidadas${this.fechaFiltro ? ' para la fecha seleccionada' : ''}.</p>`
-              : liquidadas.slice(0, 15).map(r => `
-                <div class="border p-3 rounded-lg bg-white space-y-1 mb-2 opacity-90">
-                  <div class="flex justify-between items-center">
-                    <span class="font-bold text-sm text-slate-800">Ruta #${r.id} - ${r.domiciliario_nombre}</span>
-                    <span class="text-xs bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded">Liquidada</span>
+              ? `<p class="text-center text-xs text-slate-400 py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">Aún no hay rutas liquidadas${this.fechaFiltro ? ' para la fecha seleccionada' : ''}.</p>`
+              : `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                ${liquidadas.slice(0, 15).map(r => `
+                  <div class="border border-slate-200 p-3.5 rounded-xl bg-white shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-2">
+                    <div>
+                      <div class="flex justify-between items-start gap-2 mb-1">
+                        <span class="font-bold text-xs text-slate-800 leading-tight">Ruta #${r.id} · ${escapeHtml(r.domiciliario_nombre || 'Domiciliario')}</span>
+                        <span class="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full shrink-0">Liquidada</span>
+                      </div>
+                      <div class="text-[11px] text-slate-600 space-y-0.5 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2">
+                        <div class="flex justify-between">
+                          <span class="text-slate-500">Pedidos:</span>
+                          <strong class="text-slate-800">${r.cantidad_pedidos}</strong>
+                        </div>
+                        <div class="flex justify-between">
+                          <span class="text-slate-500">Recolectado:</span>
+                          <strong class="text-slate-900 font-mono">$${(r.total_recolectado || r.total_dinero || 0).toLocaleString('es-CO')}</strong>
+                        </div>
+                      </div>
+                    </div>
+                    <button onclick="ModuloDomicilios.seleccionarRutaCuadre(${r.id})"
+                      class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors">
+                      👁️ Ver detalle
+                    </button>
                   </div>
-                  <div class="text-xs text-slate-600 flex justify-between">
-                    <span>Pedidos: <strong>${r.cantidad_pedidos}</strong></span>
-                    <span>Recolectado: <strong>$${(r.total_recolectado||r.total_dinero||0).toLocaleString()}</strong></span>
-                  </div>
-                  <button onclick="ModuloDomicilios.seleccionarRutaCuadre(${r.id})"
-                    class="w-full py-1.5 bg-slate-200 text-slate-700 text-xs font-semibold rounded">
-                    👁️ Ver detalle
-                  </button>
-                </div>
-              `).join('')}
+                `).join('')}
+              </div>`
+            }
           </div>
         </div>
       `;
@@ -1687,6 +2484,420 @@ const ModuloDomicilios = {
   seleccionarRutaCuadre(rutaId) {
     this.rutaSeleccionadaId = rutaId;
     this.cambiarSubTab('cuadre');
+  },
+
+  /** Modal emergente completo para ver el detalle de un pedido y realizar correcciones de valor, abonos, métodos y entrega */
+  async abrirModalDetallePedido(pedidoId, rutaId) {
+    const modalExistente = document.getElementById('modal-detalle-pedido-emergente');
+    if (modalExistente) modalExistente.remove();
+
+    // Crear modal contenedor
+    const modal = document.createElement('div');
+    modal.id = 'modal-detalle-pedido-emergente';
+    modal.className = 'fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in';
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 text-center text-slate-600">
+        <p class="text-sm font-semibold">⏳ Cargando detalle del pedido...</p>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    try {
+      const res = await apiFetch(`/rutas/${rutaId}`);
+      if (!res.ok) throw new Error(res.error || 'No se pudo cargar la información del pedido');
+
+      const ruta = res.ruta || {};
+      const pedidos = res.pedidos || [];
+      const p = pedidos.find(item => item.id === pedidoId);
+      if (!p) throw new Error('Pedido no encontrado en la ruta');
+
+      let totalPedido = Number(p.total) || 0;
+      let totalOriginal = Number(p.total_original) || totalPedido;
+      let metodoPago = p.metodo_pago_final || 'EFECTIVO';
+      let comprobante = p.comprobante_transf || '';
+      let estadoEntrega = p.estado_entrega || 'PENDIENTE';
+      let motivoAjuste = p.observacion || '';
+      const devueltaEntregada = Number(p.devuelta_calculada) || 0;
+
+      let montoAbono = Number(p.monto_abono) || 0;
+      let metodoAbono = p.metodo_abono || 'EFECTIVO';
+      let tipoSaldo = p.tipo_saldo || 'CREDITO';
+      let saldoPendiente = (p.saldo_pendiente !== undefined && p.saldo_pendiente !== null && Number(p.saldo_pendiente) >= 0)
+        ? Number(p.saldo_pendiente)
+        : Math.max(0, totalPedido - montoAbono);
+
+      let mostrarPanelAjuste = false;
+      let ajusteSigno = 1;
+
+      const renderModal = () => {
+        const esEntregado = estadoEntrega === 'ENTREGADO';
+        const esTransfer = metodoPago === 'TRANSFERENCIA' || metodoPago === 'TRANSFERENCIA_PENDIENTE';
+        const esYaPago = metodoPago === 'YA_PAGO';
+        const hayAbono = montoAbono > 0;
+
+        let aCaja = 0;
+        if (esYaPago) {
+          aCaja = devueltaEntregada;
+        } else if (hayAbono) {
+          aCaja = (metodoAbono === 'TRANSFERENCIA') ? devueltaEntregada : (montoAbono + devueltaEntregada);
+        } else if (esTransfer) {
+          aCaja = devueltaEntregada;
+        } else {
+          aCaja = totalPedido + devueltaEntregada;
+        }
+
+        modal.innerHTML = `
+          <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-200 text-slate-800 my-auto" onclick="event.stopPropagation()">
+            <!-- Cabecera del modal -->
+            <div class="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="text-xl">⚙️</span>
+                <div>
+                  <h3 class="font-black text-sm sm:text-base">${escapeHtml(p.codigo_pedido || ('Pedido #' + p.id))}</h3>
+                  <p class="text-[11px] text-slate-300">Ruta #${rutaId} · ${escapeHtml(ruta.domiciliario_nombre || 'Sin repartidor')}</p>
+                </div>
+              </div>
+              <button type="button" id="btn-cerrar-modal-detalle" class="w-8 h-8 rounded-full hover:bg-slate-800 text-slate-300 hover:text-white text-lg flex items-center justify-center transition">✕</button>
+            </div>
+
+            <!-- Cuerpo del modal -->
+            <div class="p-4 sm:p-5 space-y-4 max-h-[78vh] overflow-y-auto text-xs">
+              
+              <!-- 1. Datos del cliente y entrega -->
+              <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+                <div class="flex justify-between items-start gap-2">
+                  <div>
+                    <h4 class="font-extrabold text-sm text-slate-900">
+                      ${escapeHtml(p.cliente || p.cliente_nombre || 'Cliente General')}
+                      ${p.empresa ? ` · <span class="text-indigo-600 font-bold">🏢 ${escapeHtml(p.empresa)}</span>` : ''}
+                    </h4>
+                    <p class="text-slate-600 text-[11px] mt-0.5">
+                      📍 <b>Dirección:</b> ${escapeHtml(p.direccion || 'Sin dirección')}${p.municipio ? ` (${escapeHtml(p.municipio)})` : ''}
+                    </p>
+                    ${p.telefono ? `<p class="text-slate-600 text-[11px]">📞 <b>Teléfono:</b> ${escapeHtml(p.telefono)}</p>` : ''}
+                  </div>
+                  <button type="button" id="btn-toggle-entrega-modal"
+                          class="px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 transition-all ${esEntregado ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'}">
+                    ${esEntregado ? '✓ Entregado' : '⏳ En camino'}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 2. Lista de productos de la factura -->
+              <div class="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>🛒</span> <span>Productos del pedido (${p.items?.length || 0})</span>
+                  </span>
+                  ${(p.items || []).some(i => i.es_faltante) ? `<span class="bg-amber-100 text-amber-900 text-[10px] px-2 py-0.5 rounded-full font-bold border border-amber-300">⚠️ Tiene faltantes</span>` : ''}
+                </div>
+
+                <div class="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  ${(p.items && p.items.length > 0) ? p.items.map(item => `
+                    <div class="p-2 rounded-lg border text-[11px] ${item.es_faltante ? 'bg-amber-50/80 border-amber-300' : 'bg-slate-50 border-slate-200/80'}">
+                      <div class="flex justify-between items-center gap-2">
+                        <div>
+                          <p class="font-bold text-slate-800 flex items-center gap-1">
+                            <span>${escapeHtml(item.nombre_producto || 'Producto')}</span>
+                            ${item.es_faltante ? '<span class="bg-amber-200 text-amber-950 text-[9px] px-1 rounded font-bold">⚠️ Faltante</span>' : ''}
+                          </p>
+                          <p class="text-[10px] text-slate-400 font-mono">SKU: ${item.sku || '—'}</p>
+                        </div>
+                        <div class="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs shrink-0">
+                          ${item.es_faltante ? 'Faltante' : '×' + (item.cantidad_solicitada || item.cantidad_empacada || 1)}
+                        </div>
+                      </div>
+                      ${item.nota_faltante ? `<p class="text-[10px] text-amber-900 italic mt-1 font-medium bg-white/60 p-1 rounded">Nota: ${escapeHtml(item.nota_faltante)}</p>` : ''}
+                    </div>
+                  `).join('') : '<p class="text-slate-400 italic text-center py-2">No hay productos detallados registrados.</p>'}
+                </div>
+              </div>
+
+              <!-- 3. Valor y Corrección de Precio -->
+              <div class="border border-slate-200 rounded-xl p-3.5 bg-white space-y-3">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <label class="block font-bold text-slate-800 text-xs">Valor del Pedido a Cobrar</label>
+                    <span class="text-[10px] text-slate-400">Despachado: $${totalOriginal.toLocaleString('es-CO')}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base font-black text-emerald-800 font-mono bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                      $${totalPedido.toLocaleString('es-CO')}
+                    </span>
+                    <button type="button" id="btn-abrir-ajuste-mas" class="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-2xs" title="Aumentar valor">+</button>
+                    <button type="button" id="btn-abrir-ajuste-menos" class="w-7 h-7 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-2xs" title="Disminuir valor">−</button>
+                  </div>
+                </div>
+
+                ${motivoAjuste ? `
+                  <p class="text-[11px] text-amber-900 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
+                    📝 <b>Observación/Ajuste:</b> ${escapeHtml(motivoAjuste)}
+                  </p>
+                ` : ''}
+
+                <!-- Panel de ajuste desplegable -->
+                ${mostrarPanelAjuste ? `
+                  <div class="p-3 rounded-xl bg-amber-50 border border-amber-300 space-y-2 animate-fade-in">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold text-amber-950 text-xs">Corregir Total (${ajusteSigno > 0 ? '+ Sumar' : '− Restar'} monto)</span>
+                      <button type="button" id="btn-cancelar-panel-ajuste" class="text-amber-800 hover:text-amber-950 font-bold text-xs">✕ Cancelar</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-base text-amber-950">${ajusteSigno > 0 ? '+' : '−'}</span>
+                      <input type="number" id="inp-ajuste-monto-modal" min="0" step="500" placeholder="Ej: 3000"
+                             class="flex-1 px-2.5 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-bold focus:ring-2 focus:ring-amber-500" />
+                    </div>
+                    <textarea id="inp-ajuste-motivo-modal" rows="2" placeholder="Motivo: faltó producto / devolución / descuento..."
+                              class="w-full px-2.5 py-1 bg-white border border-amber-300 rounded-lg text-xs"></textarea>
+                    <button type="button" id="btn-aplicar-ajuste-modal" class="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg shadow-2xs">
+                      Aplicar Ajuste de Precio
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- 4. Método de Pago y Comprobante -->
+              <div class="border border-slate-200 rounded-xl p-3.5 bg-white space-y-3">
+                <div>
+                  <label class="block font-bold text-slate-800 mb-1">Método de Pago</label>
+                  <select id="sel-metodo-modal" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500">
+                    <option value="EFECTIVO" ${metodoPago === 'EFECTIVO' ? 'selected' : ''}>💵 Efectivo</option>
+                    <option value="TRANSFERENCIA" ${metodoPago === 'TRANSFERENCIA' ? 'selected' : ''}>🏦 Transferencia (Ya realizada)</option>
+                    <option value="TRANSFERENCIA_PENDIENTE" ${metodoPago === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>⏳ Transferencia pendiente</option>
+                    <option value="YA_PAGO" ${metodoPago === 'YA_PAGO' ? 'selected' : ''}>✅ Ya pagó previamente (Cobro $0)</option>
+                  </select>
+                </div>
+
+                <div id="box-comprobante-modal" class="${metodoPago === 'TRANSFERENCIA' ? '' : 'hidden'} space-y-1">
+                  <label class="block font-medium text-slate-600 text-[11px]"># Comprobante de Transferencia</label>
+                  <input type="text" id="inp-comp-modal" value="${escapeHtml(comprobante)}" placeholder="Ej: 987654321 / Nequi / Bancolombia"
+                         class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs" />
+                </div>
+              </div>
+
+              <!-- 5. Abonos Parciales (si el cliente solo paga una parte) -->
+              <div class="border border-slate-200 rounded-xl p-3.5 bg-white space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>💵</span> <span>Abono Parcial / Deuda</span>
+                  </span>
+                  ${hayAbono ? `
+                    <button type="button" id="btn-quitar-abono-modal" class="text-rose-600 hover:text-rose-800 text-[11px] font-bold underline">
+                      Quitar abono
+                    </button>
+                  ` : ''}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <label class="block text-[11px] text-slate-500 font-medium">Monto recibido ($)</label>
+                    <input type="number" id="inp-abono-monto-modal" min="0" max="${totalPedido}" step="1000"
+                           value="${montoAbono > 0 ? montoAbono : ''}" placeholder="Ej: 20000"
+                           class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold" />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-slate-500 font-medium">Método del abono</label>
+                    <select id="sel-abono-metodo-modal" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-slate-50">
+                      <option value="EFECTIVO" ${metodoAbono === 'EFECTIVO' ? 'selected' : ''}>💵 Efectivo</option>
+                      <option value="TRANSFERENCIA" ${metodoAbono === 'TRANSFERENCIA' ? 'selected' : ''}>🏦 Transferencia</option>
+                    </select>
+                  </div>
+                </div>
+
+                ${hayAbono ? `
+                  <div class="p-2.5 rounded-lg bg-amber-50 border border-amber-200 space-y-1 mt-1">
+                    <div class="flex justify-between items-center text-xs">
+                      <span class="text-amber-950 font-medium">Saldo pendiente (deuda):</span>
+                      <b class="text-rose-700 font-mono font-bold">$${saldoPendiente.toLocaleString('es-CO')}</b>
+                    </div>
+                    <div class="flex items-center gap-2 pt-1">
+                      <span class="text-[10px] text-slate-600">Tipo de saldo:</span>
+                      <select id="sel-abono-tipo-saldo-modal" class="px-2 py-0.5 border border-amber-300 rounded text-[11px] font-medium bg-white">
+                        <option value="CREDITO" ${tipoSaldo === 'CREDITO' ? 'selected' : ''}>💳 Crédito / Fiado</option>
+                        <option value="TRANSFERENCIA_PENDIENTE" ${tipoSaldo === 'TRANSFERENCIA_PENDIENTE' ? 'selected' : ''}>⏳ Transferencia pendiente</option>
+                      </select>
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- 6. Resumen de caja y devueltas -->
+              <div class="bg-slate-900 text-white p-3.5 rounded-xl space-y-1.5">
+                <div class="flex justify-between text-slate-300 text-[11px]">
+                  <span>🎒 Devuelta base que salió con el repartidor:</span>
+                  <b class="text-white font-mono">$${devueltaEntregada.toLocaleString('es-CO')}</b>
+                </div>
+                <div class="flex justify-between text-emerald-400 text-xs font-bold border-t border-slate-800 pt-1.5">
+                  <span>💰 Dinero a entregar en caja:</span>
+                  <b class="text-sm font-mono font-black">$${aCaja.toLocaleString('es-CO')}</b>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pie del modal -->
+            <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button type="button" id="btn-cancelar-modal-detalle" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition">
+                Cancelar
+              </button>
+              <button type="button" id="btn-guardar-modal-detalle" class="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] rounded-xl shadow transition-all flex items-center gap-1.5">
+                <span>💾</span> <span>Guardar Cambios</span>
+              </button>
+            </div>
+          </div>
+        `;
+
+        // Event Listeners
+        modal.querySelector('#btn-cerrar-modal-detalle')?.addEventListener('click', () => modal.remove());
+        modal.querySelector('#btn-cancelar-modal-detalle')?.addEventListener('click', () => modal.remove());
+
+        modal.querySelector('#btn-toggle-entrega-modal')?.addEventListener('click', () => {
+          estadoEntrega = estadoEntrega === 'ENTREGADO' ? 'PENDIENTE' : 'ENTREGADO';
+          renderModal();
+        });
+
+        modal.querySelector('#btn-abrir-ajuste-mas')?.addEventListener('click', () => {
+          mostrarPanelAjuste = true;
+          ajusteSigno = 1;
+          renderModal();
+        });
+
+        modal.querySelector('#btn-abrir-ajuste-menos')?.addEventListener('click', () => {
+          mostrarPanelAjuste = true;
+          ajusteSigno = -1;
+          renderModal();
+        });
+
+        modal.querySelector('#btn-cancelar-panel-ajuste')?.addEventListener('click', () => {
+          mostrarPanelAjuste = false;
+          renderModal();
+        });
+
+        modal.querySelector('#btn-aplicar-ajuste-modal')?.addEventListener('click', () => {
+          const inpMonto = modal.querySelector('#inp-ajuste-monto-modal');
+          const inpMotivo = modal.querySelector('#inp-ajuste-motivo-modal');
+          const valMonto = parseFloat(inpMonto?.value) || 0;
+          const txtMotivo = (inpMotivo?.value || '').trim();
+
+          if (valMonto <= 0) {
+            alert('Ingresa un monto de ajuste mayor a 0');
+            return;
+          }
+          if (!txtMotivo) {
+            alert('Escribe el motivo del ajuste (ej: faltó producto, descuento, etc.)');
+            return;
+          }
+
+          const delta = ajusteSigno * valMonto;
+          totalPedido = Math.max(0, totalPedido + delta);
+          motivoAjuste = `Ajuste ${ajusteSigno > 0 ? '+' : '−'}$${valMonto.toLocaleString('es-CO')}: ${txtMotivo}`;
+          mostrarPanelAjuste = false;
+          if (montoAbono > totalPedido) montoAbono = totalPedido;
+          saldoPendiente = Math.max(0, totalPedido - montoAbono);
+          renderModal();
+        });
+
+        modal.querySelector('#sel-metodo-modal')?.addEventListener('change', (e) => {
+          metodoPago = e.target.value;
+          const boxComp = modal.querySelector('#box-comprobante-modal');
+          if (boxComp) boxComp.classList.toggle('hidden', metodoPago !== 'TRANSFERENCIA');
+          renderModal();
+        });
+
+        modal.querySelector('#inp-comp-modal')?.addEventListener('input', (e) => {
+          comprobante = e.target.value;
+        });
+
+        modal.querySelector('#inp-abono-monto-modal')?.addEventListener('input', (e) => {
+          const val = parseFloat(e.target.value) || 0;
+          montoAbono = Math.min(Math.max(0, val), totalPedido);
+          saldoPendiente = Math.max(0, totalPedido - montoAbono);
+        });
+
+        modal.querySelector('#inp-abono-monto-modal')?.addEventListener('change', () => {
+          renderModal();
+        });
+
+        modal.querySelector('#sel-abono-metodo-modal')?.addEventListener('change', (e) => {
+          metodoAbono = e.target.value;
+        });
+
+        modal.querySelector('#sel-abono-tipo-saldo-modal')?.addEventListener('change', (e) => {
+          tipoSaldo = e.target.value;
+        });
+
+        modal.querySelector('#btn-quitar-abono-modal')?.addEventListener('click', () => {
+          montoAbono = 0;
+          saldoPendiente = 0;
+          renderModal();
+        });
+
+        modal.querySelector('#btn-guardar-modal-detalle')?.addEventListener('click', async () => {
+          const btnGuardar = modal.querySelector('#btn-guardar-modal-detalle');
+          if (btnGuardar) {
+            btnGuardar.disabled = true;
+            btnGuardar.innerHTML = '⏳ Guardando...';
+          }
+
+          try {
+            const body = {
+              total: totalPedido,
+              total_original: totalOriginal,
+              metodoPago,
+              comprobante: metodoPago === 'TRANSFERENCIA' ? (modal.querySelector('#inp-comp-modal')?.value || comprobante) : '',
+              observacion: motivoAjuste,
+              estadoEntrega,
+              estado_entrega: estadoEntrega,
+              montoAbono,
+              monto_abono: montoAbono,
+              saldoPendiente,
+              saldo_pendiente: saldoPendiente,
+              metodoAbono,
+              metodo_abono: metodoAbono,
+              tipoSaldo: (modal.querySelector('#sel-abono-tipo-saldo-modal')?.value || tipoSaldo),
+              tipo_saldo: (modal.querySelector('#sel-abono-tipo-saldo-modal')?.value || tipoSaldo)
+            };
+
+            const resp = await apiFetch(`/rutas/pedido/${pedidoId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+
+            if (resp && resp.ok) {
+              modal.remove();
+              showToast('✅ Pedido actualizado correctamente');
+              if (ModuloDomicilios.subTabActual === 'cuadre') {
+                await ModuloDomicilios.renderTabCuadre();
+              } else {
+                await ModuloDomicilios.cargarTabActual();
+              }
+            } else {
+              alert(resp?.error || 'No se pudo guardar la actualización del pedido');
+              if (btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = '💾 Guardar Cambios';
+              }
+            }
+          } catch (err) {
+            alert(err.message || 'Error de conexión');
+            if (btnGuardar) {
+              btnGuardar.disabled = false;
+              btnGuardar.innerHTML = '💾 Guardar Cambios';
+            }
+          }
+        });
+      };
+
+      renderModal();
+    } catch (err) {
+      modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center text-slate-800 space-y-3">
+          <p class="text-rose-600 font-bold">⚠️ ${escapeHtml(err.message || 'Error al cargar pedido')}</p>
+          <button type="button" onclick="document.getElementById('modal-detalle-pedido-emergente')?.remove()"
+                  class="px-4 py-2 bg-slate-200 hover:bg-slate-300 font-bold text-xs rounded-xl">Cerrar</button>
+        </div>
+      `;
+    }
   },
 
     async renderTabCuadre() {
@@ -1759,8 +2970,10 @@ const ModuloDomicilios = {
           }
         });
 
+        devueltas = this.redondearDevuelta50(devueltas);
+        cobradoEfectivo = this.redondearCaja50(cobradoEfectivo);
         // Subtotal de efectivo a entregar por este municipio = cobrado efectivo de los entregados + devueltas base asignadas
-        const subtotal = cobradoEfectivo + devueltas;
+        const subtotal = this.redondearCaja50(cobradoEfectivo + devueltas);
 
         statsPorMun[mun] = {
           todosEntregados,
@@ -1812,11 +3025,14 @@ const ModuloDomicilios = {
                 return acc + (s2.todosEntregados ? 0 : s2.devueltas);
               }, 0);
 
-              const abiertoMun = this.municipiosAbiertos && this.municipiosAbiertos[munIdx];
+              const keyCuadre = `cuadre_${this.rutaSeleccionadaId}_mun_${mun}`;
+              const abiertoMun = (this._municipiosAbiertosCuadre && this._municipiosAbiertosCuadre[keyCuadre] !== undefined)
+                ? Boolean(this._municipiosAbiertosCuadre[keyCuadre])
+                : ((this.municipiosAbiertos && this.municipiosAbiertos[munIdx] !== undefined) ? this.municipiosAbiertos[munIdx] : false);
               return `
               <div class="border rounded-lg overflow-hidden" data-municipio="${mun}">
                 <div class="bg-indigo-50 px-3 py-2 border-b cursor-pointer select-none"
-                     onclick="ModuloDomicilios.toggleMunicipioCuadre(${munIdx})">
+                     onclick="ModuloDomicilios.toggleMunicipioCuadre(${munIdx}, '${escapeHtml(mun)}', event)">
                   <div class="flex justify-between items-start gap-2">
                     <div class="flex items-start gap-1.5">
                       <span id="mun-arrow-${munIdx}" class="text-indigo-700 text-xs mt-0.5 transition-transform">${abiertoMun ? '▾' : '▸'}</span>
@@ -1840,7 +3056,7 @@ const ModuloDomicilios = {
                     </div>
                   </div>
                 </div>
-                <div class="p-2 space-y-2 bg-white ${abiertoMun ? '' : 'hidden'}" id="mun-body-${munIdx}">
+                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 bg-white ${abiertoMun ? '' : 'hidden'}" id="mun-body-${munIdx}">
                   ${lista.map(p => {
                     const entregado = p.estado_entrega === 'ENTREGADO';
                     const totalPedido = Number(p.total) || 0;
@@ -1888,7 +3104,7 @@ const ModuloDomicilios = {
                       ? `$${totalOriginal.toLocaleString('es-CO')} ${delta > 0 ? '+' : ''}${delta.toLocaleString('es-CO')}${motivoAjuste ? ' [' + motivoAjuste.replace(/"/g, '') + ']' : ''} = $${totalPedido.toLocaleString('es-CO')}`
                       : `$${totalPedido.toLocaleString('es-CO')}`;
                     return `
-                    <div class="border p-2.5 rounded-md space-y-2 ${entregado ? 'bg-emerald-50 border-emerald-200' : 'bg-white'}"
+                    <div class="border p-3 rounded-xl space-y-2.5 ${entregado ? 'bg-emerald-50/80 border-emerald-300' : 'bg-white border-slate-200'} shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between"
                          id="item-pedido-${p.id}"
                          data-total-original="${tieneOriginal ? totalOriginal : ''}"
                          data-devuelta="${devueltaEntregada}"
@@ -1902,7 +3118,7 @@ const ModuloDomicilios = {
                       <div class="flex justify-between items-start gap-2">
                         <div class="min-w-0">
                           <p class="font-bold text-xs text-slate-900">${p.codigo_pedido || ('Pedido #' + p.id)}</p>
-                          <p class="text-[10px] text-slate-500">${p.cliente || 'Cliente'} · ${p.direccion || ''}</p>
+                          <p class="text-[10px] text-slate-500">${escapeHtml(p.cliente || 'Cliente')}${p.empresa ? ` · <span class="text-indigo-700 font-bold">🏢 ${escapeHtml(p.empresa)}</span>` : ''} · 📍 ${escapeHtml(p.direccion || 'Sin dirección')}${p.municipio ? ` (${escapeHtml(p.municipio)})` : ''}${p.telefono ? ` · 📞 ${escapeHtml(p.telefono)}` : ''}</p>
                         </div>
                         <div class="flex items-center gap-1.5">
                           ${esYaPago ? `<span class="text-[10px] bg-sky-600 text-white px-1.5 py-0.5 rounded font-semibold">Ya pagado</span>` : ''}
@@ -2296,7 +3512,77 @@ async guardarAjusteTotal(pedidoId) {
   }
 },
 
-      toggleMunicipioCuadre(idx) {
+  _initPersistentState() {
+    try {
+      if (!this._rutasAbiertasSeguimiento) {
+        this._rutasAbiertasSeguimiento = JSON.parse(localStorage.getItem('domi_rutas_abiertas') || '{}');
+      }
+      if (!this._municipiosAbiertosSeguimiento) {
+        this._municipiosAbiertosSeguimiento = JSON.parse(localStorage.getItem('domi_mun_abiertos') || '{}');
+      }
+      if (!this._municipiosAbiertosCuadre) {
+        this._municipiosAbiertosCuadre = JSON.parse(localStorage.getItem('domi_cuadre_mun_abiertos') || '{}');
+      }
+    } catch (e) {
+      this._rutasAbiertasSeguimiento = this._rutasAbiertasSeguimiento || {};
+      this._municipiosAbiertosSeguimiento = this._municipiosAbiertosSeguimiento || {};
+      this._municipiosAbiertosCuadre = this._municipiosAbiertosCuadre || {};
+    }
+  },
+
+  toggleRutaSeguimiento(rutaId, event) {
+    if (event) event.stopPropagation();
+    this._initPersistentState();
+    const body = document.getElementById(`ruta-body-${rutaId}`);
+    const arrow = document.getElementById(`ruta-arrow-${rutaId}`);
+    const btnText = document.getElementById(`ruta-btn-text-${rutaId}`);
+    if (!body) return;
+    const abierto = !body.classList.contains('hidden');
+    if (abierto) {
+      body.classList.add('hidden');
+      if (arrow) arrow.textContent = '▶';
+      if (btnText) btnText.textContent = 'Desplegar ruta';
+      this._rutasAbiertasSeguimiento[rutaId] = false;
+    } else {
+      body.classList.remove('hidden');
+      if (arrow) arrow.textContent = '▼';
+      if (btnText) btnText.textContent = 'Plegar ruta';
+      this._rutasAbiertasSeguimiento[rutaId] = true;
+    }
+    try {
+      localStorage.setItem('domi_rutas_abiertas', JSON.stringify(this._rutasAbiertasSeguimiento));
+    } catch (e) {}
+  },
+
+  toggleMunicipioSeguimiento(rutaId, mun, munIdx, event) {
+    if (event) event.stopPropagation();
+    this._initPersistentState();
+    const key = `ruta_${rutaId}_mun_${mun}`;
+    const body = document.getElementById(`mun-body-${rutaId}-${munIdx}`);
+    const arrow = document.getElementById(`mun-arrow-${rutaId}-${munIdx}`);
+    const textHint = document.getElementById(`mun-hint-${rutaId}-${munIdx}`);
+    if (!body) return;
+    const abierto = !body.classList.contains('hidden');
+    if (abierto) {
+      body.classList.add('hidden');
+      if (arrow) arrow.textContent = '▶';
+      if (textHint) textHint.textContent = 'Ver pedidos';
+      this._municipiosAbiertosSeguimiento[key] = false;
+    } else {
+      body.classList.remove('hidden');
+      if (arrow) arrow.textContent = '▼';
+      if (textHint) textHint.textContent = 'Ocultar';
+      this._municipiosAbiertosSeguimiento[key] = true;
+    }
+    try {
+      localStorage.setItem('domi_mun_abiertos', JSON.stringify(this._municipiosAbiertosSeguimiento));
+    } catch (e) {}
+  },
+
+  toggleMunicipioCuadre(idx, munName, event) {
+    if (event) event.stopPropagation();
+    this._initPersistentState();
+    const key = munName ? `cuadre_${this.rutaSeleccionadaId}_mun_${munName}` : `cuadre_${this.rutaSeleccionadaId}_idx_${idx}`;
     this.municipiosAbiertos = this.municipiosAbiertos || {};
     const body = document.getElementById(`mun-body-${idx}`);
     const arrow = document.getElementById(`mun-arrow-${idx}`);
@@ -2306,11 +3592,16 @@ async guardarAjusteTotal(pedidoId) {
       body.classList.add('hidden');
       if (arrow) arrow.textContent = '▸';
       this.municipiosAbiertos[idx] = false;
+      this._municipiosAbiertosCuadre[key] = false;
     } else {
       body.classList.remove('hidden');
       if (arrow) arrow.textContent = '▾';
       this.municipiosAbiertos[idx] = true;
+      this._municipiosAbiertosCuadre[key] = true;
     }
+    try {
+      localStorage.setItem('domi_cuadre_mun_abiertos', JSON.stringify(this._municipiosAbiertosCuadre));
+    } catch (e) {}
   },
 
   toggleDetallePedido(pedidoId) {
@@ -2798,11 +4089,36 @@ async guardarAjusteTotal(pedidoId) {
     }
   },
 
+  async marcarEntregaRapida(pedidoId, entregado) {
+    const estadoEntrega = entregado ? 'ENTREGADO' : 'PENDIENTE';
+    try {
+      const res = await apiFetch(`/rutas/pedido/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estadoEntrega })
+      });
+      if (res && res.ok) {
+        showToast(entregado ? '✓ Pedido marcado como entregado' : '↩ Pedido vuelto a pendiente');
+        if (this.subTabActual === 'cuadre') {
+          await this.renderTabCuadre();
+        } else {
+          await this.cargarTabActual();
+        }
+      } else {
+        alert(res?.error || 'No se pudo actualizar el estado de entrega');
+      }
+    } catch (e) {
+      alert('Error al actualizar entrega');
+    }
+  },
+
   async confirmarEntrega(pedidoId, entregado) {
     const estadoEntrega = entregado ? 'ENTREGADO' : 'PENDIENTE';
     try {
-      // Guarda método/total actuales antes de refrescar
-      await this.guardarCambioPedido(pedidoId);
+      // Guarda método/total actuales antes de refrescar si los campos existen en DOM
+      if (document.querySelector(`.sel-metodo[data-id="${pedidoId}"]`)) {
+        await this.guardarCambioPedido(pedidoId);
+      }
 
       const res = await apiFetch(`/rutas/pedido/${pedidoId}`, {
         method: 'PUT',
@@ -2811,7 +4127,11 @@ async guardarAjusteTotal(pedidoId) {
       });
       if (res && res.ok) {
         showToast(entregado ? 'Pedido marcado como entregado' : 'Pedido vuelto a pendiente');
-        await this.renderTabCuadre();
+        if (this.subTabActual === 'cuadre') {
+          await this.renderTabCuadre();
+        } else {
+          await this.cargarTabActual();
+        }
       } else {
         alert(res.error || 'No se pudo actualizar');
       }
@@ -2862,8 +4182,9 @@ async guardarAjusteTotal(pedidoId) {
     const elBase = document.getElementById('arq-base');
     const baseRuta = parseFloat(elBase?.dataset?.valor) || 0;
 
+    totalEfectivoRecolectado = this.redondearCaja50(totalEfectivoRecolectado);
     // Total a entregar en caja = efectivo físico cobrado + base devueltas
-    const totalEntregar = totalEfectivoRecolectado + baseRuta;
+    const totalEntregar = this.redondearCaja50(totalEfectivoRecolectado + baseRuta);
 
     const elEfectivo = document.getElementById('arq-efectivo');
     const elSaldos = document.getElementById('arq-saldos');

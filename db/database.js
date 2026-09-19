@@ -37,6 +37,7 @@ agregarColumnaSiNoExiste('productos', 'unidades_por_caja', "INTEGER NOT NULL DEF
 // MIGRACIONES MÓDULO D (DOMICILIOS)
 // ==========================================
 agregarColumnaSiNoExiste('pedidos', 'cliente_id', 'INTEGER');
+agregarColumnaSiNoExiste('pedidos', 'empresa', "TEXT DEFAULT ''");
 agregarColumnaSiNoExiste('pedidos', 'telefono', "TEXT DEFAULT ''");
 agregarColumnaSiNoExiste('pedidos', 'direccion', "TEXT DEFAULT ''");
 agregarColumnaSiNoExiste('pedidos', 'total', 'REAL DEFAULT 0');

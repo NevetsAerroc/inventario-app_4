@@ -26,7 +26,17 @@ router.get('/', (req, res) => {
 // GET /api/pedidos/:id -> detalle completo con items
 // ------------------------------------------------------------------
 router.get('/:id', (req, res) => {
-  const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id);
+  const pedido = db.prepare(`
+    SELECT p.*,
+           COALESCE(NULLIF(p.empresa, ''), c.empresa, '') AS empresa,
+           COALESCE(NULLIF(p.telefono, ''), c.telefono, '') AS telefono,
+           COALESCE(NULLIF(p.direccion, ''), c.direccion, '') AS direccion,
+           COALESCE(NULLIF(p.municipio, ''), c.ciudad, '') AS municipio,
+           COALESCE(NULLIF(p.cliente, ''), c.nombre, 'Cliente General') AS cliente
+    FROM pedidos p
+    LEFT JOIN clientes c ON p.cliente_id = c.id
+    WHERE p.id = ?
+  `).get(req.params.id);
   if (!pedido) return res.status(404).json({ ok: false, error: 'Pedido no encontrado.' });
 
   // Trae el precio unitario desde productos (por producto_id, o por sku si el item
@@ -68,6 +78,7 @@ router.post('/manual', (req, res) => {
       codigo_pedido,
       cliente_nombre,
       cliente_id,
+      empresa,
       telefono,
       direccion,
       municipio,
@@ -77,24 +88,24 @@ router.post('/manual', (req, res) => {
       tipo_entrega
     } = req.body;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ ok: false, error: 'Debes agregar al menos un producto al pedido.' });
-    }
+    const itemsList = Array.isArray(items) ? items : [];
 
     const tx = db.transaction(() => {
       let finalClienteId = cliente_id || null;
       const municipioFinal = (municipio && String(municipio).trim()) || '';
+      const empresaFinal = (empresa && String(empresa).trim()) || '';
 
       if (!finalClienteId && telefono) {
-        const clienteExistente = db.prepare('SELECT id FROM clientes WHERE telefono = ?').get(telefono);
+        const clienteExistente = db.prepare('SELECT id, empresa FROM clientes WHERE telefono = ?').get(telefono);
         if (clienteExistente) {
           finalClienteId = clienteExistente.id;
         } else {
           const resCliente = db.prepare(
-            'INSERT INTO clientes (nombre, telefono, ciudad, direccion) VALUES (?, ?, ?, ?)'
+            'INSERT INTO clientes (nombre, telefono, empresa, ciudad, direccion) VALUES (?, ?, ?, ?, ?)'
           ).run(
             cliente_nombre || 'Cliente General',
             telefono,
+            empresaFinal,
             municipioFinal,
             direccion || ''
           );
@@ -102,30 +113,36 @@ router.post('/manual', (req, res) => {
         }
       }
 
-      // Si hay cliente y escribieron municipio o dirección, actualizarlo en la ficha
-      if (finalClienteId && (municipioFinal || direccion || telefono)) {
+      // Si hay cliente y escribieron municipio, dirección, teléfono o empresa, actualizarlo en la ficha
+      if (finalClienteId && (municipioFinal || direccion || telefono || empresaFinal)) {
         db.prepare(`
           UPDATE clientes
           SET ciudad = CASE WHEN ? != '' THEN ? ELSE ciudad END,
               direccion = CASE WHEN ? != '' THEN ? ELSE direccion END,
-              telefono = CASE WHEN ? != '' THEN ? ELSE telefono END
+              telefono = CASE WHEN ? != '' THEN ? ELSE telefono END,
+              empresa = CASE WHEN ? != '' THEN ? ELSE empresa END
           WHERE id = ?
         `).run(
           municipioFinal, municipioFinal,
           direccion || '', direccion || '',
           telefono || '', telefono || '',
+          empresaFinal, empresaFinal,
           finalClienteId
         );
       }
 
+      // Si no enviaron empresa pero el cliente ya la tenía registrada, usarla
+      const cliExistenteRow = finalClienteId ? db.prepare('SELECT empresa FROM clientes WHERE id = ?').get(finalClienteId) : null;
+      const empresaParaPedido = empresaFinal || (cliExistenteRow && cliExistenteRow.empresa) || '';
+
       const buscarProducto = db.prepare('SELECT * FROM productos WHERE sku = ?');
       const buscarProductoPorId = db.prepare('SELECT * FROM productos WHERE id = ?');
 
-      // Calcular total automáticamente si el empacador no lo envió
+      // Calcular total automáticamente si no lo enviaron
       let totalFinal = Number(total) || 0;
       if (totalFinal <= 0) {
         totalFinal = 0;
-        for (const item of items) {
+        for (const item of itemsList) {
           const cant = Number(item.cantidad) || 1;
           const prod = item.producto_id ? buscarProductoPorId.get(item.producto_id) : (item.sku ? buscarProducto.get(item.sku) : null);
           const precioUnit = (prod && Number(prod.precio)) || Number(item.precio) || 0;
@@ -135,16 +152,17 @@ router.post('/manual', (req, res) => {
 
       const stmtPedido = db.prepare(`
         INSERT INTO pedidos (
-          codigo_pedido, cliente_id, cliente, telefono, direccion, municipio,
+          codigo_pedido, cliente_id, cliente, empresa, telefono, direccion, municipio,
           total, observacion, tipo_entrega, estado, estado_liquidacion, ruta_id, fecha_cierre
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EMPACADO', 'PENDIENTE', 0, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EMPACADO', 'PENDIENTE', 0, datetime('now'))
       `);
 
       const info = stmtPedido.run(
         codigo_pedido || `EMP-${Date.now()}`,
         finalClienteId,
         cliente_nombre || 'Cliente General',
+        empresaParaPedido,
         telefono || '',
         direccion || '',
         municipioFinal,
@@ -159,7 +177,7 @@ router.post('/manual', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      for (const item of items) {
+      for (const item of itemsList) {
         const cant = Number(item.cantidad) || 1;
         const esFaltante = item.es_faltante ? 1 : 0;
         const notaFaltante = item.nota_faltante || '';
@@ -201,6 +219,7 @@ router.put('/:id', (req, res) => {
   const {
     cliente,
     cliente_id,
+    empresa,
     telefono,
     direccion,
     municipio,
@@ -244,10 +263,6 @@ router.put('/:id', (req, res) => {
       const getProdBySku = db.prepare('SELECT id, sku, nombre, precio, stock FROM productos WHERE sku = ?');
 
       if (Array.isArray(items)) {
-        if (items.length === 0) {
-          throw new Error('El pedido debe tener al menos un producto.');
-        }
-
         nuevosItems = items.map(item => {
           let prod = null;
           if (item.producto_id) prod = getProdById.get(item.producto_id);
@@ -325,6 +340,7 @@ router.put('/:id', (req, res) => {
         UPDATE pedidos
         SET cliente = COALESCE(?, cliente),
             cliente_id = COALESCE(?, cliente_id),
+            empresa = COALESCE(?, empresa),
             telefono = COALESCE(?, telefono),
             direccion = COALESCE(?, direccion),
             municipio = COALESCE(?, municipio),
@@ -335,6 +351,7 @@ router.put('/:id', (req, res) => {
       `).run(
         cliente !== undefined ? cliente : null,
         cliente_id !== undefined ? cliente_id : null,
+        empresa !== undefined ? empresa : null,
         telefono !== undefined ? telefono : null,
         direccion !== undefined ? direccion : null,
         municipio !== undefined ? municipio : null,
@@ -344,19 +361,21 @@ router.put('/:id', (req, res) => {
         pedidoId
       );
 
-      // Si se especificó cliente y teléfono/dirección, actualizar la ficha del cliente
+      // Si se especificó cliente y datos de contacto/empresa, actualizar la ficha del cliente
       const finalClienteId = cliente_id || pedido.cliente_id;
-      if (finalClienteId && (telefono || direccion || municipio)) {
+      if (finalClienteId && (telefono || direccion || municipio || empresa)) {
         db.prepare(`
           UPDATE clientes
           SET telefono = CASE WHEN ? != '' THEN ? ELSE telefono END,
               direccion = CASE WHEN ? != '' THEN ? ELSE direccion END,
-              ciudad = CASE WHEN ? != '' THEN ? ELSE ciudad END
+              ciudad = CASE WHEN ? != '' THEN ? ELSE ciudad END,
+              empresa = CASE WHEN ? != '' THEN ? ELSE empresa END
           WHERE id = ?
         `).run(
           telefono || '', telefono || '',
           direccion || '', direccion || '',
           municipio || '', municipio || '',
+          empresa || '', empresa || '',
           finalClienteId
         );
       }

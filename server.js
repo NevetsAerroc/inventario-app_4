@@ -72,17 +72,24 @@ app.get('/api/domicilios/pendientes', (req, res) => {
     // parametro, se devuelven todos los pendientes sin filtrar por fecha.
     const fecha = (req.query.fecha || '').trim();
     let sql = `
-      SELECT * FROM pedidos
-      WHERE estado = 'EMPACADO'
-        AND (ruta_id IS NULL OR ruta_id = 0 OR ruta_id = '')
-        AND (COALESCE(estado_liquidacion, 'PENDIENTE') = 'PENDIENTE' OR estado_liquidacion = '')
+      SELECT p.*,
+             COALESCE(NULLIF(p.empresa, ''), c.empresa, '') AS empresa,
+             COALESCE(NULLIF(p.telefono, ''), c.telefono, '') AS telefono,
+             COALESCE(NULLIF(p.direccion, ''), c.direccion, '') AS direccion,
+             COALESCE(NULLIF(p.municipio, ''), c.ciudad, '') AS municipio,
+             COALESCE(NULLIF(p.cliente, ''), c.nombre, 'Cliente General') AS cliente
+      FROM pedidos p
+      LEFT JOIN clientes c ON p.cliente_id = c.id
+      WHERE p.estado = 'EMPACADO'
+        AND (p.ruta_id IS NULL OR p.ruta_id = 0 OR p.ruta_id = '')
+        AND (COALESCE(p.estado_liquidacion, 'PENDIENTE') = 'PENDIENTE' OR p.estado_liquidacion = '')
     `;
     const params = [];
     if (fecha) {
-      sql += ` AND date(COALESCE(fecha_cierre, fecha_creacion), 'localtime') = ?`;
+      sql += ` AND date(COALESCE(p.fecha_cierre, p.fecha_creacion), 'localtime') = ?`;
       params.push(fecha);
     }
-    sql += ` ORDER BY id DESC`;
+    sql += ` ORDER BY p.id DESC`;
 
     const pedidos = db.prepare(sql).all(...params);
     res.json({ ok: true, pedidos });
@@ -203,6 +210,126 @@ app.post('/api/rutas/despachar', (req, res) => {
   }
 });
 
+// Agregar pedidos a una ruta ya despachada (en curso)
+app.post('/api/rutas/:id/agregar-pedidos', (req, res) => {
+  try {
+    if (esDomiDeCalle(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Solo los administradores pueden modificar rutas' });
+    }
+    const rutaId = Number(req.params.id);
+    const { pedidos, pedidoIds, baseEfectivoAdicional } = req.body;
+
+    if (!rutaId) {
+      return res.status(400).json({ ok: false, error: 'ID de ruta no válido' });
+    }
+
+    const ruta = db.prepare('SELECT r.*, d.nombre as domiciliario_nombre FROM rutas_domicilio r LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id WHERE r.id = ?').get(rutaId);
+    if (!ruta) {
+      return res.status(404).json({ ok: false, error: 'Ruta no encontrada' });
+    }
+    if (ruta.estado !== 'EN_RUTA') {
+      return res.status(400).json({ ok: false, error: 'Solo se pueden agregar pedidos a rutas activas (EN_RUTA)' });
+    }
+
+    let lista = [];
+    if (Array.isArray(pedidos) && pedidos.length > 0) {
+      lista = pedidos;
+    } else if (Array.isArray(pedidoIds) && pedidoIds.length > 0) {
+      lista = pedidoIds.map(id => ({ id, metodoPago: 'EFECTIVO' }));
+    }
+
+    if (!lista.length) {
+      return res.status(400).json({ ok: false, error: 'Debes seleccionar al menos un pedido' });
+    }
+
+    const tx = db.transaction(() => {
+      const getPedido = db.prepare('SELECT * FROM pedidos WHERE id = ?');
+      for (const item of lista) {
+        const pedido = getPedido.get(item.id);
+        if (!pedido) throw new Error(`Pedido ${item.id} no encontrado`);
+        if (pedido.estado !== 'EMPACADO') {
+          throw new Error(`El pedido ${pedido.codigo_pedido || item.id} aún no está empacado`);
+        }
+        if (pedido.ruta_id && Number(pedido.ruta_id) !== 0) {
+          throw new Error(`El pedido ${pedido.codigo_pedido || item.id} ya está asignado a otra ruta`);
+        }
+      }
+
+      const updatePedido = db.prepare(`
+        UPDATE pedidos
+        SET ruta_id = ?,
+            tipo_entrega = 'DOMICILIO',
+            estado_liquidacion = 'EN_RUTA',
+            metodo_pago_final = ?,
+            total = ?,
+            total_original = COALESCE(NULLIF(total_original, 0), ?),
+            devuelta_calculada = ?
+        WHERE id = ?
+      `);
+
+      const BILLETE = 50000;
+      const redondearDevuelta50 = (v) => {
+        const n = Number(v) || 0;
+        if (n <= 0) return 0;
+        return Math.round(n / 50) * 50;
+      };
+
+      let devueltaSumAdicional = 0;
+
+      for (const item of lista) {
+        const pedido = getPedido.get(item.id);
+        const totalOriginal = Number(pedido.total) || 0;
+
+        let total = (item.total !== undefined && item.total !== null && Number(item.total) > 0)
+          ? Number(item.total)
+          : totalOriginal;
+        total = Math.round(total);
+
+        const metodo = item.metodoPago || 'EFECTIVO';
+        const esYaPago = metodo === 'YA_PAGO' || item.yaPago === true || item.yaPago === 1;
+
+        let pagaCon = 0;
+        let devuelta = 0;
+
+        if (!esYaPago && metodo === 'EFECTIVO') {
+          pagaCon = (item.pagaCon !== undefined && item.pagaCon !== null && Number(item.pagaCon) >= total)
+            ? Math.round(Number(item.pagaCon))
+            : (total > 0 ? Math.ceil(total / BILLETE) * BILLETE : 0);
+
+          devuelta = (item.devuelta !== undefined && item.devuelta !== null)
+            ? redondearDevuelta50(Number(item.devuelta))
+            : redondearDevuelta50(Math.max(0, pagaCon - total));
+
+          devueltaSumAdicional += devuelta;
+        }
+
+        updatePedido.run(
+          rutaId,
+          esYaPago ? 'YA_PAGO' : metodo,
+          total,
+          totalOriginal,
+          devuelta,
+          item.id
+        );
+      }
+
+      const sumaBase = baseEfectivoAdicional !== undefined ? Number(baseEfectivoAdicional) || 0 : devueltaSumAdicional;
+      if (sumaBase > 0) {
+        db.prepare('UPDATE rutas_domicilio SET base_efectivo = COALESCE(base_efectivo, 0) + ? WHERE id = ?').run(sumaBase, rutaId);
+      }
+
+      return { rutaId, domiciliario: ruta.domiciliario_nombre, agregados: lista.length, baseAdicional: sumaBase };
+    });
+
+    const resultado = tx();
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    const msg = err.message || 'Error al agregar pedidos a la ruta';
+    const status = /no válido|no encontrado|aún no está|ya está asignado|Solo se pueden agregar/i.test(msg) ? 400 : 500;
+    res.status(status).json({ ok: false, error: msg });
+  }
+});
+
 app.get('/api/rutas', (req, res) => {
   try {
     const estado = req.query.estado || 'EN_RUTA';
@@ -251,7 +378,17 @@ app.get('/api/rutas/:id', (req, res) => {
       return res.status(403).json({ ok: false, error: 'No tienes autorización para ver esta ruta' });
     }
 
-    const pedidos = db.prepare("SELECT * FROM pedidos WHERE ruta_id = ?").all(req.params.id);
+    const pedidos = db.prepare(`
+      SELECT p.*,
+             COALESCE(NULLIF(p.empresa, ''), c.empresa, '') AS empresa,
+             COALESCE(NULLIF(p.telefono, ''), c.telefono, '') AS telefono,
+             COALESCE(NULLIF(p.direccion, ''), c.direccion, '') AS direccion,
+             COALESCE(NULLIF(p.municipio, ''), c.ciudad, '') AS municipio,
+             COALESCE(NULLIF(p.cliente, ''), c.nombre, 'Cliente General') AS cliente
+      FROM pedidos p
+      LEFT JOIN clientes c ON p.cliente_id = c.id
+      WHERE p.ruta_id = ?
+    `).all(req.params.id);
     for (const p of pedidos) {
       const items = db.prepare("SELECT * FROM detalle_pedidos WHERE pedido_id = ?").all(p.id);
       p.items = items || [];
