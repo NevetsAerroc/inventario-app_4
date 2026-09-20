@@ -73,6 +73,12 @@ const App = (() => {
     checkConnection();
     setInterval(checkConnection, 15000);
 
+    // Inicializar y refrescar periódicamente los badges de la Canasta de Faltantes
+    if (typeof ModuloDomicilios !== 'undefined' && typeof ModuloDomicilios.actualizarBadgesCanasta === 'function') {
+      ModuloDomicilios.actualizarBadgesCanasta();
+      setInterval(() => ModuloDomicilios.actualizarBadgesCanasta(), 30000);
+    }
+
     // Inicializar autenticación antes de seleccionar tab
     if (typeof Auth !== 'undefined') {
       const autenticado = await Auth.init();

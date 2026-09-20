@@ -15,11 +15,19 @@
   <!-- ============ HEADER ============ -->
   <header class="bg-slate-900 text-white sticky top-0 z-40 shadow-md">
     <div class="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2 max-w-[1700px] mx-auto">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 sm:gap-3">
         <h1 class="text-base sm:text-lg font-bold flex items-center gap-1.5">
           📦 <span>Jispiplast Express</span>
         </h1>
         <span id="conn-status" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 font-medium">online</span>
+
+        <!-- Botón Canasta Global en Header (solo logo 🧺 y badge) -->
+        <button id="btn-global-canasta-header" onclick="ModuloDomicilios.abrirModalCanastaFaltantes()"
+                title="Canasta de Faltantes (Alistamiento previo a despacho)"
+                class="relative px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 hover:text-white flex items-center gap-1 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95">
+          <span class="text-base leading-none">🧺</span>
+          <span id="badge-global-canasta-header" class="hidden text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-mono">0</span>
+        </button>
       </div>
       <div id="header-user-badge" class="flex items-center gap-2"></div>
     </div>
@@ -59,6 +67,10 @@
       </button>
       <button data-tab="domicilios" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">🚚</span><span class="text-xs font-medium">Domicilios</span>
+      </button>
+      <button id="nav-btn-canasta" onclick="ModuloDomicilios.abrirModalCanastaFaltantes()" class="flex-1 flex flex-col items-center py-3 gap-1 text-amber-600 hover:text-amber-700 transition-colors relative cursor-pointer" title="Canasta de Faltantes">
+        <span class="text-xl">🧺</span><span class="text-xs font-bold text-amber-700">Canasta</span>
+        <span id="badge-nav-canasta" class="hidden absolute top-2 right-[20%] text-[9px] font-black px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 font-mono">0</span>
       </button>
       <button id="nav-btn-usuarios" onclick="Auth.abrirModalUsuarios()" class="flex-1 flex flex-col items-center py-3 gap-1 text-slate-500 hidden hover:text-indigo-600 transition-colors">
         <span class="text-xl">👥</span><span class="text-xs font-medium">Usuarios</span>

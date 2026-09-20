@@ -48,7 +48,7 @@ const ModuloDomicilios = {
           <h2 class="text-base font-bold flex items-center gap-2">
             ${esDomi ? '🛵' : '🚚'} <span>${esDomi ? `Mis Rutas Asignadas • ${escapeHtml(domiUser ? (domiUser.domiciliario_nombre || domiUser.nombre) : 'Domiciliario')}` : 'Domicilios & Liquidación'}</span>
           </h2>
-          <div class="flex gap-2">
+          <div class="flex gap-2 items-center">
             ${!esDomi ? `
               <button onclick="ModuloDomicilios.abrirModalNuevoDomiciliario()" class="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium">
                 + Domiciliario
@@ -60,6 +60,12 @@ const ModuloDomicilios = {
                 + Crear Pedido
               </button>
             ` : ''}
+            <button id="btn-modulo-canasta" onclick="ModuloDomicilios.abrirModalCanastaFaltantes()"
+                    title="Canasta de Faltantes (Alistamiento previo a despacho)"
+                    class="px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-md font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition active:scale-95">
+              <span>🧺</span>
+              <span id="badge-modulo-canasta" class="hidden text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-950 font-mono">0</span>
+            </button>
             <button id="btn-refresh-dom" class="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium">
               🔄
             </button>
@@ -798,36 +804,25 @@ const ModuloDomicilios = {
             </p>
           </div>
 
-          <!-- Canasta de Faltantes (Alistamiento previo a despacho) -->
-          <div class="p-3 rounded-xl border ${totalFaltantesGeneral > 0 ? (faltantesPendientesGeneral > 0 ? 'bg-amber-50/90 border-amber-300' : 'bg-emerald-50/90 border-emerald-300') : 'bg-slate-50 border-slate-200'} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-2xs">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-8 h-8 rounded-lg ${totalFaltantesGeneral > 0 ? (faltantesPendientesGeneral > 0 ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900') : 'bg-slate-200 text-slate-700'} flex items-center justify-center text-base shrink-0 font-bold">
+          <!-- Canasta de Faltantes (Solo logo 🧺 y badge) -->
+          <div class="flex items-center justify-between p-2 px-3 rounded-xl ${totalFaltantesGeneral > 0 ? (faltantesPendientesGeneral > 0 ? 'bg-amber-50 border border-amber-300' : 'bg-emerald-50 border border-emerald-300') : 'bg-slate-50 border border-slate-200'} shadow-2xs">
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="ModuloDomicilios.abrirModalCanastaFaltantes()"
+                      class="w-8 h-8 rounded-lg ${faltantesPendientesGeneral > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse' : 'bg-slate-900 hover:bg-slate-800 text-white'} flex items-center justify-center text-base shadow-xs transition cursor-pointer active:scale-95"
+                      title="Canasta de Faltantes">
                 🧺
-              </div>
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <h4 class="text-xs font-extrabold ${totalFaltantesGeneral > 0 ? (faltantesPendientesGeneral > 0 ? 'text-amber-950' : 'text-emerald-950') : 'text-slate-800'}">
-                    Canasta de Faltantes
-                  </h4>
-                  ${totalFaltantesGeneral > 0 ? `
-                    <span class="text-[10px] font-bold px-2 py-0.2 rounded-full ${faltantesPendientesGeneral > 0 ? 'bg-amber-200 text-amber-900 border border-amber-300' : 'bg-emerald-200 text-emerald-900 border border-emerald-300'}">
-                      ${faltantesPendientesGeneral > 0 ? `${faltantesPendientesGeneral} pendiente(s)` : 'Todo alistado'}
-                    </span>
-                  ` : `
-                    <span class="text-[10px] font-medium px-2 py-0.2 rounded-full bg-slate-200 text-slate-700">0 faltantes</span>
-                  `}
-                </div>
-                <p class="text-[11px] ${totalFaltantesGeneral > 0 ? (faltantesPendientesGeneral > 0 ? 'text-amber-800' : 'text-emerald-800') : 'text-slate-500'} truncate">
-                  ${totalFaltantesGeneral > 0 
-                    ? `Control de productos faltantes: <b>${faltantesAlistadosGeneral} de ${totalFaltantesGeneral}</b> alistados en canasta antes de despachar.`
-                    : 'No hay productos marcados como faltantes en los pedidos listos para despachar.'}
-                </p>
+              </button>
+              <div class="flex items-center gap-1.5 text-xs">
+                <span class="font-extrabold text-slate-800">Canasta:</span>
+                <span class="text-[11px] font-black px-2 py-0.2 rounded-full ${faltantesPendientesGeneral > 0 ? 'bg-amber-200 text-amber-950 border border-amber-300' : 'bg-emerald-200 text-emerald-950 border border-emerald-300'}">
+                  ${faltantesPendientesGeneral > 0 ? `${faltantesPendientesGeneral} pendiente(s)` : `${totalFaltantesGeneral > 0 ? 'Todo alistado' : '0 faltantes'}`}
+                </span>
               </div>
             </div>
             <button type="button" onclick="ModuloDomicilios.abrirModalCanastaFaltantes()"
-                    class="w-full sm:w-auto px-3 py-1.5 ${faltantesPendientesGeneral > 0 ? 'bg-amber-700 hover:bg-amber-800 text-white animate-pulse' : 'bg-slate-900 hover:bg-slate-800 text-white'} text-xs font-bold rounded-lg shadow-xs transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
+                    class="p-1.5 px-2.5 text-xs font-bold ${faltantesPendientesGeneral > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-slate-800 hover:bg-slate-700 text-white'} rounded-lg transition-all flex items-center gap-1 shadow-2xs cursor-pointer">
               <span>🧺</span>
-              <span>${faltantesPendientesGeneral > 0 ? `Alistar Faltantes (${faltantesPendientesGeneral})` : 'Ver Canasta de Faltantes'}</span>
+              <span class="hidden sm:inline">Alistar Faltantes</span>
             </button>
           </div>
 
@@ -2085,11 +2080,45 @@ const ModuloDomicilios = {
     };
 
     await recargarDatos();
+    this.actualizarBadgesCanasta();
+  },
+
+  /**
+   * Actualiza los badges numéricos de la Canasta de Faltantes en el Header global,
+   * la navegación inferior y el módulo de Domicilios.
+   */
+  async actualizarBadgesCanasta() {
+    try {
+      const res = await apiFetch('/domicilios/faltantes');
+      const pendientes = (res && res.ok && res.stats) ? Number(res.stats.pendientes || 0) : 0;
+      
+      const badgeHeader = document.getElementById('badge-global-canasta-header');
+      if (badgeHeader) {
+        badgeHeader.textContent = pendientes;
+        badgeHeader.classList.toggle('hidden', pendientes <= 0);
+      }
+
+      const badgeNav = document.getElementById('badge-nav-canasta');
+      if (badgeNav) {
+        badgeNav.textContent = pendientes;
+        badgeNav.classList.toggle('hidden', pendientes <= 0);
+      }
+
+      const badgeModulo = document.getElementById('badge-modulo-canasta');
+      if (badgeModulo) {
+        badgeModulo.textContent = pendientes;
+        badgeModulo.classList.toggle('hidden', pendientes <= 0);
+      }
+    } catch (e) {
+      // Silencioso
+    }
   },
 
   cerrarModalCanastaFaltantes() {
     const modalPrevio = document.getElementById('modal-canasta-faltantes');
     if (modalPrevio) modalPrevio.remove();
+
+    this.actualizarBadgesCanasta();
 
     // Si estamos en la pestaña de Despachar, refrescar la lista para actualizar los indicadores
     if (this.tabActiva === 'despachar') {
@@ -2365,6 +2394,7 @@ const ModuloDomicilios = {
 
       if (res && res.ok) {
         showToast(res.mensaje || (nuevoEstado ? '✅ Producto alistado en la canasta' : '↩ Producto desmarcado'), 'success');
+        this.actualizarBadgesCanasta();
         
         // Recargar contenido del modal abierto
         const modal = document.getElementById('modal-canasta-faltantes');

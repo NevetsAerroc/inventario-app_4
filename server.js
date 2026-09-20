@@ -147,7 +147,9 @@ app.get('/api/domicilios/faltantes', (req, res) => {
       LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
       LEFT JOIN productos prod ON dp.producto_id = prod.id OR (dp.producto_id IS NULL AND prod.sku = dp.sku)
       WHERE dp.es_faltante = 1
-        AND COALESCE(p.estado_liquidacion, '') != 'LIQUIDADO'
+        AND UPPER(COALESCE(p.estado_liquidacion, '')) != 'LIQUIDADO'
+        AND UPPER(COALESCE(p.estado, '')) NOT IN ('LIQUIDADO', 'ENTREGADO', 'CANCELADO', 'ANULADO')
+        AND (r.id IS NULL OR UPPER(COALESCE(r.estado, '')) NOT IN ('LIQUIDADA', 'FINALIZADA'))
     `;
     const params = [];
 
