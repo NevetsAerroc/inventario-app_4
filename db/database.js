@@ -1,3 +1,4 @@
+process.env.TZ = process.env.TZ || 'America/Bogota';
 //const db = require('./db');
 const path = require('path');
 const fs = require('fs');
@@ -62,6 +63,7 @@ agregarColumnaSiNoExiste('pedidos', 'metodo_abono', "TEXT DEFAULT 'EFECTIVO'");
 agregarColumnaSiNoExiste('pedidos', 'tipo_saldo', "TEXT DEFAULT 'CREDITO'");
 agregarColumnaSiNoExiste('pedidos', 'usuario_confirmacion_id', 'INTEGER');
 agregarColumnaSiNoExiste('pedidos', 'usuario_confirmacion_nombre', "TEXT DEFAULT ''");
+agregarColumnaSiNoExiste('pedidos', 'aceptado_cuadre', 'INTEGER DEFAULT 0');
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pedidos_telefono ON pedidos(telefono);
   CREATE INDEX IF NOT EXISTS idx_pedidos_cliente ON pedidos(cliente);
@@ -100,6 +102,10 @@ agregarColumnaSiNoExiste('pedidos', 'usuario_confirmacion_nombre', "TEXT DEFAULT
 agregarColumnaSiNoExiste('pedidos', 'fecha_confirmacion_pago', 'DATETIME');
 agregarColumnaSiNoExiste('detalle_pedidos', 'es_faltante', 'INTEGER DEFAULT 0');
 agregarColumnaSiNoExiste('detalle_pedidos', 'nota_faltante', "TEXT DEFAULT ''");
+agregarColumnaSiNoExiste('detalle_pedidos', 'alistado', 'INTEGER DEFAULT 0');
+agregarColumnaSiNoExiste('detalle_pedidos', 'usuario_alistado_id', 'INTEGER');
+agregarColumnaSiNoExiste('detalle_pedidos', 'usuario_alistado_nombre', "TEXT DEFAULT ''");
+agregarColumnaSiNoExiste('detalle_pedidos', 'fecha_alistado', 'DATETIME');
 
 // ==========================================
 // MIGRACIONES: USUARIOS, SESIONES Y ROLES (RBAC)

@@ -1,3 +1,4 @@
+process.env.TZ = process.env.TZ || 'America/Bogota';
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -86,15 +87,169 @@ app.get('/api/domicilios/pendientes', (req, res) => {
     `;
     const params = [];
     if (fecha) {
-      sql += ` AND date(COALESCE(p.fecha_cierre, p.fecha_creacion), 'localtime') = ?`;
-      params.push(fecha);
+      sql += ` AND (
+        date(COALESCE(p.fecha_cierre, p.fecha_creacion), 'localtime') = ?
+        OR date(COALESCE(p.fecha_cierre, p.fecha_creacion)) = ?
+      )`;
+      params.push(fecha, fecha);
     }
     sql += ` ORDER BY p.id DESC`;
 
     const pedidos = db.prepare(sql).all(...params);
+    const getItems = db.prepare('SELECT * FROM detalle_pedidos WHERE pedido_id = ? ORDER BY id ASC');
+
+    for (const p of pedidos) {
+      const items = getItems.all(p.id) || [];
+      p.items = items;
+      const faltantes = items.filter(it => Boolean(it.es_faltante));
+      p.total_faltantes = faltantes.length;
+      p.faltantes_alistados = faltantes.filter(it => Boolean(it.alistado)).length;
+      p.faltantes_pendientes = p.total_faltantes - p.faltantes_alistados;
+    }
+
     res.json({ ok: true, pedidos });
   } catch (err) { 
     res.status(500).json({ ok: false, error: err.message }); 
+  }
+});
+
+// ==========================================
+// CANASTA DE FALTANTES (ALISTAMIENTO PREVIO A DESPACHO)
+// ==========================================
+
+app.get('/api/domicilios/faltantes', (req, res) => {
+  try {
+    const { estado, fecha, pedidoId } = req.query;
+    let sql = `
+      SELECT dp.*,
+             p.codigo_pedido,
+             p.cliente_id,
+             COALESCE(NULLIF(p.cliente, ''), c.nombre, 'Cliente General') AS cliente,
+             COALESCE(NULLIF(p.empresa, ''), c.empresa, '') AS empresa,
+             COALESCE(NULLIF(p.telefono, ''), c.telefono, '') AS telefono,
+             COALESCE(NULLIF(p.direccion, ''), c.direccion, '') AS direccion,
+             COALESCE(NULLIF(p.municipio, ''), c.ciudad, '') AS municipio,
+             p.estado AS pedido_estado,
+             p.estado_liquidacion AS pedido_estado_liquidacion,
+             p.ruta_id,
+             p.fecha_cierre AS pedido_fecha_cierre,
+             p.fecha_creacion AS pedido_fecha_creacion,
+             r.id AS ruta_numero,
+             r.estado AS ruta_estado,
+             d.nombre AS domiciliario_nombre,
+             prod.stock,
+             prod.ubicacion,
+             prod.precio AS precio_producto
+      FROM detalle_pedidos dp
+      JOIN pedidos p ON dp.pedido_id = p.id
+      LEFT JOIN clientes c ON p.cliente_id = c.id
+      LEFT JOIN rutas_domicilio r ON p.ruta_id = r.id
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id
+      LEFT JOIN productos prod ON dp.producto_id = prod.id OR (dp.producto_id IS NULL AND prod.sku = dp.sku)
+      WHERE dp.es_faltante = 1
+        AND COALESCE(p.estado_liquidacion, '') != 'LIQUIDADO'
+    `;
+    const params = [];
+
+    if (pedidoId) {
+      sql += ` AND dp.pedido_id = ?`;
+      params.push(Number(pedidoId));
+    }
+
+    if (estado === 'pendientes') {
+      sql += ` AND (dp.alistado = 0 OR dp.alistado IS NULL)`;
+    } else if (estado === 'alistados') {
+      sql += ` AND dp.alistado = 1`;
+    }
+
+    if (fecha) {
+      sql += ` AND (
+        date(COALESCE(p.fecha_cierre, p.fecha_creacion), 'localtime') = ?
+        OR date(COALESCE(p.fecha_cierre, p.fecha_creacion)) = ?
+      )`;
+      params.push(fecha, fecha);
+    }
+
+    sql += ` ORDER BY dp.alistado ASC, p.id DESC, dp.id ASC`;
+
+    const faltantes = db.prepare(sql).all(...params);
+    const totalCount = faltantes.length;
+    const alistadosCount = faltantes.filter(f => Boolean(f.alistado)).length;
+    const pendientesCount = totalCount - alistadosCount;
+
+    res.json({
+      ok: true,
+      faltantes,
+      stats: {
+        total: totalCount,
+        alistados: alistadosCount,
+        pendientes: pendientesCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/domicilios/faltantes/:itemId/alistado', (req, res) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    if (!itemId) return res.status(400).json({ ok: false, error: 'ID de ítem no válido' });
+
+    const item = db.prepare('SELECT * FROM detalle_pedidos WHERE id = ?').get(itemId);
+    if (!item) return res.status(404).json({ ok: false, error: 'Ítem no encontrado en el pedido' });
+
+    const { alistado, usuario_nombre } = req.body;
+    const nuevoAlistado = (alistado === true || alistado === 1 || alistado === '1') ? 1 : 0;
+
+    let usuarioNombre = '';
+    let usuarioId = null;
+
+    if (nuevoAlistado === 1) {
+      if (req.user) {
+        usuarioId = req.user.id || null;
+        usuarioNombre = (req.user.nombre || req.user.username || 'Operador').trim();
+      } else if (usuario_nombre && String(usuario_nombre).trim()) {
+        usuarioNombre = String(usuario_nombre).trim();
+      } else {
+        usuarioNombre = 'Operador Bodega';
+      }
+
+      db.prepare(`
+        UPDATE detalle_pedidos
+        SET alistado = 1,
+            usuario_alistado_id = ?,
+            usuario_alistado_nombre = ?,
+            fecha_alistado = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(usuarioId, usuarioNombre, itemId);
+    } else {
+      db.prepare(`
+        UPDATE detalle_pedidos
+        SET alistado = 0,
+            usuario_alistado_id = NULL,
+            usuario_alistado_nombre = '',
+            fecha_alistado = NULL
+        WHERE id = ?
+      `).run(itemId);
+    }
+
+    const itemActualizado = db.prepare(`
+      SELECT dp.*, p.codigo_pedido, p.cliente
+      FROM detalle_pedidos dp
+      JOIN pedidos p ON dp.pedido_id = p.id
+      WHERE dp.id = ?
+    `).get(itemId);
+
+    res.json({
+      ok: true,
+      mensaje: nuevoAlistado === 1 
+        ? `Producto confirmado en canasta por ${usuarioNombre}`
+        : 'Producto desmarcado de la canasta (pendiente)',
+      item: itemActualizado
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -380,12 +535,15 @@ app.get('/api/rutas/:id', (req, res) => {
 
     const pedidos = db.prepare(`
       SELECT p.*,
+             r.fecha_creacion as ruta_fecha_creacion,
+             r.fecha_liquidacion as ruta_fecha_liquidacion,
              COALESCE(NULLIF(p.empresa, ''), c.empresa, '') AS empresa,
              COALESCE(NULLIF(p.telefono, ''), c.telefono, '') AS telefono,
              COALESCE(NULLIF(p.direccion, ''), c.direccion, '') AS direccion,
              COALESCE(NULLIF(p.municipio, ''), c.ciudad, '') AS municipio,
              COALESCE(NULLIF(p.cliente, ''), c.nombre, 'Cliente General') AS cliente
       FROM pedidos p
+      LEFT JOIN rutas_domicilio r ON p.ruta_id = r.id
       LEFT JOIN clientes c ON p.cliente_id = c.id
       WHERE p.ruta_id = ?
     `).all(req.params.id);
@@ -397,8 +555,8 @@ app.get('/api/rutas/:id', (req, res) => {
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
-// Actualizar un pedido mientras la ruta está en curso (precio, método, entrega, abonos)
-app.put('/api/rutas/pedido/:id', (req, res) => {
+// Actualizar un pedido mientras la ruta está en curso o en cuadre (precio, método, entrega, abonos, aceptación)
+function actualizarPedidoEnRutaOCuadre(req, res) {
   try {
     const id = req.params.id;
     const body = req.body || {};
@@ -456,6 +614,10 @@ app.put('/api/rutas/pedido/:id', (req, res) => {
     if (tipoSaldo !== undefined) {
       sets.push('tipo_saldo = ?'); vals.push(tipoSaldo || 'CREDITO');
     }
+    if (body.aceptado_cuadre !== undefined || body.aceptadoCuadre !== undefined) {
+      const ac = (body.aceptado_cuadre !== undefined) ? body.aceptado_cuadre : body.aceptadoCuadre;
+      sets.push('aceptado_cuadre = ?'); vals.push(ac ? 1 : 0);
+    }
 
     if (sets.length) {
       vals.push(id);
@@ -464,6 +626,25 @@ app.put('/api/rutas/pedido/:id', (req, res) => {
 
     const actualizado = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(id);
     res.json({ ok: true, pedido: actualizado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+app.put('/api/rutas/pedido/:id', actualizarPedidoEnRutaOCuadre);
+app.patch('/api/pedidos/:id', actualizarPedidoEnRutaOCuadre);
+app.put('/api/pedidos/:id/cuadre', actualizarPedidoEnRutaOCuadre);
+
+// Aceptar o desmarcar todos los pedidos de una ruta para el cuadre
+app.post('/api/rutas/:id/aceptar-todos-cuadre', (req, res) => {
+  try {
+    if (esDomiDeCalle(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Solo administradores pueden aceptar pedidos para cuadre' });
+    }
+    const rutaId = req.params.id;
+    const valor = req.body && req.body.aceptado === false ? 0 : 1;
+    db.prepare('UPDATE pedidos SET aceptado_cuadre = ? WHERE ruta_id = ?').run(valor, rutaId);
+    res.json({ ok: true, aceptado: valor === 1 });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -482,24 +663,28 @@ app.post('/api/rutas/liquidar', (req, res) => {
     const usuarioLiquidaId = req.user ? req.user.id : null;
 
     const items = Array.isArray(pedidosLiquidacion) ? pedidosLiquidacion : [];
+    const itemsMap = new Map();
+    items.forEach(it => { if (it && it.id) itemsMap.set(Number(it.id), it); });
+
     const tx = db.transaction(() => {
       const updatePedido = db.prepare(`
         UPDATE pedidos
         SET metodo_pago_final = ?,
             comprobante_transf = ?,
             estado_liquidacion = ?,
-            tipo_saldo = COALESCE(?, tipo_saldo)
+            tipo_saldo = COALESCE(?, tipo_saldo),
+            estado_entrega = 'ENTREGADO',
+            aceptado_cuadre = 1
         WHERE id = ?
       `);
 
-      const getPedido = db.prepare('SELECT * FROM pedidos WHERE id = ?');
-
-      for (const item of items) {
-        if (!item || !item.id) continue;
-        const p = getPedido.get(item.id);
-        const saldoPend = Number(p?.saldo_pendiente || 0);
-        const metodo = item.metodoPago || p?.metodo_pago_final || 'EFECTIVO';
-        const tipoSaldo = item.tipoSaldo || item.tipo_saldo || p?.tipo_saldo || 'CREDITO';
+      const pedidosDeRuta = db.prepare('SELECT * FROM pedidos WHERE ruta_id = ?').all(rutaId);
+      for (const p of pedidosDeRuta) {
+        const item = itemsMap.get(Number(p.id));
+        const saldoPend = Number(p.saldo_pendiente || 0);
+        const metodo = item?.metodoPago || p.metodo_pago_final || 'EFECTIVO';
+        const comprobante = (item && item.comprobante !== undefined) ? item.comprobante : (p.comprobante_transf || '');
+        const tipoSaldo = item?.tipoSaldo || item?.tipo_saldo || p.tipo_saldo || 'CREDITO';
 
         // Si quedó saldo pendiente por abono o transferencia pendiente
         let estado = 'LIQUIDADO';
@@ -511,10 +696,10 @@ app.post('/api/rutas/liquidar', (req, res) => {
 
         updatePedido.run(
           metodo,
-          item.comprobante || '',
+          comprobante,
           estado,
           tipoSaldo,
-          item.id
+          p.id
         );
       }
 
@@ -556,7 +741,11 @@ app.get('/api/domicilios/auditoria', (req, res) => {
     `;
     const paramsRutas = [];
     if (fecha) {
-      sqlRutas += ` WHERE date(r.fecha_creacion, 'localtime') = ? OR date(r.fecha_liquidacion, 'localtime') = ?`;
+      sqlRutas += ` WHERE (
+        (r.estado = 'LIQUIDADA' AND date(COALESCE(r.fecha_liquidacion, r.fecha_creacion), 'localtime') = ?)
+        OR
+        (r.estado != 'LIQUIDADA' AND date(r.fecha_creacion, 'localtime') = ?)
+      )`;
       paramsRutas.push(fecha, fecha);
     }
     sqlRutas += ` ORDER BY r.id DESC`;
@@ -566,8 +755,11 @@ app.get('/api/domicilios/auditoria', (req, res) => {
     // Para cada ruta, cargamos sus pedidos con sus ítems
     for (const ruta of rutas) {
       const pedidos = db.prepare(`
-        SELECT p.*
+        SELECT p.*,
+               r.fecha_creacion as ruta_fecha_creacion,
+               r.fecha_liquidacion as ruta_fecha_liquidacion
         FROM pedidos p
+        LEFT JOIN rutas_domicilio r ON p.ruta_id = r.id
         WHERE p.ruta_id = ?
         ORDER BY p.id ASC
       `).all(ruta.id);
