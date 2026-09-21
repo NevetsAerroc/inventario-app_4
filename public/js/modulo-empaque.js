@@ -12,6 +12,7 @@ const ModuloEmpaque = (() => {
 
   function render() {
     const el = document.getElementById('view-empaque');
+    if (!el) return;
     el.innerHTML = `
       <!-- Sub-pestañas de Empaque -->
       <div class="flex gap-2 border-b border-slate-200 pb-2 mb-3">

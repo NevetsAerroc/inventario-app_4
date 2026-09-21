@@ -12,6 +12,7 @@ const ModuloCarga = (() => {
 
   function render() {
     const el = document.getElementById('view-carga');
+    if (!el) return;
     el.innerHTML = `
       <!-- 1. RECEPCIÓN AUTOMÁTICA DE MERCANCÍA CON ESCÁNER INTEGRADO -->
       <div class="bg-white rounded-2xl shadow-sm p-4 space-y-3">

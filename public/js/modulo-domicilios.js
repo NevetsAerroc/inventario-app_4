@@ -769,6 +769,7 @@ const ModuloDomicilios = {
 
     async renderTabDespachar() {
     const cont = document.getElementById('contenedor-subtab');
+    if (!cont) return;
     cont.innerHTML = `<p class="text-center text-xs text-slate-400 py-4">Cargando pedidos disponibles...</p>`;
 
     try {
@@ -783,7 +784,10 @@ const ModuloDomicilios = {
       const faltantesAlistadosGeneral = this.pedidosPendientes.reduce((acc, p) => acc + (p.faltantes_alistados || 0), 0);
       const faltantesPendientesGeneral = totalFaltantesGeneral - faltantesAlistadosGeneral;
 
-      cont.innerHTML = `
+      const contActual = document.getElementById('contenedor-subtab');
+      if (!contActual) return;
+
+      contActual.innerHTML = `
         <div class="space-y-3">
           <div class="bg-amber-50/80 border-2 border-amber-300 p-3 rounded-xl shadow-sm space-y-1.5">
             <div class="flex items-center justify-between">
@@ -1023,7 +1027,10 @@ const ModuloDomicilios = {
         </div>
       `;
     } catch (err) {
-      cont.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error: ${err.message}</p>`;
+      const contActual = document.getElementById('contenedor-subtab');
+      if (contActual) {
+        contActual.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error: ${err.message}</p>`;
+      }
     }
   },
 
@@ -2120,8 +2127,8 @@ const ModuloDomicilios = {
 
     this.actualizarBadgesCanasta();
 
-    // Si estamos en la pestaña de Despachar, refrescar la lista para actualizar los indicadores
-    if (this.tabActiva === 'despachar') {
+    // Si estamos en la pestaña de Despachar y el contenedor está en pantalla, refrescar la lista
+    if (this.tabActiva === 'despachar' && document.getElementById('contenedor-subtab')) {
       this.renderTabDespachar();
     }
   },
@@ -2627,6 +2634,7 @@ const ModuloDomicilios = {
 
     async renderTabRutas() {
     const cont = document.getElementById('contenedor-subtab');
+    if (!cont) return;
     cont.innerHTML = `<p class="text-center text-xs text-slate-400 py-4">Cargando rutas...</p>`;
 
     try {
@@ -2647,7 +2655,10 @@ const ModuloDomicilios = {
 
       this._initPersistentState();
 
-      cont.innerHTML = `
+      const contActual = document.getElementById('contenedor-subtab');
+      if (!contActual) return;
+
+      contActual.innerHTML = `
         <div class="space-y-6">
           <div>
             <div class="flex items-center justify-between mb-3">
@@ -3031,7 +3042,10 @@ const ModuloDomicilios = {
         </div>
       `;
     } catch (err) {
-      cont.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error: ${err.message}</p>`;
+      const contActual = document.getElementById('contenedor-subtab');
+      if (contActual) {
+        contActual.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error: ${err.message}</p>`;
+      }
     }
   },
 
@@ -3483,8 +3497,11 @@ const ModuloDomicilios = {
         console.error('Error al listar rutas en cuadre:', e);
       }
 
+      const contActual = document.getElementById('contenedor-subtab');
+      if (!contActual) return;
+
       if (rutasActivas.length === 0) {
-        cont.innerHTML = `
+        contActual.innerHTML = `
           <div class="text-center py-12 px-4 space-y-3 bg-white border border-slate-200 rounded-2xl shadow-2xs">
             <span class="text-4xl">📦</span>
             <p class="text-sm font-bold text-slate-800">No hay rutas activas para cuadrar en este momento</p>
@@ -4092,11 +4109,17 @@ const ModuloDomicilios = {
         </div>
       `;
 
-      cont.innerHTML = html;
-      this.recalcularArqueo();
+      const contFinal = document.getElementById('contenedor-subtab');
+      if (contFinal) {
+        contFinal.innerHTML = html;
+        this.recalcularArqueo();
+      }
     } catch (err) {
       console.error('Error al renderizar cuadre:', err);
-      cont.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error al cargar cuadre: ${escapeHtml(err.message)}</p>`;
+      const contErr = document.getElementById('contenedor-subtab');
+      if (contErr) {
+        contErr.innerHTML = `<p class="text-xs text-rose-500 text-center py-4">Error al cargar cuadre: ${escapeHtml(err.message)}</p>`;
+      }
     }
   },
 
@@ -5343,7 +5366,10 @@ async guardarAjusteTotal(pedidoId) {
       const pillActiva = 'bg-indigo-600 text-white shadow-xs font-bold';
       const pillInactiva = 'bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium';
 
-      cont.innerHTML = `
+      const contActual = document.getElementById('contenedor-subtab');
+      if (!contActual) return;
+
+      contActual.innerHTML = `
         <div class="space-y-4">
           <!-- CABECERA DE AUDITORÍA Y FILTRO DE FECHA -->
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -5507,15 +5533,18 @@ async guardarAjusteTotal(pedidoId) {
         </div>
       `;
     } catch (err) {
-      cont.innerHTML = `
-        <div class="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs space-y-2 text-center">
-          <p class="font-bold">Error al cargar la información de auditoría:</p>
-          <p>${err.message}</p>
-          <button onclick="ModuloDomicilios.renderTabAuditoria()" class="px-3 py-1.5 bg-rose-600 text-white rounded-lg font-semibold hover:bg-rose-700">
-            Reintentar
-          </button>
-        </div>
-      `;
+      const contErr = document.getElementById('contenedor-subtab');
+      if (contErr) {
+        contErr.innerHTML = `
+          <div class="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs space-y-2 text-center">
+            <p class="font-bold">Error al cargar la información de auditoría:</p>
+            <p>${err.message}</p>
+            <button onclick="ModuloDomicilios.renderTabAuditoria()" class="px-3 py-1.5 bg-rose-600 text-white rounded-lg font-semibold hover:bg-rose-700">
+              Reintentar
+            </button>
+          </div>
+        `;
+      }
     }
   },
 

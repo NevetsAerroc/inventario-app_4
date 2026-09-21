@@ -8,6 +8,7 @@ const ModuloInventario = (() => {
 
   function render() {
     const el = document.getElementById('view-inventario');
+    if (!el) return;
     el.innerHTML = `
       <div class="bg-white rounded-2xl shadow-sm p-4 space-y-3">
         <h2 class="font-bold text-slate-800">🔍 Buscar producto</h2>
