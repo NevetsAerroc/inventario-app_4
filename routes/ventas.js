@@ -513,7 +513,8 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
     const sheet = workbook.Sheets[sheetName];
 
     // Leer como matriz bidimensional para preservar columnas repetidas (como múltiples columnas "VENTA")
-    const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    // Usar raw: false para respetar el texto formateado de Excel (evitando inflar comas decimales)
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
 
     if (!rawRows || rawRows.length < 2) {
       fs.unlinkSync(filePath);
@@ -536,44 +537,94 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
       headerRowIdx = 0;
     }
 
-    const header = rawRows[headerRowIdx].map(c => String(c || '').replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase());
+    // Combinar encabezados desde la fila 0 hasta headerRowIdx para detectar tanto nombres de lista
+    // ("Lista: GENERAL", "Lista: PRECIO 2", "Lista: PRECIO 3") como campos ("CODIGO", "ARTICULO", "VENTA")
+    const maxCols = Math.max(...rawRows.slice(0, Math.min(rawRows.length, 6)).map(r => (r ? r.length : 0)));
+    const header = [];
+    for (let c = 0; c < maxCols; c++) {
+      const parts = [];
+      for (let r = 0; r <= headerRowIdx; r++) {
+        const txt = String((rawRows[r] && rawRows[r][c]) || '').replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+        if (txt && !parts.includes(txt)) {
+          parts.push(txt);
+        }
+      }
+      header.push(parts.join(' '));
+    }
 
     // Mapear índices de columnas
     let colCodigo = -1;
     let colArticulo = -1;
     let colCodBarras = -1;
+    let colP1 = -1;
+    let colP2 = -1;
+    let colP3 = -1;
     const colVentas = [];
     const colIvas = [];
 
     header.forEach((colName, idx) => {
-      if ((colName === 'CODIGO' || colName === 'CÓDIGO' || colName === 'SKU' || colName === 'COD') && colCodigo === -1) {
+      const norm = String(colName || '').trim().toUpperCase();
+      if ((norm === 'CODIGO' || norm === 'CÓDIGO' || norm === 'SKU' || norm === 'COD' || norm.startsWith('CODIGO') || norm.startsWith('CÓDIGO')) && colCodigo === -1) {
         colCodigo = idx;
-      } else if ((colName.includes('ARTICULO') || colName.includes('ARTÍCULO') || colName.includes('PRODUCTO') || colName.includes('DESCRIP') || colName === 'NOMBRE') && colArticulo === -1) {
+      } else if ((norm.includes('ARTICULO') || norm.includes('ARTÍCULO') || norm.includes('PRODUCTO') || norm.includes('DESCRIP') || norm === 'NOMBRE') && colArticulo === -1) {
         colArticulo = idx;
-      } else if ((colName.includes('BARRAS') || colName === 'BARCODE' || colName === 'COD. BARRAS' || colName === 'COD_BARRAS') && colCodBarras === -1) {
+      } else if ((norm.includes('BARRAS') || norm.includes('BARCODE') || norm.includes('COD. BARRAS') || norm.includes('COD_BARRAS')) && colCodBarras === -1) {
         colCodBarras = idx;
-      } else if (colName.includes('VENTA MIN') || colName.includes('VENTAMIN') || colName.includes('MÍNIMA') || colName.includes('MINIMA')) {
-        // Ignorar "VENTA MIN"
-      } else if (colName === 'VENTA' || colName.startsWith('VENTA') || colName.startsWith('PRECIO') || colName.startsWith('LISTA')) {
-        colVentas.push(idx);
-      } else if (colName === 'IVA') {
+      }
+
+      if (norm.includes('IVA')) {
         colIvas.push(idx);
       }
+
+      // Descartar explícitamente columnas auxiliares para no confundirlas con columnas de precio
+      const esAux = norm.includes('IVA') ||
+                    norm.includes('MIN') ||
+                    norm.includes('R/C') ||
+                    norm.includes('R/V') ||
+                    norm.includes('INC') ||
+                    norm.includes('COSTO') ||
+                    norm.includes('CONTABLE') ||
+                    norm.includes('PRINCIPAL') ||
+                    norm.includes('BODEGA') ||
+                    norm.includes('SALDO') ||
+                    norm.includes('DCTO') ||
+                    norm.includes('ACTIVO');
+      if (esAux) return;
+
+      // Columnas reales de precio de venta:
+      if (norm === 'VENTA' || norm.startsWith('VENTA ') || norm.startsWith('VENTA(') || norm.includes('PRECIO') || norm.startsWith('LISTA')) {
+        colVentas.push(idx);
+        if ((norm.includes('GENERAL') || norm.includes('PRECIO 1') || norm.includes('PRECIO1') || norm.includes('LISTA 1')) && colP1 === -1) {
+          colP1 = idx;
+        } else if ((norm.includes('PRECIO 2') || norm.includes('PRECIO2') || norm.includes('LISTA 2') || norm.includes('VENTA 2')) && colP2 === -1) {
+          colP2 = idx;
+        } else if ((norm.includes('PRECIO 3') || norm.includes('PRECIO3') || norm.includes('LISTA 3') || norm.includes('VENTA 3')) && colP3 === -1) {
+          colP3 = idx;
+        }
+      }
     });
+
+    // Si no se asignaron listas específicas por nombre, asignar según orden de columnas de venta
+    if (colP1 === -1 && colVentas.length > 0) colP1 = colVentas[0];
+    if (colP2 === -1 && colVentas.length > 1) colP2 = colVentas[1];
+    if (colP3 === -1 && colVentas.length > 2) colP3 = colVentas[2];
 
     console.log('[importar-precios] Fila cabecera:', headerRowIdx, 'Mapeo de columnas:', {
       colCodigo,
       colArticulo,
       colCodBarras,
+      colP1,
+      colP2,
+      colP3,
       colVentas,
       colIvas
     });
 
-    if (colVentas.length === 0) {
+    if (colP1 === -1 && colVentas.length === 0) {
       fs.unlinkSync(filePath);
       return res.status(400).json({
         ok: false,
-        error: 'No se encontraron columnas de precios ("VENTA" o "PRECIO") en el archivo. Por favor verifica los encabezados.'
+        error: 'No se encontraron columnas de precios ("VENTA", "GENERAL" o "PRECIO") en el archivo. Por favor verifica los encabezados.'
       });
     }
 
@@ -622,13 +673,10 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
         if (!valCodigo && !valArticulo && !valCodBarras) continue;
         procesadas++;
 
-        // Extraer los 3 precios de venta
-        // colVentas[0] = Venta 1 (General)
-        // colVentas[1] = Venta 2
-        // colVentas[2] = Venta 3
-        const p1Raw = colVentas[0] !== undefined ? row[colVentas[0]] : 0;
-        const p2Raw = colVentas[1] !== undefined ? row[colVentas[1]] : 0;
-        const p3Raw = colVentas[2] !== undefined ? row[colVentas[2]] : 0;
+        // Extraer los 3 precios de venta usando colP1, colP2, colP3
+        const p1Raw = colP1 !== -1 ? row[colP1] : (colVentas[0] !== undefined ? row[colVentas[0]] : 0);
+        const p2Raw = colP2 !== -1 ? row[colP2] : (colVentas[1] !== undefined ? row[colVentas[1]] : 0);
+        const p3Raw = colP3 !== -1 ? row[colP3] : (colVentas[2] !== undefined ? row[colVentas[2]] : 0);
 
         const p1 = parsePrecio(p1Raw);
         const p2 = parsePrecio(p2Raw);

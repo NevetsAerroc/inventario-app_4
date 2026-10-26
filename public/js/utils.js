@@ -73,8 +73,8 @@ function escapeHtml(str) {
 }
 
 function formatMoney(n) {
-  const num = Number(n) || 0;
-  return num.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const num = Math.round(Number(n) || 0);
+  return num.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 /**

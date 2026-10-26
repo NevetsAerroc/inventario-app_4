@@ -1323,15 +1323,23 @@ const ModuloVentas = (() => {
     `;
   }
 
+  function extraerPrecioLimpio(str) {
+    if (!str) return 0;
+    let s = String(str).trim().replace(/[$]/g, '').replace(/\s+/g, '');
+    if (s.includes(',')) {
+      const parts = s.split(',');
+      if (parts.length === 2 && parts[1].length <= 2) {
+        s = parts[0];
+      }
+    }
+    const digits = s.replace(/\D/g, '');
+    return parseInt(digits, 10) || 0;
+  }
+
   function formatearInputPrecio(input) {
     if (!input) return;
-    const digits = String(input.value || '').replace(/\D/g, '');
-    if (!digits) {
-      input.value = '0';
-      return;
-    }
-    const num = parseInt(digits, 10) || 0;
-    input.value = formatMoney(num);
+    const num = extraerPrecioLimpio(input.value);
+    input.value = num > 0 ? formatMoney(num) : '0';
   }
 
   async function guardarPrecioIndividual(id) {
@@ -1341,9 +1349,9 @@ const ModuloVentas = (() => {
     const btn = document.getElementById(`btn-save-precio-${id}`);
     if (!inp1 || !inp2 || !inp3) return;
 
-    const val1 = parseInt(String(inp1.value || '').replace(/\D/g, ''), 10) || 0;
-    const val2 = parseInt(String(inp2.value || '').replace(/\D/g, ''), 10) || 0;
-    const val3 = parseInt(String(inp3.value || '').replace(/\D/g, ''), 10) || 0;
+    const val1 = extraerPrecioLimpio(inp1.value);
+    const val2 = extraerPrecioLimpio(inp2.value);
+    const val3 = extraerPrecioLimpio(inp3.value);
 
     if (btn) {
       btn.disabled = true;
