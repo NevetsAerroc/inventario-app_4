@@ -33,6 +33,59 @@ agregarColumnaSiNoExiste('productos', 'ubicacion', "TEXT DEFAULT ''");
 agregarColumnaSiNoExiste('productos', 'subcategoria', "TEXT DEFAULT ''");
 agregarColumnaSiNoExiste('productos', 'codigo_caja', "TEXT");
 agregarColumnaSiNoExiste('productos', 'unidades_por_caja', "INTEGER NOT NULL DEFAULT 1");
+agregarColumnaSiNoExiste('productos', 'precio_1', "REAL DEFAULT 0");
+agregarColumnaSiNoExiste('productos', 'precio_2', "REAL DEFAULT 0");
+agregarColumnaSiNoExiste('productos', 'precio_3', "REAL DEFAULT 0");
+agregarColumnaSiNoExiste('productos', 'iva', "REAL DEFAULT 0");
+agregarColumnaSiNoExiste('productos', 'codigo_interno', "TEXT DEFAULT ''");
+
+// Sincronizar precio_1 con precio si es 0
+try {
+  db.exec(`UPDATE productos SET precio_1 = precio WHERE (precio_1 IS NULL OR precio_1 = 0) AND precio > 0;`);
+} catch (e) {}
+
+// ==========================================
+// MIGRACIONES FACTURACIÓN / VENTAS (POS)
+// ==========================================
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ventas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero_factura TEXT UNIQUE NOT NULL,
+    fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    cliente_id INTEGER,
+    cliente_nombre TEXT DEFAULT 'Consumidor Final',
+    cliente_documento TEXT DEFAULT '',
+    cliente_telefono TEXT DEFAULT '',
+    usuario_id INTEGER,
+    usuario_nombre TEXT DEFAULT '',
+    lista_precios TEXT DEFAULT 'precio_1',
+    subtotal REAL DEFAULT 0,
+    descuento REAL DEFAULT 0,
+    total REAL DEFAULT 0,
+    metodo_pago TEXT DEFAULT 'EFECTIVO',
+    monto_recibido REAL DEFAULT 0,
+    cambio REAL DEFAULT 0,
+    comprobante TEXT DEFAULT '',
+    observacion TEXT DEFAULT '',
+    estado TEXT DEFAULT 'COMPLETADA'
+  );
+
+  CREATE TABLE IF NOT EXISTS detalle_ventas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+    producto_id INTEGER REFERENCES productos(id),
+    sku TEXT,
+    nombre_producto TEXT NOT NULL,
+    cantidad REAL NOT NULL,
+    precio_unitario REAL NOT NULL,
+    tipo_precio TEXT DEFAULT 'precio_1',
+    subtotal REAL NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ventas_numero ON ventas(numero_factura);
+  CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
+  CREATE INDEX IF NOT EXISTS idx_detalle_ventas_venta ON detalle_ventas(venta_id);
+`);
 
 // ==========================================
 // MIGRACIONES MÓDULO D (DOMICILIOS)

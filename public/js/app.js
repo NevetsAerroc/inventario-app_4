@@ -5,7 +5,8 @@ const App = (() => {
     carga: { view: 'view-carga', mod: typeof ModuloCarga !== 'undefined' ? ModuloCarga : null },
     inventario: { view: 'view-inventario', mod: typeof ModuloInventario !== 'undefined' ? ModuloInventario : null },
     empaque: { view: 'view-empaque', mod: typeof ModuloEmpaque !== 'undefined' ? ModuloEmpaque : null },
-    domicilios: { view: 'view-domicilios', mod: typeof ModuloDomicilios !== 'undefined' ? ModuloDomicilios : null }
+    domicilios: { view: 'view-domicilios', mod: typeof ModuloDomicilios !== 'undefined' ? ModuloDomicilios : null },
+    ventas: { view: 'view-ventas', mod: typeof ModuloVentas !== 'undefined' ? ModuloVentas : null }
   };
   let tabActual = null;
   const montado = {};

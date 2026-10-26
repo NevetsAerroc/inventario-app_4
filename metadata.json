@@ -1,6 +1,6 @@
 {
   "name": "Inventario & Empaque",
-  "description": "Aplicación web de Inventarios, Empaque, Domicilios y Control de Usuarios con asignación granular de módulos para Dueño del Local (Admin), Programador (Superadmin) y Domiciliarios de Calle enlazados.",
+  "description": "Aplicación web de Inventarios, Empaque, Domicilios, Facturación POS con Listas de Precios (1, 2, 3), Actualizador Masivo de Precios y Control de Usuarios.",
   "requestFramePermissions": [
     "camera"
   ],

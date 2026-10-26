@@ -48,6 +48,9 @@
     <!-- MODULO D: Domicilios & Liquidacion -->
     <section id="view-domicilios" class="view p-4 space-y-4 hidden"></section>
 
+    <!-- MODULO E: Facturacion & Ventas (POS) -->
+    <section id="view-ventas" class="view p-4 space-y-4 hidden"></section>
+
   </main>
 
   <!-- ============ TOAST GLOBAL ============ -->
@@ -67,6 +70,9 @@
       </button>
       <button data-tab="domicilios" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">🚚</span><span class="text-xs font-medium">Domicilios</span>
+      </button>
+      <button data-tab="ventas" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
+        <span class="text-xl">🧾</span><span class="text-xs font-medium">Ventas</span>
       </button>
       <button id="nav-btn-canasta" onclick="ModuloDomicilios.abrirModalCanastaFaltantes()" class="flex-1 flex flex-col items-center py-3 gap-1 text-amber-600 hover:text-amber-700 transition-colors relative cursor-pointer" title="Canasta de Faltantes">
         <span class="text-xl">🧺</span><span class="text-xs font-bold text-amber-700">Canasta</span>
@@ -88,6 +94,7 @@
   <script src="js/modulo-inventario.js?v=1.4"></script>
   <script src="js/modulo-empaque.js?v=1.4"></script>
   <script src="js/modulo-domicilios.js?v=1.6"></script>
+  <script src="js/modulo-ventas.js?v=1.0"></script>
   <script src="js/app.js?v=1.4"></script>
 </body>
 </html>

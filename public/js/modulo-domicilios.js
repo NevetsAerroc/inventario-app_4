@@ -2632,10 +2632,14 @@ const ModuloDomicilios = {
     }
   },
 
-    async renderTabRutas() {
+  async renderTabRutas() {
     const cont = document.getElementById('contenedor-subtab');
     if (!cont) return;
-    cont.innerHTML = `<p class="text-center text-xs text-slate-400 py-4">Cargando rutas...</p>`;
+    const tieneContenidoPrevio = cont.children.length > 0 && !cont.querySelector('.animate-spin');
+    const scrollGuardado = window.scrollY;
+    if (!tieneContenidoPrevio) {
+      cont.innerHTML = `<p class="text-center text-xs text-slate-400 py-4">Cargando rutas...</p>`;
+    }
 
     try {
       const resActivas = await apiFetch('/rutas?estado=EN_RUTA'); // las rutas activas en calle
@@ -3041,6 +3045,9 @@ const ModuloDomicilios = {
           </div>
         </div>
       `;
+      if (tieneContenidoPrevio && scrollGuardado > 0) {
+        window.scrollTo({ top: scrollGuardado, behavior: 'instant' });
+      }
     } catch (err) {
       const contActual = document.getElementById('contenedor-subtab');
       if (contActual) {
@@ -3479,12 +3486,16 @@ const ModuloDomicilios = {
     const cont = document.getElementById('contenedor-subtab');
     if (!cont) return;
 
-    cont.innerHTML = `
-      <div class="text-center py-10 px-4 space-y-2">
-        <div class="inline-block animate-spin text-2xl">⏳</div>
-        <p class="text-xs font-bold text-slate-700">Cargando rutas en curso y pedidos para cuadre...</p>
-      </div>
-    `;
+    const tieneContenidoPrevio = cont.children.length > 0 && !cont.querySelector('.animate-spin');
+    const scrollGuardado = window.scrollY;
+    if (!tieneContenidoPrevio) {
+      cont.innerHTML = `
+        <div class="text-center py-10 px-4 space-y-2">
+          <div class="inline-block animate-spin text-2xl">⏳</div>
+          <p class="text-xs font-bold text-slate-700">Cargando rutas en curso y pedidos para cuadre...</p>
+        </div>
+      `;
+    }
 
     try {
       let rutasActivas = [];
@@ -3766,7 +3777,7 @@ const ModuloDomicilios = {
                   <div>
                     <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <span>📋</span> <span>Verificación en Caja:</span>
-                      <b class="${aceptadosCount === totalPedidos && totalPedidos > 0 ? 'text-emerald-700' : 'text-slate-900'} font-black text-sm">
+                      <b id="cuadre-contador-aceptados-${r.id}" class="${aceptadosCount === totalPedidos && totalPedidos > 0 ? 'text-emerald-700' : 'text-slate-900'} font-black text-sm">
                         ${aceptadosCount} de ${totalPedidos} pedidos aceptados
                       </b>
                     </span>
@@ -3774,7 +3785,7 @@ const ModuloDomicilios = {
                       Marca los pedidos conforme recibes el dinero del domiciliario <strong>${escapeHtml(r.domiciliario_nombre || '')}</strong>.
                     </p>
                   </div>
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1.5" id="cuadre-btn-accion-todos-${r.id}">
                     ${aceptadosCount < totalPedidos ? `
                       <button type="button" onclick="ModuloDomicilios.aceptarTodosPedidosCuadre(${r.id}, true)"
                               class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1 cursor-pointer">
@@ -3789,7 +3800,7 @@ const ModuloDomicilios = {
                   </div>
                 </div>
                 <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                  <div class="bg-emerald-500 h-full transition-all duration-300 rounded-full" style="width: ${pctAceptados}%"></div>
+                  <div id="cuadre-progress-bar-${r.id}" class="bg-emerald-500 h-full transition-all duration-300 rounded-full" style="width: ${pctAceptados}%"></div>
                 </div>
               </div>
 
@@ -3885,6 +3896,8 @@ const ModuloDomicilios = {
                                    id="item-pedido-${p.id}"
                                    data-id="${p.id}"
                                    data-ruta-id="${r.id}"
+                                   data-aceptado="${p.aceptado_cuadre ? '1' : '0'}"
+                                   data-entregado="${entregado ? '1' : '0'}"
                                    data-total="${totalPedido}"
                                    data-devuelta="${devueltaRedondeada}"
                                    data-monto-abono="${montoAbono}"
@@ -4083,11 +4096,12 @@ const ModuloDomicilios = {
               ${!(typeof Auth !== 'undefined' && Auth.isDomiciliario()) ? `
                 <div class="space-y-1.5 pt-1">
                   <button type="button"
+                          id="cuadre-btn-liquidar-${r.id}"
                           onclick="ModuloDomicilios.cerrarYLiquidarRuta(${r.id})"
                           class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
-                    <span>✅</span> <span>Liquidar Ruta #${r.id} · ${escapeHtml(r.domiciliario_nombre || 'Domiciliario')} (${aceptadosCount}/${totalPedidos} aceptados)</span>
+                    <span>✅</span> <span id="cuadre-btn-liquidar-texto-${r.id}">Liquidar Ruta #${r.id} · ${escapeHtml(r.domiciliario_nombre || 'Domiciliario')} (${aceptadosCount}/${totalPedidos} aceptados)</span>
                   </button>
-                  <p class="text-[11px] text-center text-slate-400">
+                  <p id="cuadre-texto-liquidar-${r.id}" class="text-[11px] text-center text-slate-400">
                     ${aceptadosCount === totalPedidos
                       ? '✓ Todos los pedidos han sido aceptados y verificados. Listo para liquidar y asentar en auditoría.'
                       : `Hay ${totalPedidos - aceptadosCount} pedido(s) pendientes de aceptar. Se confirmará su aceptación automática al liquidar.`}
@@ -4113,6 +4127,9 @@ const ModuloDomicilios = {
       if (contFinal) {
         contFinal.innerHTML = html;
         this.recalcularArqueo();
+        if (tieneContenidoPrevio && scrollGuardado > 0) {
+          window.scrollTo({ top: scrollGuardado, behavior: 'instant' });
+        }
       }
     } catch (err) {
       console.error('Error al renderizar cuadre:', err);
@@ -4404,50 +4421,215 @@ async guardarAjusteTotal(pedidoId) {
     }
   },
 
-  /** Marca o desmarca individualmente un pedido como verificado/aceptado en el cuadre */
-  async toggleAceptarPedidoCuadre(pedidoId, aceptar) {
-    try {
-      // Feedback visual optimista inmediato
-      const card = document.getElementById(`item-pedido-${pedidoId}`);
-      const btn = document.getElementById(`btn-check-cuadre-${pedidoId}`);
-      if (card) {
-        card.classList.toggle('bg-emerald-50/80', Boolean(aceptar));
-        card.classList.toggle('border-emerald-400', Boolean(aceptar));
-        card.classList.toggle('ring-1', Boolean(aceptar));
-        card.classList.toggle('ring-emerald-300', Boolean(aceptar));
-      }
-      if (btn) {
-        btn.classList.toggle('bg-emerald-600', Boolean(aceptar));
-        btn.classList.toggle('text-white', Boolean(aceptar));
-        btn.classList.toggle('ring-2', Boolean(aceptar));
-        btn.classList.toggle('ring-emerald-300', Boolean(aceptar));
-        btn.classList.toggle('bg-white', !aceptar);
-        btn.classList.toggle('text-slate-300', !aceptar);
-        btn.setAttribute('onclick', `ModuloDomicilios.toggleAceptarPedidoCuadre(${pedidoId}, ${!aceptar})`);
-      }
+  /** Actualiza en vivo los contadores y botones de verificación de la ruta sin recargar la página */
+  actualizarContadoresCuadreRuta(rutaId) {
+    if (!rutaId) return;
+    const bodyRuta = document.getElementById(`ruta-body-cuadre-${rutaId}`);
+    const selector = bodyRuta ? `#ruta-body-cuadre-${rutaId} [id^="item-pedido-"]` : `[id^="item-pedido-"][data-ruta-id="${rutaId}"]`;
+    const cards = Array.from(document.querySelectorAll(selector));
+    const totalPedidos = cards.length;
+    if (totalPedidos === 0) return;
 
-      await apiFetch(`/rutas/pedido/${pedidoId}`, {
+    const aceptadosCount = cards.filter(c => c.dataset.aceptado === '1').length;
+    const pctAceptados = totalPedidos > 0 ? Math.round((aceptadosCount / totalPedidos) * 100) : 0;
+
+    // 1. Contador de texto en barra de verificación
+    const elContador = document.getElementById(`cuadre-contador-aceptados-${rutaId}`);
+    if (elContador) {
+      elContador.textContent = `${aceptadosCount} de ${totalPedidos} pedidos aceptados`;
+      elContador.className = `${aceptadosCount === totalPedidos && totalPedidos > 0 ? 'text-emerald-700' : 'text-slate-900'} font-black text-sm`;
+    }
+
+    // 2. Barra de progreso
+    const elProgreso = document.getElementById(`cuadre-progress-bar-${rutaId}`);
+    if (elProgreso) {
+      elProgreso.style.width = `${pctAceptados}%`;
+    }
+
+    // 3. Botón de Aceptar todos / Desmarcar todos
+    const elBtnAccion = document.getElementById(`cuadre-btn-accion-todos-${rutaId}`);
+    if (elBtnAccion) {
+      if (aceptadosCount < totalPedidos) {
+        elBtnAccion.innerHTML = `
+          <button type="button" onclick="ModuloDomicilios.aceptarTodosPedidosCuadre(${rutaId}, true)"
+                  class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1 cursor-pointer">
+            <span>✓</span> <span>Aceptar todos (${rutaId})</span>
+          </button>
+        `;
+      } else {
+        elBtnAccion.innerHTML = `
+          <button type="button" onclick="ModuloDomicilios.aceptarTodosPedidosCuadre(${rutaId}, false)"
+                  class="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition cursor-pointer">
+            ↩ Desmarcar todos
+          </button>
+        `;
+      }
+    }
+
+    // 4. Texto del botón liquidar y texto descriptivo
+    const txtBtnLiq = document.getElementById(`cuadre-btn-liquidar-texto-${rutaId}`);
+    if (txtBtnLiq) {
+      const actual = txtBtnLiq.textContent || '';
+      const baseTexto = actual.replace(/\s*\(\d+\/\d+\s+aceptados\)/, '');
+      txtBtnLiq.textContent = `${baseTexto} (${aceptadosCount}/${totalPedidos} aceptados)`;
+    }
+
+    const txtDescLiq = document.getElementById(`cuadre-texto-liquidar-${rutaId}`);
+    if (txtDescLiq) {
+      txtDescLiq.textContent = aceptadosCount === totalPedidos
+        ? '✓ Todos los pedidos han sido aceptados y verificados. Listo para liquidar y asentar en auditoría.'
+        : `Hay ${totalPedidos - aceptadosCount} pedido(s) pendientes de aceptar. Se confirmará su aceptación automática al liquidar.`;
+    }
+  },
+
+  /** Marca o desmarca individualmente un pedido como verificado/aceptado en el cuadre sin recargar la página */
+  async toggleAceptarPedidoCuadre(pedidoId, aceptar) {
+    const card = document.getElementById(`item-pedido-${pedidoId}`);
+    const btn = document.getElementById(`btn-check-cuadre-${pedidoId}`);
+    const rutaId = card?.dataset?.rutaId;
+    const estadoPrevio = card?.dataset?.aceptado === '1';
+
+    // 1. Feedback visual optimista inmediato sin recargar la pantalla
+    if (card) {
+      card.dataset.aceptado = aceptar ? '1' : '0';
+      if (aceptar) {
+        card.classList.remove('bg-white', 'border-slate-200');
+        card.classList.add('bg-emerald-50/80', 'border-emerald-400', 'ring-1', 'ring-emerald-300');
+      } else {
+        card.classList.remove('bg-emerald-50/80', 'border-emerald-400', 'ring-emerald-300');
+        card.classList.add('bg-white');
+        const entregado = card.dataset.entregado === '1';
+        if (entregado) {
+          card.classList.add('border-emerald-300', 'ring-1', 'ring-emerald-100');
+        } else {
+          card.classList.remove('ring-1', 'ring-emerald-100');
+          card.classList.add('border-slate-200');
+        }
+      }
+    }
+
+    if (btn) {
+      if (aceptar) {
+        btn.className = 'mt-0.5 w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300';
+        btn.title = 'Pedido verificado y aceptado (clic para desmarcar)';
+        btn.setAttribute('onclick', `ModuloDomicilios.toggleAceptarPedidoCuadre(${pedidoId}, false)`);
+      } else {
+        btn.className = 'mt-0.5 w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 bg-white hover:bg-emerald-50 text-slate-300 hover:text-emerald-600 border-2 border-slate-300 hover:border-emerald-500';
+        btn.title = 'Clic para verificar y aceptar en caja';
+        btn.setAttribute('onclick', `ModuloDomicilios.toggleAceptarPedidoCuadre(${pedidoId}, true)`);
+      }
+    }
+
+    if (this._cuadrePedidos && Array.isArray(this._cuadrePedidos)) {
+      const p = this._cuadrePedidos.find(x => x.id === pedidoId);
+      if (p) p.aceptado_cuadre = Boolean(aceptar);
+    }
+
+    if (rutaId) {
+      this.actualizarContadoresCuadreRuta(rutaId);
+    }
+
+    try {
+      // 2. Guardar en backend silenciosamente
+      const res = await apiFetch(`/rutas/pedido/${pedidoId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aceptado_cuadre: Boolean(aceptar) })
       });
-      await this.cargarTabActual();
+
+      if (!res || !res.ok) {
+        throw new Error(res?.error || 'No se pudo guardar la verificación');
+      }
     } catch (err) {
       console.error('Error al actualizar estado de cuadre:', err);
-      alert('Error al actualizar estado del pedido: ' + err.message);
-      this.cargarTabActual();
+      // Revertir estado optimista en caso de error
+      if (card) {
+        card.dataset.aceptado = estadoPrevio ? '1' : '0';
+        card.classList.toggle('bg-emerald-50/80', estadoPrevio);
+        card.classList.toggle('border-emerald-400', estadoPrevio);
+        card.classList.toggle('ring-1', estadoPrevio);
+        card.classList.toggle('ring-emerald-300', estadoPrevio);
+        card.classList.toggle('bg-white', !estadoPrevio);
+      }
+      if (btn) {
+        btn.setAttribute('onclick', `ModuloDomicilios.toggleAceptarPedidoCuadre(${pedidoId}, ${!estadoPrevio})`);
+      }
+      if (rutaId) {
+        this.actualizarContadoresCuadreRuta(rutaId);
+      }
+      alert('Error al guardar verificación del pedido: ' + err.message);
     }
   },
 
-  /** Acepta o desmarca todos los pedidos de la ruta para el cuadre */
+  /** Acepta o desmarca todos los pedidos de la ruta para el cuadre sin recargar la página */
   async aceptarTodosPedidosCuadre(rutaId, aceptar = true) {
+    if (!rutaId) return;
+    const bodyRuta = document.getElementById(`ruta-body-cuadre-${rutaId}`);
+    const selector = bodyRuta ? `#ruta-body-cuadre-${rutaId} [id^="item-pedido-"]` : `[id^="item-pedido-"][data-ruta-id="${rutaId}"]`;
+    const cards = Array.from(document.querySelectorAll(selector));
+
+    const estadosPrevios = cards.map(c => ({
+      id: c.dataset.id,
+      aceptado: c.dataset.aceptado === '1'
+    }));
+
+    cards.forEach(card => {
+      card.dataset.aceptado = aceptar ? '1' : '0';
+      const pid = card.dataset.id;
+      const btn = document.getElementById(`btn-check-cuadre-${pid}`);
+      if (aceptar) {
+        card.classList.remove('bg-white', 'border-slate-200');
+        card.classList.add('bg-emerald-50/80', 'border-emerald-400', 'ring-1', 'ring-emerald-300');
+      } else {
+        card.classList.remove('bg-emerald-50/80', 'border-emerald-400', 'ring-emerald-300');
+        card.classList.add('bg-white');
+        const entregado = card.dataset.entregado === '1';
+        if (entregado) {
+          card.classList.add('border-emerald-300', 'ring-1', 'ring-emerald-100');
+        } else {
+          card.classList.remove('ring-1', 'ring-emerald-100');
+          card.classList.add('border-slate-200');
+        }
+      }
+      if (btn) {
+        if (aceptar) {
+          btn.className = 'mt-0.5 w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300';
+          btn.title = 'Pedido verificado y aceptado (clic para desmarcar)';
+          btn.setAttribute('onclick', `ModuloDomicilios.toggleAceptarPedidoCuadre(${pid}, false)`);
+        } else {
+          btn.className = 'mt-0.5 w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 bg-white hover:bg-emerald-50 text-slate-300 hover:text-emerald-600 border-2 border-slate-300 hover:border-emerald-500';
+          btn.title = 'Clic para verificar y aceptar en caja';
+          btn.setAttribute('onclick', `ModuloDomicilios.toggleAceptarPedidoCuadre(${pid}, true)`);
+        }
+      }
+    });
+
+    if (this._cuadrePedidos && Array.isArray(this._cuadrePedidos)) {
+      this._cuadrePedidos.forEach(p => {
+        if (p.ruta_id == rutaId) p.aceptado_cuadre = Boolean(aceptar);
+      });
+    }
+
+    this.actualizarContadoresCuadreRuta(rutaId);
+
     try {
-      await apiFetch(`/rutas/${rutaId}/aceptar-todos-cuadre`, {
+      const res = await apiFetch(`/rutas/${rutaId}/aceptar-todos-cuadre`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aceptado: Boolean(aceptar) })
       });
-      await this.cargarTabActual();
+      if (!res || !res.ok) {
+        throw new Error(res?.error || 'Error al aceptar pedidos');
+      }
     } catch (err) {
+      console.error('Error al aceptar todos los pedidos:', err);
+      estadosPrevios.forEach(item => {
+        const c = document.getElementById(`item-pedido-${item.id}`);
+        const b = document.getElementById(`btn-check-cuadre-${item.id}`);
+        if (c) c.dataset.aceptado = item.aceptado ? '1' : '0';
+        if (b) b.setAttribute('onclick', `ModuloDomicilios.toggleAceptarPedidoCuadre(${item.id}, ${!item.aceptado})`);
+      });
+      this.actualizarContadoresCuadreRuta(rutaId);
       alert('Error al aceptar pedidos: ' + err.message);
     }
   },
@@ -4911,10 +5093,14 @@ async guardarAjusteTotal(pedidoId) {
       });
       if (res && res.ok) {
         showToast(entregado ? '✓ Pedido marcado como entregado' : '↩ Pedido vuelto a pendiente');
-        if (this.subTabActual === 'cuadre') {
+        const scrollPrev = window.scrollY;
+        if (this.tabActiva === 'cuadre' || this.subTabActual === 'cuadre') {
           await this.renderTabCuadre();
         } else {
           await this.cargarTabActual();
+        }
+        if (scrollPrev > 0) {
+          window.scrollTo({ top: scrollPrev, behavior: 'instant' });
         }
       } else {
         alert(res?.error || 'No se pudo actualizar el estado de entrega');
@@ -4939,10 +5125,14 @@ async guardarAjusteTotal(pedidoId) {
       });
       if (res && res.ok) {
         showToast(entregado ? 'Pedido marcado como entregado' : 'Pedido vuelto a pendiente');
-        if (this.subTabActual === 'cuadre') {
+        const scrollPrev = window.scrollY;
+        if (this.tabActiva === 'cuadre' || this.subTabActual === 'cuadre') {
           await this.renderTabCuadre();
         } else {
           await this.cargarTabActual();
+        }
+        if (scrollPrev > 0) {
+          window.scrollTo({ top: scrollPrev, behavior: 'instant' });
         }
       } else {
         alert(res.error || 'No se pudo actualizar');

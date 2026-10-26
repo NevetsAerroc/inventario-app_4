@@ -89,9 +89,9 @@ router.post('/', (req, res) => {
   }
 
   const info = db.prepare(`
-    INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(skuLimpio, nombreLimpio, (categoria || '').trim(), (subcategoria || '').trim(), (ubicacion || '').trim(), stockFinal, precioFinal, codigoFinal);
+    INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras, precio_1)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(skuLimpio, nombreLimpio, (categoria || '').trim(), (subcategoria || '').trim(), (ubicacion || '').trim(), stockFinal, precioFinal, codigoFinal, precioFinal);
 
   const creado = db.prepare('SELECT * FROM productos WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ ok: true, data: creado });

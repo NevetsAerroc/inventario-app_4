@@ -77,6 +77,12 @@ const Auth = (() => {
       return canManageUsers();
     }
 
+    if (modulo === 'ventas') {
+      if (currentUser.rol === 'superadmin' || currentUser.rol === 'admin') return true;
+      if (perms.includes('ventas')) return true;
+      return perms.includes('inventario') || perms.includes('empaque') || perms.includes('carga');
+    }
+
     return perms.includes(modulo);
   }
 
@@ -708,6 +714,15 @@ const Auth = (() => {
                 </div>
               </label>
 
+              <!-- VENTAS -->
+              <label class="flex items-start gap-2 p-2 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-indigo-300">
+                <input type="checkbox" id="perm-ventas" ${perms.includes('ventas') ? 'checked' : ''} class="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500" />
+                <div>
+                  <span class="font-bold text-slate-800">🧾 Ventas y Facturación POS</span>
+                  <p class="text-[10px] text-slate-500">Crear facturas, cobrar y consultar/actualizar listas de precios.</p>
+                </div>
+              </label>
+
               <!-- USUARIOS -->
               <label class="flex items-start gap-2 p-2 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-indigo-300">
                 <input type="checkbox" id="perm-usuarios" ${perms.includes('usuarios') ? 'checked' : ''} class="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500" />
@@ -793,6 +808,7 @@ const Auth = (() => {
     const chkCarga = document.getElementById('perm-carga');
     const chkInv = document.getElementById('perm-inventario');
     const chkEmp = document.getElementById('perm-empaque');
+    const chkVen = document.getElementById('perm-ventas');
     const chkUsr = document.getElementById('perm-usuarios');
     const radioTodos = document.querySelector('input[name="perm-domicilio-tipo"][value="domicilios_todos"]');
     const radioEnCurso = document.querySelector('input[name="perm-domicilio-tipo"][value="domicilios_en_curso"]');
@@ -803,6 +819,7 @@ const Auth = (() => {
       if (chkCarga) chkCarga.checked = true;
       if (chkInv) chkInv.checked = true;
       if (chkEmp) chkEmp.checked = true;
+      if (chkVen) chkVen.checked = true;
       if (chkUsr) chkUsr.checked = true;
       if (radioTodos) radioTodos.checked = true;
       if (campoDomi) campoDomi.classList.add('hidden');
@@ -810,6 +827,7 @@ const Auth = (() => {
       if (chkCarga) chkCarga.checked = false;
       if (chkInv) chkInv.checked = false;
       if (chkEmp) chkEmp.checked = false;
+      if (chkVen) chkVen.checked = false;
       if (chkUsr) chkUsr.checked = false;
       if (radioEnCurso) radioEnCurso.checked = true;
       if (campoDomi) campoDomi.classList.remove('hidden');
@@ -817,6 +835,7 @@ const Auth = (() => {
       if (chkCarga) chkCarga.checked = false;
       if (chkInv) chkInv.checked = true;
       if (chkEmp) chkEmp.checked = true;
+      if (chkVen) chkVen.checked = true;
       if (chkUsr) chkUsr.checked = false;
       if (radioNinguno) radioNinguno.checked = true;
       if (campoDomi) campoDomi.classList.add('hidden');
@@ -999,6 +1018,7 @@ const Auth = (() => {
     if (document.getElementById('perm-carga')?.checked) permisos.push('carga');
     if (document.getElementById('perm-inventario')?.checked) permisos.push('inventario');
     if (document.getElementById('perm-empaque')?.checked) permisos.push('empaque');
+    if (document.getElementById('perm-ventas')?.checked) permisos.push('ventas');
     if (document.getElementById('perm-usuarios')?.checked) permisos.push('usuarios');
 
     const tipoDomi = document.querySelector('input[name="perm-domicilio-tipo"]:checked')?.value;
