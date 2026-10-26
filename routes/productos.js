@@ -8,6 +8,50 @@ const db = require('../db/database');
 const router = express.Router();
 const upload = multer({ dest: path.join(__dirname, '..', 'uploads') });
 
+function parsePrecio(val) {
+  if (val === null || val === undefined || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val * 100) / 100);
+
+  let s = String(val).trim().replace(/[$]/g, '').replace(/\s+/g, '');
+  if (!s) return 0;
+
+  if (s.includes('.') && s.includes(',')) {
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (s.includes(',')) {
+    const parts = s.split(',');
+    if (parts.length > 2) {
+      s = s.replace(/,/g, '');
+    } else {
+      const decimalPart = parts[1];
+      if (decimalPart.length <= 4) {
+        s = parts[0] + '.' + parts[1];
+      } else {
+        s = s.replace(/,/g, '');
+      }
+    }
+  } else if (s.includes('.')) {
+    const parts = s.split('.');
+    if (parts.length > 2) {
+      s = s.replace(/\./g, '');
+    } else {
+      if (parts[1].length === 3) {
+        s = parts[0] + parts[1];
+      } else {
+        s = parts[0] + '.' + parts[1];
+      }
+    }
+  }
+
+  const num = parseFloat(s);
+  return isNaN(num) ? 0 : Math.max(0, Math.round(num * 100) / 100);
+}
+
 // ------------------------------------------------------------------
 // GET /api/productos/siguiente-sku -> Devuelve el consecutivo (P001, P002...)
 // (IMPORTANTE: Debe ir antes de rutas dinámicas como /:id)
@@ -485,13 +529,14 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
     const updateStmt = db.prepare(`
       UPDATE productos
       SET nombre = ?, categoria = ?, subcategoria = ?, ubicacion = ?, stock = ?, precio = ?,
+          precio_1 = ?, precio_2 = ?, precio_3 = ?,
           codigo_barras = ?, codigo_caja = ?, unidades_por_caja = ?, updated_at = datetime('now')
       WHERE id = ?
     `);
 
     const insertStmt = db.prepare(`
-      INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras, codigo_caja, unidades_por_caja)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, precio_1, precio_2, precio_3, codigo_barras, codigo_caja, unidades_por_caja)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertMov = db.prepare(`
@@ -502,23 +547,31 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
     const tx = db.transaction(() => {
       for (let i = 0; i < rows.length; i++) {
         const fila = rows[i];
-        const sku = String(get(fila, 'SKU', 'Sku', 'Código') ?? '').trim();
-        const nombre = String(get(fila, 'Nombre', 'NombreProducto', 'Producto', 'Descripcion') ?? '').trim();
+        const sku = String(get(fila, 'SKU', 'Sku', 'Código', 'Codigo') ?? '').trim();
+        const nombre = String(get(fila, 'Nombre', 'NombreProducto', 'Producto', 'Descripcion', 'Artículo', 'Articulo') ?? '').trim();
         if (!sku || !nombre) {
           if (sku || nombre) errores.push(`Fila ${i + 2}: SKU y Nombre son obligatorios.`);
           continue;
         }
 
-        const categoria = String(get(fila, 'Categoria', 'Categoría') ?? '').trim();
+        const categoria = String(get(fila, 'Categoria', 'Categoría', 'Grupo') ?? '').trim();
         const subcategoria = String(get(fila, 'Subcategoria', 'Subcategoría') ?? '').trim();
         const ubicacion = String(get(fila, 'Ubicacion', 'Ubicación', 'Posicion') ?? '').trim();
 
-        const rawStock = get(fila, 'StockInicial', 'Stock', 'Stock Inicial', 'Cantidad');
+        const rawStock = get(fila, 'StockInicial', 'Stock', 'Stock Inicial', 'Cantidad', 'Saldo en BODEGAS y ALERTAS');
         const stockNum = parseInt(rawStock, 10);
-        const precioNum = parseFloat(get(fila, 'Precio', 'PrecioUnitario', 'Valor') ?? 0);
+        
+        const rawP1 = get(fila, 'Precio', 'PrecioUnitario', 'Valor', 'Venta', 'Precio 1', 'Precio1', 'General', 'Lista: GENERAL');
+        const rawP2 = get(fila, 'Precio 2', 'Precio2', 'Venta 2', 'Lista: PRECIO 2');
+        const rawP3 = get(fila, 'Precio 3', 'Precio3', 'Venta 3', 'Lista: PRECIO 3');
+
+        const p1Val = parsePrecio(rawP1);
+        const p2Val = parsePrecio(rawP2);
+        const p3Val = parsePrecio(rawP3);
+
         const unidadesPorCaja = parseInt(get(fila, 'UnidadesPorCaja', 'UndPorCaja', 'UnidadesCaja') ?? 1, 10) || 1;
 
-        let codigoBarras = db.normalizarCodigoBarras(get(fila, 'CodigoBarras', 'Codigo_Barras', 'Barcode', 'Codigo'));
+        let codigoBarras = db.normalizarCodigoBarras(get(fila, 'CodigoBarras', 'Codigo_Barras', 'Barcode', 'Codigo_Barras', 'Cod. Barras'));
         let codigoCaja = db.normalizarCodigoBarras(get(fila, 'CodigoCaja', 'Codigo_Caja', 'BarcodeCaja'));
 
         const prodExistente = buscarPorSku.get(sku);
@@ -543,7 +596,11 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
 
         if (prodExistente) {
           const stockFinal = !isNaN(stockNum) ? stockNum : prodExistente.stock;
-          const precioFinal = !isNaN(precioNum) ? precioNum : prodExistente.precio;
+          const precioFinal = p1Val > 0 ? p1Val : prodExistente.precio;
+          const p1Final = p1Val > 0 ? p1Val : (prodExistente.precio_1 || precioFinal);
+          const p2Final = p2Val > 0 ? p2Val : (prodExistente.precio_2 || p1Final);
+          const p3Final = p3Val > 0 ? p3Val : (prodExistente.precio_3 || p2Final);
+
           updateStmt.run(
             nombre,
             categoria || prodExistente.categoria,
@@ -551,6 +608,9 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
             ubicacion || prodExistente.ubicacion,
             stockFinal,
             precioFinal,
+            p1Final,
+            p2Final,
+            p3Final,
             codigoBarras,
             codigoCaja,
             unidadesPorCaja,
@@ -559,7 +619,11 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
           actualizados++;
         } else {
           const stockFinal = Number.isInteger(stockNum) && stockNum >= 0 ? stockNum : 0;
-          const precioFinal = !isNaN(precioNum) && precioNum >= 0 ? precioNum : 0;
+          const precioFinal = p1Val >= 0 ? p1Val : 0;
+          const p1Final = p1Val;
+          const p2Final = p2Val > 0 ? p2Val : p1Final;
+          const p3Final = p3Val > 0 ? p3Val : p2Final;
+
           const resInsert = insertStmt.run(
             sku,
             nombre,
@@ -568,6 +632,9 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
             ubicacion,
             stockFinal,
             precioFinal,
+            p1Final,
+            p2Final,
+            p3Final,
             codigoBarras,
             codigoCaja,
             unidadesPorCaja

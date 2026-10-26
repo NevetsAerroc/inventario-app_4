@@ -12,34 +12,58 @@ if (!fs.existsSync(uploadDir)) {
 }
 const upload = multer({ dest: uploadDir });
 
-// ------------------------------------------------------------------
-// Helper: Limpiar y parsear valores monetarios (ej: "14.000,00", "$14000", 14000)
-// ------------------------------------------------------------------
 function parsePrecio(val) {
   if (val === null || val === undefined || val === '') return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, val);
-  
-  let s = String(val).trim().replace(/[$]/g, '').trim();
-  // Si contiene comas y puntos (ej: 14.000,00)
+  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val * 100) / 100);
+
+  let s = String(val).trim().replace(/[$]/g, '').replace(/\s+/g, '');
+  if (!s) return 0;
+
+  // Ambos presentes: punto y coma (ej: "1.240.000,00" o "1,240,000.00")
   if (s.includes('.') && s.includes(',')) {
-    // Si la coma está después del punto (formato 14.000,00)
-    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastComma > lastDot) {
+      // Formato latino: miles con punto, decimales con coma (ej: 14.000,00 o 1.240.000,00)
       s = s.replace(/\./g, '').replace(',', '.');
     } else {
-      // Formato 14,000.00
+      // Formato anglo: miles con coma, decimales con punto (ej: 14,000.00 o 1,240,000.00)
       s = s.replace(/,/g, '');
     }
   } else if (s.includes(',')) {
-    // Solo comas (ej: 14000,50 o 14,000)
-    if (s.indexOf(',') === s.lastIndexOf(',') && (s.length - s.lastIndexOf(',') === 3 || s.length - s.lastIndexOf(',') === 2)) {
-      s = s.replace(',', '.');
-    } else {
+    // Solo contiene comas
+    const parts = s.split(',');
+    if (parts.length > 2) {
+      // Múltiples comas: separador de miles (ej: 1,240,000)
       s = s.replace(/,/g, '');
+    } else {
+      // Una sola coma: decimal (ej: "2000,00", "1650,00", "0,0000")
+      const decimalPart = parts[1];
+      if (decimalPart.length <= 4) {
+        s = parts[0] + '.' + parts[1];
+      } else {
+        s = s.replace(/,/g, '');
+      }
+    }
+  } else if (s.includes('.')) {
+    // Solo contiene puntos
+    const parts = s.split('.');
+    if (parts.length > 2) {
+      // Múltiples puntos: separador de miles (ej: 1.240.000)
+      s = s.replace(/\./g, '');
+    } else {
+      // Un solo punto: si tiene 3 dígitos al final (ej: "2.000", "15.000"), en COP es separador de miles!
+      if (parts[1].length === 3) {
+        s = parts[0] + parts[1];
+      } else {
+        // Decimal (ej: "12.50")
+        s = parts[0] + '.' + parts[1];
+      }
     }
   }
-  
+
   const num = parseFloat(s);
-  return isNaN(num) ? 0 : Math.max(0, num);
+  return isNaN(num) ? 0 : Math.max(0, Math.round(num * 100) / 100);
 }
 
 function parseBarcode(val) {
@@ -496,24 +520,25 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
       return res.status(400).json({ ok: false, error: 'El archivo Excel no tiene suficientes filas o está vacío.' });
     }
 
-    // Encontrar la fila del encabezado (la que contiene CODIGO, ARTICULO o VENTA)
+    // Encontrar la fila del encabezado real (debe contener CODIGO/SKU o ARTICULO/PRODUCTO)
     let headerRowIdx = -1;
-    for (let r = 0; r < Math.min(rawRows.length, 10); r++) {
-      const rowStrings = (rawRows[r] || []).map(c => String(c).trim().toUpperCase());
-      if (rowStrings.includes('CODIGO') || rowStrings.includes('CÓDIGO') || rowStrings.includes('ARTICULO') || rowStrings.includes('ARTÍCULO') || rowStrings.includes('VENTA')) {
+    for (let r = 0; r < Math.min(rawRows.length, 12); r++) {
+      const rowStrings = (rawRows[r] || []).map(c => String(c || '').replace(/\r?\n/g, ' ').trim().toUpperCase());
+      const hasCode = rowStrings.some(c => c === 'CODIGO' || c === 'CÓDIGO' || c === 'SKU' || c === 'COD');
+      const hasArt = rowStrings.some(c => c.includes('ARTICULO') || c.includes('ARTÍCULO') || c.includes('PRODUCTO') || c.includes('DESCRIP') || c === 'NOMBRE');
+      if (hasCode || hasArt) {
         headerRowIdx = r;
         break;
       }
     }
 
     if (headerRowIdx === -1) {
-      headerRowIdx = 0; // fallback a primera fila
+      headerRowIdx = 0;
     }
 
-    const header = rawRows[headerRowIdx].map(c => String(c).trim().toUpperCase());
+    const header = rawRows[headerRowIdx].map(c => String(c || '').replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase());
 
     // Mapear índices de columnas
-    let colId = -1;
     let colCodigo = -1;
     let colArticulo = -1;
     let colCodBarras = -1;
@@ -521,21 +546,22 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
     const colIvas = [];
 
     header.forEach((colName, idx) => {
-      if (colName === 'ID' && colId === -1) colId = idx;
-      else if ((colName === 'CODIGO' || colName === 'CÓDIGO' || colName === 'SKU' || colName === 'COD') && colCodigo === -1) colCodigo = idx;
-      else if ((colName === 'ARTICULO' || colName === 'ARTÍCULO' || colName === 'PRODUCTO' || colName === 'DESCRIPCION' || colName === 'DESCRIPCIÓN' || colName === 'NOMBRE') && colArticulo === -1) colArticulo = idx;
-      else if ((colName.includes('BARRAS') || colName === 'BARCODE' || colName === 'COD. BARRAS' || colName === 'COD_BARRAS') && colCodBarras === -1) colCodBarras = idx;
-      else if (colName.includes('VENTA MIN') || colName.includes('VENTAMIN') || colName.includes('MÍNIMA') || colName.includes('MINIMA')) {
-        // Ignorar "VENTA MIN" para que no se confunda con los precios de venta 1, 2 y 3
-      } else if (colName === 'VENTA' || colName.startsWith('VENTA') || colName.startsWith('PRECIO')) {
+      if ((colName === 'CODIGO' || colName === 'CÓDIGO' || colName === 'SKU' || colName === 'COD') && colCodigo === -1) {
+        colCodigo = idx;
+      } else if ((colName.includes('ARTICULO') || colName.includes('ARTÍCULO') || colName.includes('PRODUCTO') || colName.includes('DESCRIP') || colName === 'NOMBRE') && colArticulo === -1) {
+        colArticulo = idx;
+      } else if ((colName.includes('BARRAS') || colName === 'BARCODE' || colName === 'COD. BARRAS' || colName === 'COD_BARRAS') && colCodBarras === -1) {
+        colCodBarras = idx;
+      } else if (colName.includes('VENTA MIN') || colName.includes('VENTAMIN') || colName.includes('MÍNIMA') || colName.includes('MINIMA')) {
+        // Ignorar "VENTA MIN"
+      } else if (colName === 'VENTA' || colName.startsWith('VENTA') || colName.startsWith('PRECIO') || colName.startsWith('LISTA')) {
         colVentas.push(idx);
       } else if (colName === 'IVA') {
         colIvas.push(idx);
       }
     });
 
-    console.log('[importar-precios] Mapeo de columnas:', {
-      colId,
+    console.log('[importar-precios] Fila cabecera:', headerRowIdx, 'Mapeo de columnas:', {
       colCodigo,
       colArticulo,
       colCodBarras,
@@ -551,12 +577,17 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
       });
     }
 
-    // Preparar consultas de búsqueda para emparejar productos
-    const findBySku = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3 FROM productos WHERE UPPER(TRIM(sku)) = ?');
-    const findByCodigoInterno = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3 FROM productos WHERE UPPER(TRIM(codigo_interno)) = ?');
-    const findByBarcode = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3 FROM productos WHERE codigo_barras = ?');
-    const findById = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3 FROM productos WHERE id = ?');
-    const findByNombreExacto = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3 FROM productos WHERE UPPER(TRIM(nombre)) = ?');
+    // Consultas preparadas de búsqueda precisa
+    const findBySku = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3, codigo_interno FROM productos WHERE UPPER(TRIM(sku)) = ?');
+    const findByCodigoInterno = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3, codigo_interno FROM productos WHERE UPPER(TRIM(codigo_interno)) = ?');
+    const findByBarcode = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3, codigo_interno FROM productos WHERE codigo_barras = ? OR codigo_caja = ?');
+    const findByNombreExacto = db.prepare('SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3, codigo_interno FROM productos WHERE UPPER(TRIM(nombre)) = ?');
+    const findByNombreNormalizado = db.prepare(`
+      SELECT id, sku, nombre, precio, precio_1, precio_2, precio_3, codigo_interno
+      FROM productos
+      WHERE REPLACE(REPLACE(REPLACE(REPLACE(UPPER(nombre), ' ', ''), '-', ''), '.', ''), '/', '') = ?
+      LIMIT 1
+    `);
 
     const updatePrecios = db.prepare(`
       UPDATE productos
@@ -564,6 +595,10 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
           precio_1 = ?,
           precio_2 = ?,
           precio_3 = ?,
+          codigo_interno = CASE 
+            WHEN (codigo_interno IS NULL OR codigo_interno = '') AND ? != '' THEN ? 
+            ELSE codigo_interno 
+          END,
           updated_at = datetime('now')
       WHERE id = ?
     `);
@@ -579,16 +614,15 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
         const row = rawRows[r];
         if (!row || row.length === 0) continue;
 
-        const valId = colId !== -1 ? row[colId] : null;
         const valCodigo = colCodigo !== -1 ? String(row[colCodigo] || '').trim() : '';
         const valArticulo = colArticulo !== -1 ? String(row[colArticulo] || '').trim() : '';
         const valCodBarras = colCodBarras !== -1 ? parseBarcode(row[colCodBarras]) : '';
 
-        // Si la fila está totalmente vacía de identificadores, saltar
-        if (!valId && !valCodigo && !valArticulo && !valCodBarras) continue;
+        // Si la fila no tiene ni código ni artículo ni barcode, saltar
+        if (!valCodigo && !valArticulo && !valCodBarras) continue;
         procesadas++;
 
-        // Extraer los 3 precios VENTA
+        // Extraer los 3 precios de venta
         // colVentas[0] = Venta 1 (General)
         // colVentas[1] = Venta 2
         // colVentas[2] = Venta 3
@@ -600,47 +634,51 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
         const p2 = parsePrecio(p2Raw);
         const p3 = parsePrecio(p3Raw);
 
-        // Buscar coincidencia en productos
+        // Búsqueda jerárquica segura (JAMÁS por columna ID externa)
         let prod = null;
 
-        // 1. Por código / SKU
-        if (valCodigo) {
+        // 1. Por Nombre Exacto del Artículo (la correspondencia más fiel en listados ERP)
+        if (valArticulo) {
+          prod = findByNombreExacto.get(valArticulo.toUpperCase());
+        }
+
+        // 2. Por Nombre Normalizado (sin espacios ni puntuación)
+        if (!prod && valArticulo) {
+          const normArt = valArticulo.toUpperCase().replace(/[\s\.\-\/]/g, '');
+          if (normArt.length >= 3) {
+            prod = findByNombreNormalizado.get(normArt);
+          }
+        }
+
+        // 3. Por Código / SKU
+        if (!prod && valCodigo) {
           prod = findBySku.get(valCodigo.toUpperCase());
           if (!prod) {
             prod = findByCodigoInterno.get(valCodigo.toUpperCase());
           }
+          // Si el código en la base fue guardado con prefijo 'P' (ej P210006 o P309)
+          if (!prod && /^\d+$/.test(valCodigo)) {
+            prod = findBySku.get('P' + valCodigo) || findBySku.get('P' + valCodigo.padStart(3, '0'));
+          }
         }
 
-        // 2. Por código de barras
+        // 4. Por Código de Barras
         if (!prod && valCodBarras) {
-          prod = findByBarcode.get(valCodBarras);
+          prod = findByBarcode.get(valCodBarras, valCodBarras);
           if (!prod && db.normalizarCodigoBarras) {
             const norm = db.normalizarCodigoBarras(valCodBarras);
-            if (norm) prod = findByBarcode.get(norm);
+            if (norm) prod = findByBarcode.get(norm, norm);
           }
-        }
-
-        // 3. Por ID numérico (si viene en columna ID y coincide)
-        if (!prod && valId) {
-          const idNum = parseInt(valId, 10);
-          if (!isNaN(idNum) && idNum > 0) {
-            prod = findById.get(idNum);
-          }
-        }
-
-        // 4. Por Nombre exacto
-        if (!prod && valArticulo) {
-          prod = findByNombreExacto.get(valArticulo.toUpperCase());
         }
 
         if (prod) {
-          // Si el archivo solo trae precio 1 o si precio 2/3 son 0, manejar de manera inteligente
+          // Asignación inteligente de precios
           const nuevoP1 = p1 > 0 ? p1 : (prod.precio_1 || prod.precio || 0);
           const nuevoP2 = p2 > 0 ? p2 : (nuevoP1);
           const nuevoP3 = p3 > 0 ? p3 : (nuevoP2);
 
-          // Actualizar SOLO los precios, manteniendo inalterados nombre, stock, ubicacion, barcode, etc.
-          updatePrecios.run(nuevoP1, nuevoP1, nuevoP2, nuevoP3, prod.id);
+          // Actualizar SOLO los precios y vincular codigo_interno si no lo tenía
+          updatePrecios.run(nuevoP1, nuevoP1, nuevoP2, nuevoP3, valCodigo, valCodigo, prod.id);
           actualizados++;
 
           if (detallesActualizados.length < 50) {
