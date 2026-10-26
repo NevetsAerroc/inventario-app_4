@@ -10,7 +10,7 @@ const upload = multer({ dest: path.join(__dirname, '..', 'uploads') });
 
 function parsePrecio(val) {
   if (val === null || val === undefined || val === '') return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val * 100) / 100);
+  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val));
 
   let s = String(val).trim().replace(/[$]/g, '').replace(/\s+/g, '');
   if (!s) return 0;
@@ -49,7 +49,7 @@ function parsePrecio(val) {
   }
 
   const num = parseFloat(s);
-  return isNaN(num) ? 0 : Math.max(0, Math.round(num * 100) / 100);
+  return isNaN(num) ? 0 : Math.max(0, Math.round(num));
 }
 
 // ------------------------------------------------------------------
@@ -503,7 +503,7 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
   try {
     const workbook = XLSX.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '', raw: false });
 
     if (!rows || rows.length === 0) {
       return res.status(400).json({ ok: false, error: 'El archivo Excel está vacío.' });

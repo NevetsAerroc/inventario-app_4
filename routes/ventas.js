@@ -14,7 +14,7 @@ const upload = multer({ dest: uploadDir });
 
 function parsePrecio(val) {
   if (val === null || val === undefined || val === '') return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val * 100) / 100);
+  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val));
 
   let s = String(val).trim().replace(/[$]/g, '').replace(/\s+/g, '');
   if (!s) return 0;
@@ -63,7 +63,7 @@ function parsePrecio(val) {
   }
 
   const num = parseFloat(s);
-  return isNaN(num) ? 0 : Math.max(0, Math.round(num * 100) / 100);
+  return isNaN(num) ? 0 : Math.max(0, Math.round(num));
 }
 
 function parseBarcode(val) {

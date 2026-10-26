@@ -1277,16 +1277,37 @@ const ModuloVentas = (() => {
               <td class="py-2.5 px-3 font-mono text-slate-500 text-[11px]">${escapeHtml(p.codigo_barras || '-')}</td>
               <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-700">${p.stock}</td>
               <td class="py-2 px-2 text-right">
-                <input type="number" id="inp-p1-${p.id}" value="${p.precio_1 || p.precio || 0}" step="100" min="0"
-                       class="w-24 text-right px-2 py-1 bg-white border border-slate-200 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-500 font-bold text-emerald-800" />
+                <div class="relative inline-flex items-center">
+                  <span class="absolute left-2 text-emerald-600 font-bold text-xs select-none pointer-events-none">$</span>
+                  <input type="text" inputmode="numeric" id="inp-p1-${p.id}"
+                         value="${formatMoney(p.precio_1 || p.precio || 0)}"
+                         oninput="ModuloVentas.formatearInputPrecio(this)"
+                         onfocus="this.select()"
+                         title="Precio 1 (General)"
+                         class="w-28 text-right pl-5 pr-2 py-1 bg-white border border-emerald-300 rounded font-mono text-xs focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-800 shadow-sm" />
+                </div>
               </td>
               <td class="py-2 px-2 text-right">
-                <input type="number" id="inp-p2-${p.id}" value="${p.precio_2 || p.precio_1 || 0}" step="100" min="0"
-                       class="w-24 text-right px-2 py-1 bg-white border border-slate-200 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700" />
+                <div class="relative inline-flex items-center">
+                  <span class="absolute left-2 text-slate-400 font-bold text-xs select-none pointer-events-none">$</span>
+                  <input type="text" inputmode="numeric" id="inp-p2-${p.id}"
+                         value="${formatMoney(p.precio_2 || p.precio_1 || 0)}"
+                         oninput="ModuloVentas.formatearInputPrecio(this)"
+                         onfocus="this.select()"
+                         title="Precio 2"
+                         class="w-28 text-right pl-5 pr-2 py-1 bg-white border border-slate-200 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm" />
+                </div>
               </td>
               <td class="py-2 px-2 text-right">
-                <input type="number" id="inp-p3-${p.id}" value="${p.precio_3 || p.precio_1 || 0}" step="100" min="0"
-                       class="w-24 text-right px-2 py-1 bg-white border border-slate-200 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700" />
+                <div class="relative inline-flex items-center">
+                  <span class="absolute left-2 text-slate-400 font-bold text-xs select-none pointer-events-none">$</span>
+                  <input type="text" inputmode="numeric" id="inp-p3-${p.id}"
+                         value="${formatMoney(p.precio_3 || p.precio_1 || 0)}"
+                         oninput="ModuloVentas.formatearInputPrecio(this)"
+                         onfocus="this.select()"
+                         title="Precio 3"
+                         class="w-28 text-right pl-5 pr-2 py-1 bg-white border border-slate-200 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm" />
+                </div>
               </td>
               <td class="py-2 px-3 text-center">
                 <button type="button" onclick="ModuloVentas.guardarPrecioIndividual(${p.id})"
@@ -1302,12 +1323,27 @@ const ModuloVentas = (() => {
     `;
   }
 
+  function formatearInputPrecio(input) {
+    if (!input) return;
+    const digits = String(input.value || '').replace(/\D/g, '');
+    if (!digits) {
+      input.value = '0';
+      return;
+    }
+    const num = parseInt(digits, 10) || 0;
+    input.value = formatMoney(num);
+  }
+
   async function guardarPrecioIndividual(id) {
     const inp1 = document.getElementById(`inp-p1-${id}`);
     const inp2 = document.getElementById(`inp-p2-${id}`);
     const inp3 = document.getElementById(`inp-p3-${id}`);
     const btn = document.getElementById(`btn-save-precio-${id}`);
     if (!inp1 || !inp2 || !inp3) return;
+
+    const val1 = parseInt(String(inp1.value || '').replace(/\D/g, ''), 10) || 0;
+    const val2 = parseInt(String(inp2.value || '').replace(/\D/g, ''), 10) || 0;
+    const val3 = parseInt(String(inp3.value || '').replace(/\D/g, ''), 10) || 0;
 
     if (btn) {
       btn.disabled = true;
@@ -1319,15 +1355,18 @@ const ModuloVentas = (() => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          precio_1: parseFloat(inp1.value) || 0,
-          precio_2: parseFloat(inp2.value) || 0,
-          precio_3: parseFloat(inp3.value) || 0
+          precio_1: val1,
+          precio_2: val2,
+          precio_3: val3
         })
       });
 
       if (res && res.ok) {
         showToast('Precios guardados con éxito', 'success');
         if (btn) btn.textContent = '✓';
+        inp1.value = formatMoney(val1);
+        inp2.value = formatMoney(val2);
+        inp3.value = formatMoney(val3);
         setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '💾'; } }, 1500);
       } else {
         showToast(res.error || 'Error al guardar precio', 'error');
@@ -1489,91 +1528,105 @@ const ModuloVentas = (() => {
     if (sub) sub.textContent = `${venta.numero_factura} • ${venta.fecha}`;
 
     const items = venta.items || [];
+    const totalFactura = Number(venta.total) || 0;
+    const subtotal = Number(venta.subtotal) || totalFactura;
+    const descuento = Number(venta.descuento) || 0;
+    const clienteNombre = venta.cliente_nombre || 'Consumidor Final';
+    const clienteTelefono = venta.cliente_telefono || 'N/A';
+    const clienteDireccion = venta.cliente_direccion || 'No especificada';
+    const formaPago = venta.metodo_pago || 'EFECTIVO';
+
+    const filasItems = items.map(it => {
+      const precioUnitario = Number(it.precio_unitario || 0);
+      const cantidad = Number(it.cantidad || 0);
+      const itemSubtotal = Number(it.subtotal || (precioUnitario * cantidad));
+
+      return `
+        <tr>
+          <td style="text-align: left; padding: 3px 0; vertical-align: top;">
+            ${escapeHtml(it.nombre_producto)}
+            ${it.sku ? `<br><small style="font-size: 8px; color: #444;">SKU: ${escapeHtml(it.sku)}</small>` : ''}
+          </td>
+          <td style="text-align: center; vertical-align: top; padding: 3px 0;">${cantidad}</td>
+          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(precioUnitario)}</td>
+          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(itemSubtotal)}</td>
+        </tr>
+      `;
+    }).join('');
+
     body.innerHTML = `
-      <div id="ticket-print-area" class="text-center space-y-2">
-        <div class="border-b border-dashed border-slate-300 pb-2">
-          <div class="text-base font-black text-slate-900">JISPIPLAST EXPRESS</div>
-          <div class="text-[10px] text-slate-500">Comercializadora y Distribución</div>
-          <div class="text-[10px] text-slate-500">PBX / Ventas: Tel. (601) 000-0000</div>
+      <div id="ticket-print-area" style="font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.2; color: #000; width: 100%; max-width: 320px; margin: 0 auto;">
+        <div style="text-align: center;">
+          <img src="/img/Logo.png" style="max-width: 55mm; max-height: 25mm; margin: 0 auto 4px auto; display: block;" alt="Logo Jispiplast" onerror="this.style.display='none';" />
+          <p style="font-weight: bold; font-size: 15px; margin: 0;">Jispiplast</p>
+          <p style="margin: 2px 0;">Olga Inés Bueno Pineda</p>
+          <p style="margin: 2px 0;">Calle 13 #15-20</p>
         </div>
 
-        <div class="text-left text-[11px] py-1 border-b border-dashed border-slate-300 space-y-0.5">
-          <div class="flex justify-between">
-            <span class="text-slate-500">Factura:</span>
-            <span class="font-bold text-slate-900">${escapeHtml(venta.numero_factura)}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">Fecha:</span>
-            <span>${escapeHtml(venta.fecha)}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">Cliente:</span>
-            <span class="font-bold truncate max-w-[170px]">${escapeHtml(venta.cliente_nombre || 'Consumidor Final')}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">Cajero:</span>
-            <span>${escapeHtml(venta.usuario_nombre || 'Caja')}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">Lista:</span>
-            <span>${getNombreLista(venta.lista_precios)}</span>
-          </div>
-        </div>
+        <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
 
-        <div class="text-left py-1 border-b border-dashed border-slate-300">
-          <table class="w-full text-[11px]">
-            <thead>
-              <tr class="border-b border-slate-200 text-slate-500">
-                <th class="text-left pb-1 font-normal">Cant. x Prod</th>
-                <th class="text-right pb-1 font-normal">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              ${items.map(it => `
-                <tr>
-                  <td class="py-1">
-                    <div class="font-bold text-slate-800">${escapeHtml(it.nombre_producto)}</div>
-                    <div class="text-[10px] text-slate-500">${it.cantidad} x $${formatMoney(it.precio_unitario)}</div>
-                  </td>
-                  <td class="text-right py-1 font-bold font-mono">
-                    $ ${formatMoney(it.subtotal)}
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
+        <p style="margin: 2px 0;"><b>Fecha:</b> ${escapeHtml(venta.fecha)}</p>
+        <p style="margin: 2px 0;"><b>Factura N°:</b> ${escapeHtml(venta.numero_factura)}</p>
+        <p style="margin: 2px 0;"><b>Cliente:</b> ${escapeHtml(clienteNombre)}</p>
+        <p style="margin: 2px 0;"><b>Teléfono:</b> ${escapeHtml(clienteTelefono)}</p>
+        <p style="margin: 2px 0;"><b>Dirección:</b> ${escapeHtml(clienteDireccion)}</p>
+        <p style="margin: 2px 0;"><b>Cajero:</b> ${escapeHtml(venta.usuario_nombre || 'Caja')}</p>
+        <p style="margin: 2px 0;"><b>Lista Precios:</b> ${escapeHtml(getNombreLista(venta.lista_precios))}</p>
 
-        <div class="text-left py-1.5 border-b border-dashed border-slate-300 space-y-1 text-xs">
-          <div class="flex justify-between text-slate-600">
-            <span>Subtotal:</span>
-            <span class="font-mono">$ ${formatMoney(venta.subtotal)}</span>
-          </div>
-          ${venta.descuento > 0 ? `
-            <div class="flex justify-between text-slate-600">
-              <span>Descuento:</span>
-              <span class="font-mono">-$ ${formatMoney(venta.descuento)}</span>
-            </div>
+        <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+
+        <table style="width: 100%; border-collapse: collapse; margin: 4px 0;">
+          <thead>
+            <tr>
+              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: left;">DESCRIPCIÓN</th>
+              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: center; width: 22px;">CANT</th>
+              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 45px;">VR.UNI</th>
+              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 50px;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasItems}
+          </tbody>
+        </table>
+
+        <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+
+        <table style="width: 100%; margin-top: 4px;">
+          ${descuento > 0 ? `
+            <tr>
+              <td>Subtotal:</td>
+              <td style="text-align: right;">$${formatMoney(subtotal)}</td>
+            </tr>
+            <tr>
+              <td>Descuento:</td>
+              <td style="text-align: right;">-$${formatMoney(descuento)}</td>
+            </tr>
           ` : ''}
-          <div class="flex justify-between text-base font-black text-slate-900 pt-1">
-            <span>TOTAL:</span>
-            <span class="font-mono">$ ${formatMoney(venta.total)}</span>
-          </div>
-          <div class="flex justify-between text-[11px] text-slate-500 pt-1">
-            <span>Pago (${escapeHtml(venta.metodo_pago)}):</span>
-            <span class="font-mono font-semibold">$ ${formatMoney(venta.monto_recibido || venta.total)}</span>
-          </div>
-          ${venta.metodo_pago === 'EFECTIVO' ? `
-            <div class="flex justify-between text-[11px] text-emerald-700 font-bold">
-              <span>Cambio / Devuelta:</span>
-              <span class="font-mono">$ ${formatMoney(venta.cambio || 0)}</span>
-            </div>
+          <tr>
+            <td style="font-weight: bold; font-size: 12px;">VALOR A PAGAR:</td>
+            <td style="text-align: right; font-weight: bold; font-size: 13px;">$${formatMoney(totalFactura)}</td>
+          </tr>
+          <tr>
+            <td style="padding-top: 3px;">Forma de Pago:</td>
+            <td style="text-align: right; padding-top: 3px;">${escapeHtml(formaPago)}</td>
+          </tr>
+          ${formaPago === 'EFECTIVO' ? `
+            <tr>
+              <td style="padding-top: 2px;">Monto Recibido:</td>
+              <td style="text-align: right; padding-top: 2px;">$${formatMoney(venta.monto_recibido || totalFactura)}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding-top: 2px;">Cambio / Devuelta:</td>
+              <td style="text-align: right; font-weight: bold; padding-top: 2px;">$${formatMoney(venta.cambio || 0)}</td>
+            </tr>
           ` : ''}
-        </div>
+        </table>
 
-        <div class="pt-2 text-[10px] text-slate-500 space-y-1">
-          <p>¡Gracias por su compra!</p>
-          <p class="font-mono text-[9px] text-slate-400">Software Jispiplast Express</p>
+        <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+
+        <div style="text-align: center; font-weight: bold; margin-top: 8px;">
+          <p style="margin: 0;">*** ¡GRACIAS POR SU COMPRA! ***</p>
+          <p style="font-size: 9px; font-weight: normal; margin-top: 4px;">Venta registrada exitosamente.</p>
         </div>
       </div>
     `;
@@ -1587,53 +1640,159 @@ const ModuloVentas = (() => {
     enfocarBuscador();
   }
 
-  function imprimirTicketDirecto() {
-    const printArea = document.getElementById('ticket-print-area');
-    if (!printArea) return;
+  function imprimirTicketDirecto(facturaCustom) {
+    const f = facturaCustom || ultimaFacturaCreada;
+    if (!f) return;
 
-    // Crear iframe invisible o imprimir con ventana aislada
-    const printWindow = window.open('', '_blank', 'width=350,height=600');
-    if (!printWindow) {
-      window.print();
-      return;
+    // Usar iframe invisible exactamente igual que en modulo-empaque.js para evitar bloqueos de popup en iframe
+    let iframe = document.getElementById('iframe-impresion-ventas');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'iframe-impresion-ventas';
+      iframe.style.position = 'absolute';
+      iframe.style.width = '0px';
+      iframe.style.height = '0px';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
     }
 
-    printWindow.document.write(`
+    const doc = iframe.contentWindow.document;
+    doc.open();
+
+    const totalFactura = Number(f.total) || 0;
+    const subtotal = Number(f.subtotal) || totalFactura;
+    const descuento = Number(f.descuento) || 0;
+    const clienteNombre = f.cliente_nombre || 'Consumidor Final';
+    const clienteTelefono = f.cliente_telefono || 'N/A';
+    const clienteDireccion = f.cliente_direccion || 'No especificada';
+    const formaPago = f.metodo_pago || 'EFECTIVO';
+
+    const filasItems = (f.items || []).map(it => {
+      const precioUnitario = Number(it.precio_unitario || 0);
+      const cantidad = Number(it.cantidad || 0);
+      const itemSubtotal = Number(it.subtotal || (precioUnitario * cantidad));
+
+      return `
+        <tr>
+          <td style="text-align: left; padding: 3px 0; vertical-align: top;">
+            ${escapeHtml(it.nombre_producto)}
+            ${it.sku ? `<br><small style="font-size: 8px; color: #444;">SKU: ${escapeHtml(it.sku)}</small>` : ''}
+          </td>
+          <td style="text-align: center; vertical-align: top; padding: 3px 0;">${cantidad}</td>
+          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(precioUnitario)}</td>
+          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(itemSubtotal)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    doc.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Ticket ${ultimaFacturaCreada ? ultimaFacturaCreada.numero_factura : 'Venta'}</title>
+        <meta charset="utf-8">
+        <title>Factura POS - ${escapeHtml(f.numero_factura || 'Venta')}</title>
         <style>
-          @page { size: 80mm auto; margin: 0; }
+          @page { margin: 0; size: 80mm auto; }
           body {
             font-family: 'Courier New', Courier, monospace;
-            width: 76mm;
+            width: 72mm;
             margin: 0 auto;
-            padding: 8px;
+            padding: 4mm 0;
             font-size: 11px;
             color: #000;
+            line-height: 1.2;
           }
-          table { width: 100%; border-collapse: collapse; }
           .text-center { text-align: center; }
-          .text-left { text-align: left; }
           .text-right { text-align: right; }
-          .font-bold { font-weight: bold; }
-          .border-b { border-bottom: 1px dashed #000; }
-          .py-1 { padding-top: 4px; padding-bottom: 4px; }
+          .bold { font-weight: bold; }
+          .divider { border-top: 1px dashed #000; margin: 6px 0; }
+          .logo { max-width: 55mm; max-height: 25mm; margin: 0 auto 4px auto; display: block; }
+          table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+          th { border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; }
         </style>
       </head>
       <body>
-        ${printArea.innerHTML}
-        <script>
-          window.onload = function() {
-            window.print();
-            setTimeout(function() { window.close(); }, 500);
-          };
-        </script>
+        <div class="text-center">
+          <img src="/img/Logo.png" class="logo" alt="Logo Jispiplast" onerror="this.style.display='none';" />
+          <p class="bold" style="font-size: 15px; margin: 0;">Jispiplast</p>
+          <p style="margin: 2px 0;">Olga Inés Bueno Pineda</p>
+          <p style="margin: 2px 0;">Calle 13 #15-20</p>
+        </div>
+
+        <div class="divider"></div>
+
+        <p style="margin: 2px 0;"><b>Fecha:</b> ${escapeHtml(f.fecha)}</p>
+        <p style="margin: 2px 0;"><b>Factura N°:</b> ${escapeHtml(f.numero_factura)}</p>
+        <p style="margin: 2px 0;"><b>Cliente:</b> ${escapeHtml(clienteNombre)}</p>
+        <p style="margin: 2px 0;"><b>Teléfono:</b> ${escapeHtml(clienteTelefono)}</p>
+        <p style="margin: 2px 0;"><b>Dirección:</b> ${escapeHtml(clienteDireccion)}</p>
+        <p style="margin: 2px 0;"><b>Cajero:</b> ${escapeHtml(f.usuario_nombre || 'Caja')}</p>
+        <p style="margin: 2px 0;"><b>Lista Precios:</b> ${escapeHtml(getNombreLista(f.lista_precios))}</p>
+
+        <div class="divider"></div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: left;">DESCRIPCIÓN</th>
+              <th style="text-align: center; width: 22px;">CANT</th>
+              <th style="text-align: right; width: 45px;">VR.UNI</th>
+              <th style="text-align: right; width: 50px;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasItems}
+          </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <table style="margin-top: 4px;">
+          ${descuento > 0 ? `
+            <tr>
+              <td>Subtotal:</td>
+              <td class="text-right">$${formatMoney(subtotal)}</td>
+            </tr>
+            <tr>
+              <td>Descuento:</td>
+              <td class="text-right">-$${formatMoney(descuento)}</td>
+            </tr>
+          ` : ''}
+          <tr>
+            <td class="bold" style="font-size: 12px;">VALOR A PAGAR:</td>
+            <td class="text-right bold" style="font-size: 13px;">$${formatMoney(totalFactura)}</td>
+          </tr>
+          <tr>
+            <td style="padding-top: 3px;">Forma de Pago:</td>
+            <td class="text-right" style="padding-top: 3px;">${escapeHtml(formaPago)}</td>
+          </tr>
+          ${formaPago === 'EFECTIVO' ? `
+            <tr>
+              <td style="padding-top: 2px;">Monto Recibido:</td>
+              <td class="text-right" style="padding-top: 2px;">$${formatMoney(f.monto_recibido || totalFactura)}</td>
+            </tr>
+            <tr>
+              <td class="bold" style="padding-top: 2px;">Cambio / Devuelta:</td>
+              <td class="text-right bold" style="padding-top: 2px;">$${formatMoney(f.cambio || 0)}</td>
+            </tr>
+          ` : ''}
+        </table>
+
+        <div class="divider"></div>
+
+        <div class="text-center bold" style="margin-top: 8px;">
+          <p style="margin: 0;">*** ¡GRACIAS POR SU COMPRA! ***</p>
+          <p style="font-size: 9px; font-weight: normal; margin-top: 4px;">Venta registrada exitosamente.</p>
+        </div>
       </body>
       </html>
     `);
-    printWindow.document.close();
+
+    doc.close();
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      iframe.contentWindow.print();
+    }, 250);
   }
 
   // API pública del módulo
@@ -1663,6 +1822,7 @@ const ModuloVentas = (() => {
     subirArchivoPrecios,
     cargarCatalogoPrecios,
     onFiltrarCatalogoPrecios,
+    formatearInputPrecio,
     guardarPrecioIndividual,
     cargarHistorialFacturas,
     verTicketHistorial,
