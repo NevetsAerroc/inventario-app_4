@@ -14,6 +14,7 @@ const productosRouter = require('./routes/productos');
 const pedidosRouter = require('./routes/pedidos');
 const clientesRouter = require('./routes/clientes');
 const ventasRouter = require('./routes/ventas');
+const impresionRouter = require('./routes/impresion');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +38,7 @@ app.use('/api/productos', productosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/clientes', clientesRouter);
 app.use('/api/ventas', ventasRouter);
+app.use('/api/impresion', impresionRouter);
 app.get('/api/health', (req, res) => res.json({ ok: true, status: 'up', time: new Date().toISOString() }));
 
 // ==========================================

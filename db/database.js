@@ -82,9 +82,22 @@ db.exec(`
     subtotal REAL NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS cola_impresion (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL DEFAULT 'VENTA',
+    referencia_id INTEGER,
+    numero_factura TEXT DEFAULT '',
+    contenido_ticket TEXT NOT NULL,
+    estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+    usuario_nombre TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    printed_at DATETIME
+  );
+
   CREATE INDEX IF NOT EXISTS idx_ventas_numero ON ventas(numero_factura);
   CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
   CREATE INDEX IF NOT EXISTS idx_detalle_ventas_venta ON detalle_ventas(venta_id);
+  CREATE INDEX IF NOT EXISTS idx_cola_impresion_estado ON cola_impresion(estado);
 `);
 
 // ==========================================

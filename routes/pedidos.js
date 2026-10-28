@@ -493,6 +493,33 @@ function crearPedidoConItems(codigo_pedido, cliente, items, extras = {}) {
 }
 
 // ------------------------------------------------------------------
+// DELETE /api/pedidos/:id -> Eliminar pedido completo (ingresado por error)
+// ------------------------------------------------------------------
+router.delete('/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const pedido = db.prepare('SELECT id, codigo_pedido, cliente, estado, ruta_id FROM pedidos WHERE id = ?').get(id);
+    if (!pedido) {
+      return res.status(404).json({ ok: false, error: 'Pedido no encontrado.' });
+    }
+
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM detalle_pedidos WHERE pedido_id = ?').run(id);
+      db.prepare('DELETE FROM pedidos WHERE id = ?').run(id);
+    });
+    tx();
+
+    res.json({
+      ok: true,
+      mensaje: `Pedido ${pedido.codigo_pedido || '#' + id} eliminado con éxito.`
+    });
+  } catch (err) {
+    console.error('Error al eliminar pedido:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
 // DELETE /api/pedidos/:pedidoId/items/:itemId -> Eliminar ítem
 // ------------------------------------------------------------------
 router.delete('/:pedidoId/items/:itemId', (req, res) => {

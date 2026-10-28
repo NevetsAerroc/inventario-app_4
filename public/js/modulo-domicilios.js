@@ -856,16 +856,25 @@ const ModuloDomicilios = {
 
                 return `
                 <div class="relative bg-white p-2.5 rounded-xl border ${totalFalt > 0 && pendFalt > 0 ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'} shadow-2xs space-y-2 hover:border-slate-300 transition-colors" data-pedido-card="${p.id}">
-                  <!-- Botón lápiz en la esquina superior derecha -->
-                  <button type="button" onclick="event.stopPropagation(); ModuloDomicilios.abrirModalEditarPedido(${p.id})"
-                          class="absolute top-2 right-2 p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md border border-transparent hover:border-amber-200 transition-colors"
-                          title="Modificar pedido y productos">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  </button>
+                  <!-- Botones de Acción (Lápiz para editar / Basura para borrar pedido por error) -->
+                  <div class="absolute top-2 right-2 flex items-center gap-0.5 z-10" onclick="event.stopPropagation()">
+                    <button type="button" onclick="ModuloDomicilios.abrirModalEditarPedido(${p.id})"
+                            class="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md border border-transparent hover:border-amber-200 transition-colors cursor-pointer"
+                            title="Modificar pedido y productos">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                    <button type="button" onclick="ModuloDomicilios.confirmarEliminarPedido(${p.id}, '${escapeHtml(p.codigo_pedido || '#' + p.id)}')"
+                            class="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md border border-transparent hover:border-rose-200 transition-colors cursor-pointer"
+                            title="Borrar pedido ingresado por error">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
 
-                  <label class="flex items-start gap-2 text-xs cursor-pointer pr-6">
+                  <label class="flex items-start gap-2 text-xs cursor-pointer pr-14">
                     <input type="checkbox" value="${p.id}"
                            data-total="${total}"
                            data-paga-con="${pagaCon}"
@@ -1419,6 +1428,82 @@ const ModuloDomicilios = {
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.remove('flex');
   },
 
+  /**
+   * Cuadro de diálogo para confirmar la eliminación de un pedido ingresado por error.
+   */
+  confirmarEliminarPedido(pedidoId, codigoPedido = '') {
+    const modalExistente = document.getElementById('modal-confirmar-eliminar-pedido');
+    if (modalExistente) modalExistente.remove();
+
+    const codTexto = codigoPedido || ('Pedido #' + pedidoId);
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-confirmar-eliminar-pedido';
+    modal.className = 'fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center z-[70] p-4 animate-in fade-in duration-150';
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full border border-rose-200 overflow-hidden transform animate-in zoom-in-95 duration-150">
+        <div class="p-5 text-center space-y-3">
+          <div class="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl mx-auto flex items-center justify-center text-2xl shadow-inner">
+            🗑️
+          </div>
+          <div>
+            <h3 class="font-extrabold text-slate-900 text-base">¿Borrar este pedido?</h3>
+            <p class="text-xs font-mono font-bold text-rose-600 mt-1">${escapeHtml(codTexto)}</p>
+          </div>
+          <p class="text-xs text-slate-600 bg-amber-50 border border-amber-200 p-2.5 rounded-xl leading-relaxed">
+            Esta opción es por si el pedido se ingresó por error. Se eliminará de la lista de despacho y del sistema de forma permanente.
+          </p>
+          <div class="flex items-center gap-2 pt-2">
+            <button type="button" id="btn-cancelar-eliminar-ped"
+                    class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer">
+              No, Mantener
+            </button>
+            <button type="button" id="btn-confirmar-eliminar-ped"
+                    class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md cursor-pointer">
+              <span>🗑️</span> Sí, Borrar
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#btn-cancelar-eliminar-ped')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modal.remove();
+    });
+
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.remove();
+    };
+
+    modal.querySelector('#btn-confirmar-eliminar-ped')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="animate-spin text-sm">⏳</span> Borrando...`;
+
+      try {
+        const res = await apiFetch(`/pedidos/${pedidoId}`, { method: 'DELETE' });
+        if (res && res.ok) {
+          modal.remove();
+          ModuloDomicilios.cerrarModalEditarPedido();
+          showToast(res.mensaje || 'Pedido eliminado con éxito.', 'success');
+          await ModuloDomicilios.renderTabDespachar();
+        } else {
+          showToast(res?.error || 'No se pudo eliminar el pedido.', 'error');
+          btn.disabled = false;
+          btn.innerHTML = `<span>🗑️</span> Sí, Borrar`;
+        }
+      } catch (err) {
+        showToast('Error de conexión al eliminar el pedido.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = `<span>🗑️</span> Sí, Borrar`;
+      }
+    });
+  },
+
   /** Cierra de forma segura e inmediata el modal de edición de pedidos. */
   cerrarModalEditarPedido() {
     const modalPrevio = document.getElementById('modal-editar-pedido-completo');
@@ -1490,9 +1575,19 @@ const ModuloDomicilios = {
               </h3>
               <p class="text-xs text-slate-300">Central de Domicilios · Quitar/cambiar productos, cantidades y entrega</p>
             </div>
-            <button type="button" id="btn-cerrar-modal-edit" onclick="ModuloDomicilios.cerrarModalEditarPedido()"
-                    class="text-slate-400 hover:text-white text-2xl font-bold p-1 leading-none hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                    title="Cerrar">&times;</button>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="ModuloDomicilios.confirmarEliminarPedido(${pedido.id}, '${escapeHtml(pedido.codigo_pedido || '#' + pedido.id)}')"
+                      class="text-rose-300 hover:text-white hover:bg-rose-600/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1 border border-rose-500/40"
+                      title="Borrar pedido ingresado por error">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span class="text-[11px] font-bold">Borrar Pedido</span>
+              </button>
+              <button type="button" id="btn-cerrar-modal-edit" onclick="ModuloDomicilios.cerrarModalEditarPedido()"
+                      class="text-slate-400 hover:text-white text-2xl font-bold p-1 leading-none hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                      title="Cerrar">&times;</button>
+            </div>
           </div>
 
           <!-- Cuerpo con Scroll -->
@@ -1637,15 +1732,26 @@ const ModuloDomicilios = {
           </div>
 
           <!-- Pie con Acciones -->
-          <div class="px-5 py-3.5 bg-slate-100 border-t border-slate-200 flex justify-end gap-2.5 shrink-0">
-            <button type="button" id="btn-cancelar-modal-edit" onclick="ModuloDomicilios.cerrarModalEditarPedido()"
-                    class="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
-              Cancelar
+          <div class="px-5 py-3.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-2.5 shrink-0">
+            <button type="button" id="btn-eliminar-modal-edit"
+                    onclick="ModuloDomicilios.confirmarEliminarPedido(${pedido.id}, '${escapeHtml(pedido.codigo_pedido || '#' + pedido.id)}')"
+                    class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 hover:border-rose-400 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                    title="Borrar este pedido si fue ingresado por error">
+              <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>Borrar Pedido</span>
             </button>
-            <button type="button" id="btn-guardar-modal-edit"
-                    class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md cursor-pointer">
-              <span>💾</span> Guardar Cambios en Pedido
-            </button>
+            <div class="flex items-center gap-2">
+              <button type="button" id="btn-cancelar-modal-edit" onclick="ModuloDomicilios.cerrarModalEditarPedido()"
+                      class="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
+                Cancelar
+              </button>
+              <button type="button" id="btn-guardar-modal-edit"
+                      class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md cursor-pointer">
+                <span>💾</span> Guardar Cambios en Pedido
+              </button>
+            </div>
           </div>
         </div>
       `;

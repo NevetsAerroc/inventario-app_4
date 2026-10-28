@@ -41,6 +41,16 @@ const ModuloVentas = (() => {
         </div>
 
         <div class="flex items-center gap-2">
+          <button type="button" onclick="ModuloVentas.abrirModalServidorImpresion()"
+                  class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                  title="Configuración de Servidor de Impresión Local">
+            <span>🖨️</span>
+            <span class="hidden sm:inline">Impresora Tienda:</span>
+            <span id="label-estado-impresora" class="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+              <span id="dot-estado-impresora" class="w-2 h-2 rounded-full bg-slate-400 inline-block"></span>
+              <span id="txt-estado-impresora">Verificar</span>
+            </span>
+          </button>
           <div class="bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 text-xs flex items-center gap-2">
             <span class="text-slate-500 font-medium">Factura:</span>
             <span id="label-consecutivo-pos" class="font-mono font-bold text-indigo-700">${consecutivoActual}</span>
@@ -71,12 +81,79 @@ const ModuloVentas = (() => {
             <!-- Contenido del ticket -->
           </div>
 
-          <div class="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-2">
-            <button onclick="ModuloVentas.imprimirTicketDirecto()" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm">
-              <span>🖨️</span> <span>Imprimir Ticket</span>
+          <div class="p-3 bg-slate-100 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <button onclick="ModuloVentas.imprimirTicketDirecto()" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer" title="Imprimir en este dispositivo mediante el navegador">
+              <span>🖨️</span> <span>Imprimir Aquí</span>
             </button>
-            <button onclick="ModuloVentas.cerrarModalTicket()" class="px-4 py-2.5 rounded-xl bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold text-xs">
+            <button onclick="ModuloVentas.enviarAImpresoraTienda()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer" title="Enviar directamente a la impresora térmica conectada al PC de la tienda">
+              <span>⚡</span> <span>Imprimir en Tienda</span>
+            </button>
+            <button onclick="ModuloVentas.cerrarModalTicket()" class="px-3 py-2.5 rounded-xl bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold text-xs cursor-pointer">
               Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL CONFIGURACIÓN SERVIDOR DE IMPRESIÓN LOCAL -->
+      <div id="modal-servidor-impresion" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+          <div class="bg-slate-900 text-white p-4 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <span class="text-2xl">🖨️</span>
+              <div>
+                <h3 class="font-bold text-sm sm:text-base">Servidor de Impresión Local (Node.js)</h3>
+                <p class="text-xs text-slate-400">Imprime en la tienda desde celulares, tablets u otros PCs</p>
+              </div>
+            </div>
+            <button onclick="ModuloVentas.cerrarModalServidorImpresion()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">✕</button>
+          </div>
+
+          <div class="p-5 overflow-y-auto space-y-4 text-xs text-slate-700 flex-1">
+            <!-- Estado en Vivo -->
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-800">Estado del Agente en el PC de la Tienda:</span>
+                <span id="info-estado-agente-badge" class="px-2.5 py-1 rounded-full text-xs font-extrabold bg-slate-200 text-slate-600 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-slate-400"></span> Verificando...
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-500 space-y-1">
+                <p>• <b>Impresora:</b> <span id="info-impresora-nombre" class="font-mono text-slate-700 font-bold">Predeterminada de Windows</span></p>
+                <p>• <b>Tickets en espera:</b> <span id="info-tickets-cola" class="font-bold text-slate-700">0</span></p>
+              </div>
+            </div>
+
+            <!-- Pasos de Instalación -->
+            <div class="space-y-2.5">
+              <h4 class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <span>🚀</span> ¿Cómo instalarlo en el computador de la tienda?
+              </h4>
+              <p class="text-slate-600 leading-relaxed">
+                Solo toma 2 minutos. En el computador que tiene conectada la impresora térmica USB:
+              </p>
+              <div class="space-y-2 bg-indigo-50/70 border border-indigo-200 rounded-xl p-3 text-[11px]">
+                <p><b>1.</b> Asegúrate de tener instalado <b>Node.js</b> (si no lo tienes, descárgalo gratis de <a href="https://nodejs.org" target="_blank" class="text-indigo-600 underline font-bold">nodejs.org</a>).</p>
+                <p><b>2.</b> Descarga estos 2 archivos en una carpeta (por ejemplo en el Escritorio):</p>
+                <div class="flex flex-wrap gap-2 pt-1">
+                  <a href="/api/impresion/descargar-agente" download="agente-impresion.js" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1 shadow-2xs">
+                    <span>📥</span> Descargar agente-impresion.js
+                  </a>
+                  <a href="/api/impresion/descargar-bat" download="iniciar_impresora.bat" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold flex items-center gap-1 shadow-2xs">
+                    <span>⚡</span> Descargar iniciar_impresora.bat
+                  </a>
+                </div>
+                <p class="pt-1"><b>3.</b> Haz <b>doble clic en <code>iniciar_impresora.bat</code></b>. ¡Listo! Verás que el estado cambia a <b class="text-emerald-700">🟢 En Línea</b> y cada venta que hagas desde tu celular se imprimirá automáticamente en la tienda.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3.5 bg-slate-100 border-t border-slate-200 flex justify-between items-center gap-2">
+            <button onclick="ModuloVentas.verificarEstadoServidorImpresion(true)" class="px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer">
+              <span>🔄</span> Actualizar Estado
+            </button>
+            <button onclick="ModuloVentas.cerrarModalServidorImpresion()" class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer">
+              Entendido
             </button>
           </div>
         </div>
@@ -103,10 +180,12 @@ const ModuloVentas = (() => {
     await cargarConsecutivo();
     cambiarSubtab(subtabActiva);
     iniciarListenerTecladoCodigoBarras();
+    verificarEstadoServidorImpresion();
   }
 
   function onEnterTab() {
     cargarConsecutivo();
+    verificarEstadoServidorImpresion();
     if (subtabActiva === 'precios') cargarCatalogoPrecios();
     if (subtabActiva === 'historial') cargarHistorialFacturas();
     enfocarBuscador();
@@ -1803,6 +1882,156 @@ const ModuloVentas = (() => {
     }, 250);
   }
 
+  // ------------------------------------------------------------
+  // SERVIDOR DE IMPRESIÓN LOCAL (TIENDA)
+  // ------------------------------------------------------------
+  function generarTextoPlanoTicket(venta) {
+    if (!venta) return '';
+    const f = venta;
+    const items = f.items || [];
+    const ancho = 40;
+    const sep = '='.repeat(ancho);
+    const lin = '-'.repeat(ancho);
+
+    let t = '';
+    t += '           JISPIPLAST           \n';
+    t += '     Olga Ines Bueno Pineda     \n';
+    t += '         Calle 13 #15-20        \n';
+    t += sep + '\n';
+    t += `Fecha: ${f.fecha || new Date().toLocaleString('es-CO')}\n`;
+    t += `Factura N°: ${f.numero_factura}\n`;
+    t += `Cliente: ${f.cliente_nombre || 'Consumidor Final'}\n`;
+    if (f.cliente_telefono) t += `Teléfono: ${f.cliente_telefono}\n`;
+    if (f.cliente_direccion) t += `Dirección: ${f.cliente_direccion}\n`;
+    t += `Cajero: ${f.usuario_nombre || 'Caja'}\n`;
+    t += `Lista: ${getNombreLista(f.lista_precios || 'precio_1')}\n`;
+    t += sep + '\n';
+    t += 'DESCRIPCION       CANT  VR.UNI    TOTAL\n';
+    t += lin + '\n';
+
+    items.forEach(it => {
+      const nom = (it.nombre_producto || 'Producto').substring(0, 16).padEnd(16, ' ');
+      const cant = String(it.cantidad || 1).padStart(4, ' ');
+      const uni = String(Math.round(it.precio_unitario || 0)).padStart(8, ' ');
+      const sub = String(Math.round(it.subtotal || 0)).padStart(9, ' ');
+      t += `${nom} ${cant} ${uni} ${sub}\n`;
+    });
+
+    t += sep + '\n';
+    const total = Math.round(Number(f.total) || 0);
+    const subtotal = Math.round(Number(f.subtotal) || total);
+    const descuento = Math.round(Number(f.descuento) || 0);
+
+    if (descuento > 0) {
+      t += `SUBTOTAL:          $ ${formatMoney(subtotal)}\n`;
+      t += `DESCUENTO:        -$ ${formatMoney(descuento)}\n`;
+    }
+    t += `VALOR A PAGAR:     $ ${formatMoney(total)}\n`;
+    t += `Forma de Pago:     ${f.metodo_pago || 'EFECTIVO'}\n`;
+    if (f.metodo_pago === 'EFECTIVO') {
+      const rec = Math.round(Number(f.monto_recibido) || total);
+      const cam = Math.round(Number(f.cambio) || 0);
+      t += `Recibido:          $ ${formatMoney(rec)}\n`;
+      t += `Cambio:            $ ${formatMoney(cam)}\n`;
+    }
+    t += sep + '\n';
+    t += '     ¡GRACIAS POR SU COMPRA!     \n';
+    t += '         Vuelva pronto          \n\n\n\n\n';
+    return t;
+  }
+
+  async function enviarAImpresoraTienda(facturaCustom) {
+    const f = facturaCustom || ultimaFacturaCreada;
+    if (!f) {
+      showToast('No hay ninguna factura activa para imprimir.', 'error');
+      return;
+    }
+
+    const textoPlano = generarTextoPlanoTicket(f);
+    showToast('Enviando factura a la impresora física de la tienda...', 'info');
+
+    try {
+      const res = await apiFetch('/impresion/encolar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'VENTA',
+          referencia_id: f.id,
+          numero_factura: f.numero_factura,
+          contenido_ticket: textoPlano,
+          usuario_nombre: f.usuario_nombre
+        })
+      });
+
+      if (res && res.ok) {
+        showToast(`✓ Factura ${f.numero_factura} enviada a imprimir en tienda.`, 'success');
+      } else {
+        showToast(res?.error || 'Error al enviar a la impresora de la tienda.', 'error');
+      }
+    } catch (err) {
+      showToast('Error de red al enviar la impresión.', 'error');
+    }
+  }
+
+  async function verificarEstadoServidorImpresion(mostrarToast = false) {
+    try {
+      const res = await apiFetch('/impresion/estado');
+      const conectado = res && res.agente_conectado;
+
+      const dotTop = document.getElementById('dot-estado-impresora');
+      const txtTop = document.getElementById('txt-estado-impresora');
+      const badgeModal = document.getElementById('info-estado-agente-badge');
+      const txtCola = document.getElementById('info-tickets-cola');
+      const txtImpr = document.getElementById('info-impresora-nombre');
+
+      if (dotTop && txtTop) {
+        if (conectado) {
+          dotTop.className = 'w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse';
+          txtTop.textContent = 'En Línea';
+          txtTop.className = 'text-emerald-700 font-bold';
+        } else {
+          dotTop.className = 'w-2 h-2 rounded-full bg-slate-400 inline-block';
+          txtTop.textContent = 'Fuera de Línea';
+          txtTop.className = 'text-slate-500 font-bold';
+        }
+      }
+
+      if (badgeModal) {
+        if (conectado) {
+          badgeModal.className = 'px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 flex items-center gap-1.5';
+          badgeModal.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> 🟢 En Línea (Listo)';
+        } else {
+          badgeModal.className = 'px-2.5 py-1 rounded-full text-xs font-extrabold bg-slate-100 text-slate-600 flex items-center gap-1.5';
+          badgeModal.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span> ⚪ Fuera de Línea (Esperando PC)';
+        }
+      }
+
+      if (txtCola) txtCola.textContent = String(res?.pendientes_en_cola || 0);
+      if (txtImpr) txtImpr.textContent = res?.impresora_registrada || 'Predeterminada de Windows';
+
+      if (mostrarToast) {
+        if (conectado) {
+          showToast('✓ El servidor de impresión de la tienda está conectado y listo.', 'success');
+        } else {
+          showToast('El servidor de impresión en el PC de la tienda aún no está iniciado.', 'info');
+        }
+      }
+    } catch (e) {}
+  }
+
+  function abrirModalServidorImpresion() {
+    const modal = document.getElementById('modal-servidor-impresion');
+    if (modal) {
+      modal.classList.remove('hidden');
+      verificarEstadoServidorImpresion(false);
+    }
+  }
+
+  function cerrarModalServidorImpresion() {
+    const modal = document.getElementById('modal-servidor-impresion');
+    if (modal) modal.classList.add('hidden');
+  }
+
   // API pública del módulo
   return {
     render,
@@ -1837,6 +2066,10 @@ const ModuloVentas = (() => {
     anularFactura,
     abrirModalTicket,
     cerrarModalTicket,
-    imprimirTicketDirecto
+    imprimirTicketDirecto,
+    abrirModalServidorImpresion,
+    cerrarModalServidorImpresion,
+    verificarEstadoServidorImpresion,
+    enviarAImpresoraTienda
   };
 })();
