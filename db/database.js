@@ -94,6 +94,12 @@ db.exec(`
     printed_at DATETIME
   );
 
+  CREATE TABLE IF NOT EXISTS configuracion_app (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS idx_ventas_numero ON ventas(numero_factura);
   CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
   CREATE INDEX IF NOT EXISTS idx_detalle_ventas_venta ON detalle_ventas(venta_id);

@@ -15,6 +15,62 @@ const ModuloVentas = (() => {
   let statsHistorial = null;
   let ultimaFacturaCreada = null;
 
+  // Configuración de formato y visibilidad de factura (80mm)
+  const CONFIG_FACTURA_DEFAULT = {
+    mostrarLogo: true,
+    urlLogo: '/img/Logo.png',
+    mostrarNombreNegocio: true,
+    nombreNegocio: 'Jispiplast',
+    mostrarRazonSocial: true,
+    razonSocial: 'Olga Inés Bueno Pineda',
+    mostrarNit: true,
+    nitNegocio: '',
+    mostrarDireccion: true,
+    direccionNegocio: 'Calle 13 #15-20',
+    mostrarTelefono: true,
+    telefonoNegocio: '',
+    mostrarCiudad: true,
+    ciudadNegocio: 'Bucaramanga',
+    mostrarFecha: true,
+    mostrarNumeroFactura: true,
+    mostrarCliente: true,
+    mostrarTelefonoCliente: true,
+    mostrarDireccionCliente: true,
+    mostrarCajero: true,
+    mostrarListaPrecios: true,
+    mostrarSku: true,
+    mostrarPrecioUnitario: true,
+    mostrarSubtotalDescuento: true,
+    mostrarMetodoPago: true,
+    mostrarCambio: true,
+    mostrarPiePagina: true,
+    textoPiePagina: '*** ¡GRACIAS POR SU COMPRA! ***\nVuelva pronto',
+    tamanoPapel: '80mm'
+  };
+
+  let configFactura = Object.assign({}, CONFIG_FACTURA_DEFAULT);
+  let configFacturaTemp = null;
+
+  const MUESTRA_FACTURA_DEFAULT = {
+    numero_factura: 'FAC-0001',
+    fecha: new Date().toLocaleDateString('es-CO') + ' ' + new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+    cliente_nombre: 'Comercializadora San Mateo',
+    cliente_telefono: '312 345 6789',
+    cliente_direccion: 'Carrera 22 #35-40',
+    usuario_nombre: 'Caja Principal',
+    lista_precios: 'precio_1',
+    subtotal: 26200,
+    descuento: 2000,
+    total: 24200,
+    metodo_pago: 'EFECTIVO',
+    monto_recibido: 30000,
+    cambio: 5800,
+    items: [
+      { sku: 'P309', nombre_producto: 'BOLSA 18X24COLORX10', cantidad: 3, precio_unitario: 2000, subtotal: 6000 },
+      { sku: 'P307', nombre_producto: 'BOLSA 18X24 P.P CAL1.2', cantidad: 1, precio_unitario: 20200, subtotal: 20200 }
+    ]
+  };
+
   // ------------------------------------------------------------
   // INICIALIZACIÓN Y RENDER PRINCIPAL
   // ------------------------------------------------------------
@@ -41,6 +97,12 @@ const ModuloVentas = (() => {
         </div>
 
         <div class="flex items-center gap-2">
+          <button type="button" onclick="ModuloVentas.abrirModalConfigTicket()"
+                  class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                  title="Configurar campos y visibilidad del ticket (ojitos de activar/desactivar)">
+            <span>👁️</span>
+            <span class="hidden md:inline">Diseño Factura</span>
+          </button>
           <button type="button" onclick="ModuloVentas.abrirModalServidorImpresion()"
                   class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
                   title="Configuración de Servidor de Impresión Local">
@@ -74,7 +136,12 @@ const ModuloVentas = (() => {
                 <p id="ticket-modal-sub" class="text-[11px] text-slate-400">Comprobante térmico 80mm</p>
               </div>
             </div>
-            <button onclick="ModuloVentas.cerrarModalTicket()" class="text-slate-400 hover:text-white text-lg">✕</button>
+            <div class="flex items-center gap-1.5">
+              <button onclick="ModuloVentas.abrirModalConfigTicket()" class="px-2.5 py-1 rounded-lg bg-indigo-600/70 hover:bg-indigo-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors" title="Configurar qué campos se ven en este ticket">
+                <span>👁️</span> <span>Diseño</span>
+              </button>
+              <button onclick="ModuloVentas.cerrarModalTicket()" class="text-slate-400 hover:text-white text-lg">✕</button>
+            </div>
           </div>
 
           <div id="ticket-body-container" class="p-4 overflow-y-auto font-mono text-xs text-slate-800 bg-amber-50/30 flex-1">
@@ -91,6 +158,75 @@ const ModuloVentas = (() => {
             <button onclick="ModuloVentas.cerrarModalTicket()" class="px-3 py-2.5 rounded-xl bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold text-xs cursor-pointer">
               Cerrar
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL DE CONFIGURACIÓN Y EDICIÓN DE FACTURA (OJITOS DE VISIBILIDAD) -->
+      <div id="modal-config-ticket" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full overflow-hidden flex flex-col max-h-[92vh] border border-slate-700/30">
+          <!-- Header -->
+          <div class="bg-slate-900 text-white p-4 flex items-center justify-between border-b border-slate-800">
+            <div class="flex items-center gap-3">
+              <span class="text-2xl">👁️</span>
+              <div>
+                <h3 class="font-bold text-base sm:text-lg flex items-center gap-2">
+                  <span>Edición y Diseño de Factura</span>
+                  <span class="text-xs bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-2 py-0.5 rounded-full font-mono font-bold">Térmica 80mm</span>
+                </h3>
+                <p class="text-xs text-slate-400">Activa o desactiva con los ojitos (<b class="text-emerald-400">👁️ Visible</b> / <b class="text-slate-400">👁️‍🗨️ Oculto</b>) los elementos que deseas que se impriman en el ticket.</p>
+              </div>
+            </div>
+            <button onclick="ModuloVentas.cerrarModalConfigTicket()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">✕</button>
+          </div>
+
+          <!-- Body con 2 columnas: Controles a la izquierda y Vista previa en vivo a la derecha -->
+          <div class="p-4 sm:p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-slate-50">
+            <!-- Columna Izquierda: Opciones y Ojitos -->
+            <div id="config-ticket-controles" class="lg:col-span-7 space-y-4">
+              <!-- Renderizado por renderControlesConfigTicket() -->
+            </div>
+
+            <!-- Columna Derecha: Vista previa térmica en tiempo real -->
+            <div class="lg:col-span-5 flex flex-col">
+              <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sticky top-0 flex flex-col h-full max-h-[700px]">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div class="flex items-center gap-2 font-bold text-xs text-slate-800">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                    <span>Vista Previa en Vivo</span>
+                  </div>
+                  <span class="text-[10px] bg-indigo-50 text-indigo-700 font-mono px-2 py-0.5 rounded font-bold border border-indigo-100">Papel 80mm</span>
+                </div>
+
+                <div class="flex-1 overflow-y-auto mt-3 p-3 bg-amber-50/40 rounded-xl border border-amber-200/70 shadow-inner flex justify-center">
+                  <div id="preview-ticket-live" class="w-full max-w-[310px]">
+                    <!-- Renderizado dinámicamente -->
+                  </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>* Simulación fiel del ticket impreso</span>
+                  <button type="button" onclick="ModuloVentas.probarImpresionConfigTicket()" class="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer">
+                    <span>🖨️</span> <span>Imprimir Prueba</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer con Acciones -->
+          <div class="p-3.5 sm:p-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <button type="button" onclick="ModuloVentas.restablecerConfigTicketDefault()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors">
+              <span>↺</span> <span>Restablecer Predeterminados</span>
+            </button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="ModuloVentas.cerrarModalConfigTicket()" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer transition-colors">
+                Cancelar
+              </button>
+              <button type="button" id="btn-guardar-config-ticket" onclick="ModuloVentas.guardarConfigTicket()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all">
+                <span>💾</span> <span>Guardar Formato</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -178,6 +314,7 @@ const ModuloVentas = (() => {
     `;
 
     await cargarConsecutivo();
+    await cargarConfigFactura();
     cambiarSubtab(subtabActiva);
     iniciarListenerTecladoCodigoBarras();
     verificarEstadoServidorImpresion();
@@ -185,6 +322,7 @@ const ModuloVentas = (() => {
 
   function onEnterTab() {
     cargarConsecutivo();
+    cargarConfigFactura();
     verificarEstadoServidorImpresion();
     if (subtabActiva === 'precios') cargarCatalogoPrecios();
     if (subtabActiva === 'historial') cargarHistorialFacturas();
@@ -1603,27 +1741,22 @@ const ModuloVentas = (() => {
   }
 
   // ------------------------------------------------------------
-  // MODAL DE TICKET Y FORMATO DE IMPRESIÓN
+  // GENERADOR DE HTML DE TICKET (80MM) Y VISTA PREVIA
   // ------------------------------------------------------------
-  function abrirModalTicket(venta) {
-    ultimaFacturaCreada = venta;
-    const modal = document.getElementById('modal-ticket-factura');
-    const body = document.getElementById('ticket-body-container');
-    const sub = document.getElementById('ticket-modal-sub');
-    if (!modal || !body) return;
+  function generarHtmlTicketInterno(f, cfg) {
+    if (!f) f = MUESTRA_FACTURA_DEFAULT;
+    const c = Object.assign({}, CONFIG_FACTURA_DEFAULT, cfg || configFactura);
 
-    if (sub) sub.textContent = `${venta.numero_factura} • ${venta.fecha}`;
+    const totalFactura = Number(f.total) || 0;
+    const subtotal = Number(f.subtotal) || totalFactura;
+    const descuento = Number(f.descuento) || 0;
+    const clienteNombre = f.cliente_nombre || 'Consumidor Final';
+    const clienteTelefono = f.cliente_telefono || '';
+    const clienteDireccion = f.cliente_direccion || '';
+    const formaPago = f.metodo_pago || 'EFECTIVO';
 
-    const items = venta.items || [];
-    const totalFactura = Number(venta.total) || 0;
-    const subtotal = Number(venta.subtotal) || totalFactura;
-    const descuento = Number(venta.descuento) || 0;
-    const clienteNombre = venta.cliente_nombre || 'Consumidor Final';
-    const clienteTelefono = venta.cliente_telefono || 'N/A';
-    const clienteDireccion = venta.cliente_direccion || 'No especificada';
-    const formaPago = venta.metodo_pago || 'EFECTIVO';
-
-    const filasItems = items.map(it => {
+    // Generar filas de items
+    const filasItems = (f.items || []).map(it => {
       const precioUnitario = Number(it.precio_unitario || 0);
       const cantidad = Number(it.cantidad || 0);
       const itemSubtotal = Number(it.subtotal || (precioUnitario * cantidad));
@@ -1632,42 +1765,102 @@ const ModuloVentas = (() => {
         <tr>
           <td style="text-align: left; padding: 3px 0; vertical-align: top;">
             ${escapeHtml(it.nombre_producto)}
-            ${it.sku ? `<br><small style="font-size: 8px; color: #444;">SKU: ${escapeHtml(it.sku)}</small>` : ''}
+            ${c.mostrarSku && it.sku ? `<br><small style="font-size: 8px; color: #555;">SKU: ${escapeHtml(it.sku)}</small>` : ''}
           </td>
           <td style="text-align: center; vertical-align: top; padding: 3px 0;">${cantidad}</td>
-          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(precioUnitario)}</td>
+          ${c.mostrarPrecioUnitario ? `
+            <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(precioUnitario)}</td>
+          ` : ''}
           <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(itemSubtotal)}</td>
         </tr>
       `;
     }).join('');
 
-    body.innerHTML = `
-      <div id="ticket-print-area" style="font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.2; color: #000; width: 100%; max-width: 320px; margin: 0 auto;">
-        <div style="text-align: center;">
-          <img src="/img/Logo.png" style="max-width: 55mm; max-height: 25mm; margin: 0 auto 4px auto; display: block;" alt="Logo Jispiplast" onerror="this.style.display='none';" />
-          <p style="font-weight: bold; font-size: 15px; margin: 0;">Jispiplast</p>
-          <p style="margin: 2px 0;">Olga Inés Bueno Pineda</p>
-          <p style="margin: 2px 0;">Calle 13 #15-20</p>
+    // Encabezado
+    const tieneCabecera = c.mostrarLogo || c.mostrarNombreNegocio || c.mostrarRazonSocial || c.mostrarNit || c.mostrarDireccion || c.mostrarTelefono || c.mostrarCiudad;
+
+    let htmlCabecera = '';
+    if (tieneCabecera) {
+      htmlCabecera = `
+        <div style="text-align: center; margin-bottom: 4px;">
+          ${c.mostrarLogo ? `
+            <img src="${c.urlLogo || '/img/Logo.png'}" style="max-width: 50mm; max-height: 24mm; margin: 0 auto 4px auto; display: block;" alt="Logo" onerror="this.style.display='none';" />
+          ` : ''}
+          ${c.mostrarNombreNegocio && c.nombreNegocio ? `
+            <p style="font-weight: bold; font-size: 15px; margin: 0; text-transform: uppercase;">${escapeHtml(c.nombreNegocio)}</p>
+          ` : ''}
+          ${c.mostrarRazonSocial && c.razonSocial ? `
+            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.razonSocial)}</p>
+          ` : ''}
+          ${c.mostrarNit && c.nitNegocio ? `
+            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.nitNegocio)}</p>
+          ` : ''}
+          ${c.mostrarDireccion && c.direccionNegocio ? `
+            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.direccionNegocio)}</p>
+          ` : ''}
+          ${c.mostrarTelefono && c.telefonoNegocio ? `
+            <p style="margin: 2px 0; font-size: 11px;">Tel: ${escapeHtml(c.telefonoNegocio)}</p>
+          ` : ''}
+          ${c.mostrarCiudad && c.ciudadNegocio ? `
+            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.ciudadNegocio)}</p>
+          ` : ''}
         </div>
-
         <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+      `;
+    }
 
-        <p style="margin: 2px 0;"><b>Fecha:</b> ${escapeHtml(venta.fecha)}</p>
-        <p style="margin: 2px 0;"><b>Factura N°:</b> ${escapeHtml(venta.numero_factura)}</p>
-        <p style="margin: 2px 0;"><b>Cliente:</b> ${escapeHtml(clienteNombre)}</p>
-        <p style="margin: 2px 0;"><b>Teléfono:</b> ${escapeHtml(clienteTelefono)}</p>
-        <p style="margin: 2px 0;"><b>Dirección:</b> ${escapeHtml(clienteDireccion)}</p>
-        <p style="margin: 2px 0;"><b>Cajero:</b> ${escapeHtml(venta.usuario_nombre || 'Caja')}</p>
-        <p style="margin: 2px 0;"><b>Lista Precios:</b> ${escapeHtml(getNombreLista(venta.lista_precios))}</p>
+    // Datos de la venta
+    let htmlDatosVenta = '';
+    if (c.mostrarFecha) htmlDatosVenta += `<p style="margin: 2px 0;"><b>Fecha:</b> ${escapeHtml(f.fecha || '')}</p>`;
+    if (c.mostrarNumeroFactura) htmlDatosVenta += `<p style="margin: 2px 0;"><b>Factura N°:</b> ${escapeHtml(f.numero_factura || '')}</p>`;
+    if (c.mostrarCliente) {
+      const tieneNombreReal = clienteNombre && clienteNombre !== 'Consumidor Final' && clienteNombre !== 'Cliente General';
+      const tieneTelefonoReal = clienteTelefono && clienteTelefono !== 'N/A' && clienteTelefono.trim() !== '';
+      const tieneDireccionReal = clienteDireccion && clienteDireccion !== 'No especificada' && clienteDireccion.trim() !== '';
 
+      if (tieneNombreReal || tieneTelefonoReal || tieneDireccionReal || !clienteNombre) {
+        if (tieneNombreReal) {
+          htmlDatosVenta += `<p style="margin: 2px 0;"><b>Cliente:</b> ${escapeHtml(clienteNombre)}</p>`;
+        }
+        if (c.mostrarTelefonoCliente && tieneTelefonoReal) {
+          htmlDatosVenta += `<p style="margin: 2px 0;"><b>Teléfono:</b> ${escapeHtml(clienteTelefono)}</p>`;
+        }
+        if (c.mostrarDireccionCliente && tieneDireccionReal) {
+          htmlDatosVenta += `<p style="margin: 2px 0;"><b>Dirección:</b> ${escapeHtml(clienteDireccion)}</p>`;
+        }
+      }
+    }
+    if (c.mostrarCajero) htmlDatosVenta += `<p style="margin: 2px 0;"><b>Cajero:</b> ${escapeHtml(f.usuario_nombre || 'Caja')}</p>`;
+    if (c.mostrarListaPrecios) htmlDatosVenta += `<p style="margin: 2px 0;"><b>Lista Precios:</b> ${escapeHtml(getNombreLista(f.lista_precios))}</p>`;
+
+    if (htmlDatosVenta) {
+      htmlDatosVenta += `<div style="border-top: 1px dashed #000; margin: 6px 0;"></div>`;
+    }
+
+    // Pie de página
+    let htmlPie = '';
+    if (c.mostrarPiePagina && c.textoPiePagina) {
+      htmlPie = `
         <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+        <div style="text-align: center; font-weight: bold; margin-top: 8px; font-size: 10px; line-height: 1.3;">
+          ${c.textoPiePagina.split('\n').map(linea => `<p style="margin: 2px 0;">${escapeHtml(linea)}</p>`).join('')}
+        </div>
+      `;
+    }
+
+    return `
+      <div id="ticket-print-area" style="font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.25; color: #000; width: 100%; max-width: 300px; margin: 0 auto; background: #fff; padding: 6px; box-sizing: border-box;">
+        ${htmlCabecera}
+        ${htmlDatosVenta}
 
         <table style="width: 100%; border-collapse: collapse; margin: 4px 0;">
           <thead>
             <tr>
               <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: left;">DESCRIPCIÓN</th>
               <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: center; width: 22px;">CANT</th>
-              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 45px;">VR.UNI</th>
+              ${c.mostrarPrecioUnitario ? `
+                <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 45px;">VR.UNI</th>
+              ` : ''}
               <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 50px;">TOTAL</th>
             </tr>
           </thead>
@@ -1679,7 +1872,7 @@ const ModuloVentas = (() => {
         <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
 
         <table style="width: 100%; margin-top: 4px;">
-          ${descuento > 0 ? `
+          ${c.mostrarSubtotalDescuento && descuento > 0 ? `
             <tr>
               <td>Subtotal:</td>
               <td style="text-align: right;">$${formatMoney(subtotal)}</td>
@@ -1693,31 +1886,41 @@ const ModuloVentas = (() => {
             <td style="font-weight: bold; font-size: 12px;">VALOR A PAGAR:</td>
             <td style="text-align: right; font-weight: bold; font-size: 13px;">$${formatMoney(totalFactura)}</td>
           </tr>
-          <tr>
-            <td style="padding-top: 3px;">Forma de Pago:</td>
-            <td style="text-align: right; padding-top: 3px;">${escapeHtml(formaPago)}</td>
-          </tr>
-          ${formaPago === 'EFECTIVO' ? `
+          ${c.mostrarMetodoPago ? `
+            <tr>
+              <td style="padding-top: 3px;">Forma de Pago:</td>
+              <td style="text-align: right; padding-top: 3px;">${escapeHtml(formaPago)}</td>
+            </tr>
+          ` : ''}
+          ${c.mostrarCambio && formaPago === 'EFECTIVO' ? `
             <tr>
               <td style="padding-top: 2px;">Monto Recibido:</td>
-              <td style="text-align: right; padding-top: 2px;">$${formatMoney(venta.monto_recibido || totalFactura)}</td>
+              <td style="text-align: right; padding-top: 2px;">$${formatMoney(f.monto_recibido || totalFactura)}</td>
             </tr>
             <tr>
               <td style="font-weight: bold; padding-top: 2px;">Cambio / Devuelta:</td>
-              <td style="text-align: right; font-weight: bold; padding-top: 2px;">$${formatMoney(venta.cambio || 0)}</td>
+              <td style="text-align: right; font-weight: bold; padding-top: 2px;">$${formatMoney(f.cambio || 0)}</td>
             </tr>
           ` : ''}
         </table>
 
-        <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
-
-        <div style="text-align: center; font-weight: bold; margin-top: 8px;">
-          <p style="margin: 0;">*** ¡GRACIAS POR SU COMPRA! ***</p>
-          <p style="font-size: 9px; font-weight: normal; margin-top: 4px;">Venta registrada exitosamente.</p>
-        </div>
+        ${htmlPie}
       </div>
     `;
+  }
 
+  // ------------------------------------------------------------
+  // MODAL DE TICKET Y FORMATO DE IMPRESIÓN
+  // ------------------------------------------------------------
+  function abrirModalTicket(venta) {
+    ultimaFacturaCreada = venta;
+    const modal = document.getElementById('modal-ticket-factura');
+    const body = document.getElementById('ticket-body-container');
+    const sub = document.getElementById('ticket-modal-sub');
+    if (!modal || !body) return;
+
+    if (sub) sub.textContent = `${venta.numero_factura} • ${venta.fecha}`;
+    body.innerHTML = generarHtmlTicketInterno(venta, configFactura);
     modal.classList.remove('hidden');
   }
 
@@ -1731,7 +1934,6 @@ const ModuloVentas = (() => {
     const f = facturaCustom || ultimaFacturaCreada;
     if (!f) return;
 
-    // Usar iframe invisible exactamente igual que en modulo-empaque.js para evitar bloqueos de popup en iframe
     let iframe = document.getElementById('iframe-impresion-ventas');
     if (!iframe) {
       iframe = document.createElement('iframe');
@@ -1746,31 +1948,7 @@ const ModuloVentas = (() => {
     const doc = iframe.contentWindow.document;
     doc.open();
 
-    const totalFactura = Number(f.total) || 0;
-    const subtotal = Number(f.subtotal) || totalFactura;
-    const descuento = Number(f.descuento) || 0;
-    const clienteNombre = f.cliente_nombre || 'Consumidor Final';
-    const clienteTelefono = f.cliente_telefono || 'N/A';
-    const clienteDireccion = f.cliente_direccion || 'No especificada';
-    const formaPago = f.metodo_pago || 'EFECTIVO';
-
-    const filasItems = (f.items || []).map(it => {
-      const precioUnitario = Number(it.precio_unitario || 0);
-      const cantidad = Number(it.cantidad || 0);
-      const itemSubtotal = Number(it.subtotal || (precioUnitario * cantidad));
-
-      return `
-        <tr>
-          <td style="text-align: left; padding: 3px 0; vertical-align: top;">
-            ${escapeHtml(it.nombre_producto)}
-            ${it.sku ? `<br><small style="font-size: 8px; color: #444;">SKU: ${escapeHtml(it.sku)}</small>` : ''}
-          </td>
-          <td style="text-align: center; vertical-align: top; padding: 3px 0;">${cantidad}</td>
-          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(precioUnitario)}</td>
-          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(itemSubtotal)}</td>
-        </tr>
-      `;
-    }).join('');
+    const ticketHtml = generarHtmlTicketInterno(f, configFactura);
 
     doc.write(`
       <!DOCTYPE html>
@@ -1787,90 +1965,13 @@ const ModuloVentas = (() => {
             padding: 4mm 0;
             font-size: 11px;
             color: #000;
-            line-height: 1.2;
+            line-height: 1.25;
+            background: #fff;
           }
-          .text-center { text-align: center; }
-          .text-right { text-align: right; }
-          .bold { font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 6px 0; }
-          .logo { max-width: 55mm; max-height: 25mm; margin: 0 auto 4px auto; display: block; }
-          table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-          th { border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; }
         </style>
       </head>
       <body>
-        <div class="text-center">
-          <img src="/img/Logo.png" class="logo" alt="Logo Jispiplast" onerror="this.style.display='none';" />
-          <p class="bold" style="font-size: 15px; margin: 0;">Jispiplast</p>
-          <p style="margin: 2px 0;">Olga Inés Bueno Pineda</p>
-          <p style="margin: 2px 0;">Calle 13 #15-20</p>
-        </div>
-
-        <div class="divider"></div>
-
-        <p style="margin: 2px 0;"><b>Fecha:</b> ${escapeHtml(f.fecha)}</p>
-        <p style="margin: 2px 0;"><b>Factura N°:</b> ${escapeHtml(f.numero_factura)}</p>
-        <p style="margin: 2px 0;"><b>Cliente:</b> ${escapeHtml(clienteNombre)}</p>
-        <p style="margin: 2px 0;"><b>Teléfono:</b> ${escapeHtml(clienteTelefono)}</p>
-        <p style="margin: 2px 0;"><b>Dirección:</b> ${escapeHtml(clienteDireccion)}</p>
-        <p style="margin: 2px 0;"><b>Cajero:</b> ${escapeHtml(f.usuario_nombre || 'Caja')}</p>
-        <p style="margin: 2px 0;"><b>Lista Precios:</b> ${escapeHtml(getNombreLista(f.lista_precios))}</p>
-
-        <div class="divider"></div>
-
-        <table>
-          <thead>
-            <tr>
-              <th style="text-align: left;">DESCRIPCIÓN</th>
-              <th style="text-align: center; width: 22px;">CANT</th>
-              <th style="text-align: right; width: 45px;">VR.UNI</th>
-              <th style="text-align: right; width: 50px;">TOTAL</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filasItems}
-          </tbody>
-        </table>
-
-        <div class="divider"></div>
-
-        <table style="margin-top: 4px;">
-          ${descuento > 0 ? `
-            <tr>
-              <td>Subtotal:</td>
-              <td class="text-right">$${formatMoney(subtotal)}</td>
-            </tr>
-            <tr>
-              <td>Descuento:</td>
-              <td class="text-right">-$${formatMoney(descuento)}</td>
-            </tr>
-          ` : ''}
-          <tr>
-            <td class="bold" style="font-size: 12px;">VALOR A PAGAR:</td>
-            <td class="text-right bold" style="font-size: 13px;">$${formatMoney(totalFactura)}</td>
-          </tr>
-          <tr>
-            <td style="padding-top: 3px;">Forma de Pago:</td>
-            <td class="text-right" style="padding-top: 3px;">${escapeHtml(formaPago)}</td>
-          </tr>
-          ${formaPago === 'EFECTIVO' ? `
-            <tr>
-              <td style="padding-top: 2px;">Monto Recibido:</td>
-              <td class="text-right" style="padding-top: 2px;">$${formatMoney(f.monto_recibido || totalFactura)}</td>
-            </tr>
-            <tr>
-              <td class="bold" style="padding-top: 2px;">Cambio / Devuelta:</td>
-              <td class="text-right bold" style="padding-top: 2px;">$${formatMoney(f.cambio || 0)}</td>
-            </tr>
-          ` : ''}
-        </table>
-
-        <div class="divider"></div>
-
-        <div class="text-center bold" style="margin-top: 8px;">
-          <p style="margin: 0;">*** ¡GRACIAS POR SU COMPRA! ***</p>
-          <p style="font-size: 9px; font-weight: normal; margin-top: 4px;">Venta registrada exitosamente.</p>
-        </div>
+        ${ticketHtml}
       </body>
       </html>
     `);
@@ -1883,38 +1984,91 @@ const ModuloVentas = (() => {
   }
 
   // ------------------------------------------------------------
-  // SERVIDOR DE IMPRESIÓN LOCAL (TIENDA)
+  // SERVIDOR DE IMPRESIÓN LOCAL (TIENDA) - TEXTO PLANO
   // ------------------------------------------------------------
-  function generarTextoPlanoTicket(venta) {
+  function centrarTexto(str, len) {
+    if (!str) return '';
+    if (str.length >= len) return str.substring(0, len);
+    const pad = Math.floor((len - str.length) / 2);
+    return ' '.repeat(pad) + str;
+  }
+
+  function generarTextoPlanoTicket(venta, cfg) {
     if (!venta) return '';
     const f = venta;
+    const c = Object.assign({}, CONFIG_FACTURA_DEFAULT, cfg || configFactura);
     const items = f.items || [];
     const ancho = 40;
     const sep = '='.repeat(ancho);
     const lin = '-'.repeat(ancho);
 
     let t = '';
-    t += '           JISPIPLAST           \n';
-    t += '     Olga Ines Bueno Pineda     \n';
-    t += '         Calle 13 #15-20        \n';
+
+    // Encabezado
+    if (c.mostrarNombreNegocio && c.nombreNegocio) {
+      t += centrarTexto(c.nombreNegocio.toUpperCase(), ancho) + '\n';
+    }
+    if (c.mostrarRazonSocial && c.razonSocial) {
+      t += centrarTexto(c.razonSocial, ancho) + '\n';
+    }
+    if (c.mostrarNit && c.nitNegocio) {
+      t += centrarTexto(c.nitNegocio, ancho) + '\n';
+    }
+    if (c.mostrarDireccion && c.direccionNegocio) {
+      t += centrarTexto(c.direccionNegocio, ancho) + '\n';
+    }
+    if (c.mostrarTelefono && c.telefonoNegocio) {
+      t += centrarTexto('Tel: ' + c.telefonoNegocio, ancho) + '\n';
+    }
+    if (c.mostrarCiudad && c.ciudadNegocio) {
+      t += centrarTexto(c.ciudadNegocio, ancho) + '\n';
+    }
+
     t += sep + '\n';
-    t += `Fecha: ${f.fecha || new Date().toLocaleString('es-CO')}\n`;
-    t += `Factura N°: ${f.numero_factura}\n`;
-    t += `Cliente: ${f.cliente_nombre || 'Consumidor Final'}\n`;
-    if (f.cliente_telefono) t += `Teléfono: ${f.cliente_telefono}\n`;
-    if (f.cliente_direccion) t += `Dirección: ${f.cliente_direccion}\n`;
-    t += `Cajero: ${f.usuario_nombre || 'Caja'}\n`;
-    t += `Lista: ${getNombreLista(f.lista_precios || 'precio_1')}\n`;
+
+    if (c.mostrarFecha) t += `Fecha: ${f.fecha || new Date().toLocaleString('es-CO')}\n`;
+    if (c.mostrarNumeroFactura) t += `Factura N°: ${f.numero_factura}\n`;
+    if (c.mostrarCliente) {
+      const cliNom = f.cliente_nombre || '';
+      const cliTel = f.cliente_telefono || '';
+      const cliDir = f.cliente_direccion || '';
+      const tieneReal = cliNom && cliNom !== 'Consumidor Final' && cliNom !== 'Cliente General';
+      const tieneTel = cliTel && cliTel !== 'N/A' && cliTel.trim() !== '';
+      const tieneDir = cliDir && cliDir !== 'No especificada' && cliDir.trim() !== '';
+
+      if (tieneReal || tieneTel || tieneDir) {
+        if (tieneReal) t += `Cliente: ${cliNom}\n`;
+        if (c.mostrarTelefonoCliente && tieneTel) t += `Teléfono: ${cliTel}\n`;
+        if (c.mostrarDireccionCliente && tieneDir) t += `Dirección: ${cliDir}\n`;
+      }
+    }
+    if (c.mostrarCajero) t += `Cajero: ${f.usuario_nombre || 'Caja'}\n`;
+    if (c.mostrarListaPrecios) t += `Lista: ${getNombreLista(f.lista_precios || 'precio_1')}\n`;
+
     t += sep + '\n';
-    t += 'DESCRIPCION       CANT  VR.UNI    TOTAL\n';
+    if (c.mostrarPrecioUnitario) {
+      t += 'DESCRIPCION       CANT  VR.UNI    TOTAL\n';
+    } else {
+      t += 'DESCRIPCION                 CANT   TOTAL\n';
+    }
     t += lin + '\n';
 
     items.forEach(it => {
-      const nom = (it.nombre_producto || 'Producto').substring(0, 16).padEnd(16, ' ');
-      const cant = String(it.cantidad || 1).padStart(4, ' ');
-      const uni = String(Math.round(it.precio_unitario || 0)).padStart(8, ' ');
-      const sub = String(Math.round(it.subtotal || 0)).padStart(9, ' ');
-      t += `${nom} ${cant} ${uni} ${sub}\n`;
+      if (c.mostrarPrecioUnitario) {
+        const nom = (it.nombre_producto || 'Producto').substring(0, 16).padEnd(16, ' ');
+        const cant = String(it.cantidad || 1).padStart(4, ' ');
+        const uni = String(Math.round(it.precio_unitario || 0)).padStart(8, ' ');
+        const sub = String(Math.round(it.subtotal || 0)).padStart(9, ' ');
+        t += `${nom} ${cant} ${uni} ${sub}\n`;
+      } else {
+        const nom = (it.nombre_producto || 'Producto').substring(0, 24).padEnd(24, ' ');
+        const cant = String(it.cantidad || 1).padStart(4, ' ');
+        const sub = String(Math.round(it.subtotal || 0)).padStart(10, ' ');
+        t += `${nom} ${cant} ${sub}\n`;
+      }
+      if (c.mostrarSku && it.sku) {
+        t += `  * SKU: ${it.sku}\n`;
+      }
     });
 
     t += sep + '\n';
@@ -1922,22 +2076,389 @@ const ModuloVentas = (() => {
     const subtotal = Math.round(Number(f.subtotal) || total);
     const descuento = Math.round(Number(f.descuento) || 0);
 
-    if (descuento > 0) {
+    if (c.mostrarSubtotalDescuento && descuento > 0) {
       t += `SUBTOTAL:          $ ${formatMoney(subtotal)}\n`;
       t += `DESCUENTO:        -$ ${formatMoney(descuento)}\n`;
     }
     t += `VALOR A PAGAR:     $ ${formatMoney(total)}\n`;
-    t += `Forma de Pago:     ${f.metodo_pago || 'EFECTIVO'}\n`;
-    if (f.metodo_pago === 'EFECTIVO') {
+    if (c.mostrarMetodoPago) {
+      t += `Forma de Pago:     ${f.metodo_pago || 'EFECTIVO'}\n`;
+    }
+    if (c.mostrarCambio && f.metodo_pago === 'EFECTIVO') {
       const rec = Math.round(Number(f.monto_recibido) || total);
       const cam = Math.round(Number(f.cambio) || 0);
       t += `Recibido:          $ ${formatMoney(rec)}\n`;
       t += `Cambio:            $ ${formatMoney(cam)}\n`;
     }
-    t += sep + '\n';
-    t += '     ¡GRACIAS POR SU COMPRA!     \n';
-    t += '         Vuelva pronto          \n\n\n\n\n';
+
+    if (c.mostrarPiePagina && c.textoPiePagina) {
+      t += sep + '\n';
+      c.textoPiePagina.split('\n').forEach(linea => {
+        t += centrarTexto(linea, ancho) + '\n';
+      });
+    }
+    t += '\n\n\n\n\n';
     return t;
+  }
+
+  // ------------------------------------------------------------
+  // GESTIÓN DEL FORMATO DE FACTURA (MODAL CON OJITOS Y EN VIVO)
+  // ------------------------------------------------------------
+  async function cargarConfigFactura() {
+    try {
+      const savedLocal = localStorage.getItem('jispi_config_factura');
+      if (savedLocal) {
+        try {
+          configFactura = Object.assign({}, CONFIG_FACTURA_DEFAULT, JSON.parse(savedLocal));
+        } catch (e) {}
+      }
+      const res = await apiFetch('/ventas/config-factura');
+      if (res && res.ok && res.config) {
+        configFactura = Object.assign({}, CONFIG_FACTURA_DEFAULT, res.config);
+        localStorage.setItem('jispi_config_factura', JSON.stringify(configFactura));
+      }
+    } catch (e) {
+      console.warn('Usando configuración local de factura:', e);
+    }
+  }
+
+  function abrirModalConfigTicket() {
+    const modal = document.getElementById('modal-config-ticket');
+    if (!modal) return;
+    configFacturaTemp = Object.assign({}, configFactura);
+    renderControlesConfigTicket();
+    renderPreviewConfigTicket();
+    modal.classList.remove('hidden');
+  }
+
+  function cerrarModalConfigTicket() {
+    const modal = document.getElementById('modal-config-ticket');
+    if (modal) modal.classList.add('hidden');
+    configFacturaTemp = null;
+  }
+
+  function renderFilaOpcion({ campo, titulo, descripcion, tieneInput, inputTipo, inputCampo, placeholder }) {
+    const visible = !!configFacturaTemp[campo];
+    return `
+      <div class="bg-white border ${visible ? 'border-emerald-300 shadow-2xs' : 'border-slate-200 opacity-80'} rounded-xl p-3 flex flex-col gap-2 transition-all">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs text-slate-800">${escapeHtml(titulo)}</span>
+              ${visible ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded-full">Activo</span>' : '<span class="text-[10px] bg-slate-100 text-slate-500 font-medium px-1.5 py-0.2 rounded-full">Oculto</span>'}
+            </div>
+            ${descripcion ? `<p class="text-[11px] text-slate-500 truncate">${escapeHtml(descripcion)}</p>` : ''}
+          </div>
+          <button type="button" onclick="ModuloVentas.toggleVisibilidad('${campo}')"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-2xs select-none ${visible ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 hover:bg-slate-300 text-slate-600'}">
+            <span class="text-sm">${visible ? '👁️' : '👁️‍🗨️'}</span>
+            <span>${visible ? 'Visible' : 'Oculto'}</span>
+          </button>
+        </div>
+        ${tieneInput && visible ? `
+          <div class="pt-1 border-t border-slate-100">
+            ${inputTipo === 'textarea' ? `
+              <textarea rows="2" oninput="ModuloVentas.actualizarCampoTexto('${inputCampo}', this.value)"
+                        placeholder="${escapeHtml(placeholder || '')}"
+                        class="w-full text-xs p-2 rounded-lg border border-slate-300 focus:ring-1 focus:ring-indigo-500 text-slate-800 bg-slate-50/80 font-mono">${escapeHtml(configFacturaTemp[inputCampo] || '')}</textarea>
+            ` : `
+              <input type="text" oninput="ModuloVentas.actualizarCampoTexto('${inputCampo}', this.value)"
+                     value="${escapeHtml(configFacturaTemp[inputCampo] || '')}"
+                     placeholder="${escapeHtml(placeholder || '')}"
+                     class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 focus:ring-1 focus:ring-indigo-500 text-slate-800 bg-slate-50/80" />
+            `}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  function renderControlesConfigTicket() {
+    const cont = document.getElementById('config-ticket-controles');
+    if (!cont || !configFacturaTemp) return;
+
+    const isAdmin = Auth.isAdmin();
+    const btnGuardar = document.getElementById('btn-guardar-config-ticket');
+    if (btnGuardar) {
+      if (!isAdmin) {
+        btnGuardar.disabled = true;
+        btnGuardar.className = 'px-5 py-2 rounded-xl bg-slate-300 text-slate-500 font-bold text-xs cursor-not-allowed';
+        btnGuardar.title = 'Se requiere rol Administrador para guardar cambios';
+      } else {
+        btnGuardar.disabled = false;
+        btnGuardar.className = 'px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all';
+        btnGuardar.title = 'Guardar configuración para todos los usuarios';
+      }
+    }
+
+    cont.innerHTML = `
+      ${!isAdmin ? `
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-center gap-2.5">
+          <span class="text-xl">🔒</span>
+          <div>
+            <p class="font-bold">Modo de solo visualización</p>
+            <p class="text-[11px] text-amber-700">Puedes probar los ojitos y previsualizar los cambios en pantalla, pero solo los usuarios Administradores pueden guardar el diseño de factura para la tienda.</p>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- SECCIÓN 1: CABECERA Y DATOS DEL NEGOCIO -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+        <h4 class="font-extrabold text-xs uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+          <span>🏢</span> <span>Cabecera y Datos del Negocio</span>
+        </h4>
+        <div class="space-y-2">
+          ${renderFilaOpcion({
+            campo: 'mostrarLogo',
+            titulo: 'Logo de la Empresa',
+            descripcion: 'Muestra el logotipo de Jispiplast en la parte superior del ticket.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarNombreNegocio',
+            titulo: 'Nombre Comercial',
+            descripcion: 'Nombre principal visible en el encabezado.',
+            tieneInput: true,
+            inputCampo: 'nombreNegocio',
+            placeholder: 'Ej: Jispiplast'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarRazonSocial',
+            titulo: 'Razón Social / Propietario',
+            descripcion: 'Nombre legal o del propietario.',
+            tieneInput: true,
+            inputCampo: 'razonSocial',
+            placeholder: 'Ej: Olga Inés Bueno Pineda'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarNit',
+            titulo: 'NIT / Cédula / RUT',
+            descripcion: 'Identificación tributaria de la empresa.',
+            tieneInput: true,
+            inputCampo: 'nitNegocio',
+            placeholder: 'Ej: NIT: 1098.123.456-7'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarDireccion',
+            titulo: 'Dirección del Establecimiento',
+            descripcion: 'Ubicación física de la tienda.',
+            tieneInput: true,
+            inputCampo: 'direccionNegocio',
+            placeholder: 'Ej: Calle 13 #15-20'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarTelefono',
+            titulo: 'Teléfono / WhatsApp de Contacto',
+            descripcion: 'Línea de atención para clientes.',
+            tieneInput: true,
+            inputCampo: 'telefonoNegocio',
+            placeholder: 'Ej: 312 345 6789'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarCiudad',
+            titulo: 'Ciudad / Municipio',
+            descripcion: 'Ciudad de operación.',
+            tieneInput: true,
+            inputCampo: 'ciudadNegocio',
+            placeholder: 'Ej: Bucaramanga'
+          })}
+        </div>
+      </div>
+
+      <!-- SECCIÓN 2: INFORMACIÓN DE LA FACTURA Y VENTA -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+        <h4 class="font-extrabold text-xs uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+          <span>🧾</span> <span>Datos de la Factura y Cajero</span>
+        </h4>
+        <div class="space-y-2">
+          ${renderFilaOpcion({
+            campo: 'mostrarFecha',
+            titulo: 'Fecha y Hora de Emisión',
+            descripcion: 'Estampa de tiempo en la que se generó la venta.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarNumeroFactura',
+            titulo: 'Número de Factura / Consecutivo',
+            descripcion: 'Identificador único del comprobante (ej: FAC-0001).'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarCajero',
+            titulo: 'Nombre del Cajero / Vendedor',
+            descripcion: 'Usuario del sistema que registró la operación.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarListaPrecios',
+            titulo: 'Nombre de la Lista de Precios',
+            descripcion: 'Indica si se cobró Precio 1 (General), Precio 2 o Precio 3.'
+          })}
+        </div>
+      </div>
+
+      <!-- SECCIÓN 3: DATOS DEL CLIENTE -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+        <h4 class="font-extrabold text-xs uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+          <span>👤</span> <span>Datos del Cliente</span>
+        </h4>
+        <div class="space-y-2">
+          ${renderFilaOpcion({
+            campo: 'mostrarCliente',
+            titulo: 'Nombre del Cliente',
+            descripcion: 'Muestra el nombre o razón social del cliente.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarTelefonoCliente',
+            titulo: 'Teléfono del Cliente',
+            descripcion: 'Muestra el número de teléfono si está registrado.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarDireccionCliente',
+            titulo: 'Dirección del Cliente',
+            descripcion: 'Muestra la dirección de entrega o domicilio.'
+          })}
+        </div>
+      </div>
+
+      <!-- SECCIÓN 4: DETALLE DE PRODUCTOS -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+        <h4 class="font-extrabold text-xs uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+          <span>📦</span> <span>Detalle de Productos en la Tabla</span>
+        </h4>
+        <div class="space-y-2">
+          ${renderFilaOpcion({
+            campo: 'mostrarSku',
+            titulo: 'Código SKU del Producto',
+            descripcion: 'Muestra el SKU debajo del nombre de cada artículo.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarPrecioUnitario',
+            titulo: 'Columna de Precio Unitario (VR.UNI)',
+            descripcion: 'Muestra el costo unitario de cada producto en la tabla.'
+          })}
+        </div>
+      </div>
+
+      <!-- SECCIÓN 5: TOTALES Y FORMA DE PAGO -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+        <h4 class="font-extrabold text-xs uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+          <span>💵</span> <span>Totales, Forma de Pago y Cambio</span>
+        </h4>
+        <div class="space-y-2">
+          ${renderFilaOpcion({
+            campo: 'mostrarSubtotalDescuento',
+            titulo: 'Líneas de Subtotal y Descuento',
+            descripcion: 'Desglose del valor bruto y rebajas aplicadas.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarMetodoPago',
+            titulo: 'Método de Pago',
+            descripcion: 'Muestra si fue pagado en Efectivo, Transferencia u otro.'
+          })}
+          ${renderFilaOpcion({
+            campo: 'mostrarCambio',
+            titulo: 'Monto Recibido y Cambio / Devuelta',
+            descripcion: 'Muestra el valor entregado por el cliente y el cambio en efectivo.'
+          })}
+        </div>
+      </div>
+
+      <!-- SECCIÓN 6: PIE DE PÁGINA -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+        <h4 class="font-extrabold text-xs uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+          <span>💬</span> <span>Pie de Página y Despedida</span>
+        </h4>
+        <div class="space-y-2">
+          ${renderFilaOpcion({
+            campo: 'mostrarPiePagina',
+            titulo: 'Mensaje Final / Agradecimiento',
+            descripcion: 'Texto al pie del ticket con mensajes de agradecimiento o notas legales.',
+            tieneInput: true,
+            inputTipo: 'textarea',
+            inputCampo: 'textoPiePagina',
+            placeholder: '*** ¡GRACIAS POR SU COMPRA! ***\nVuelva pronto'
+          })}
+        </div>
+      </div>
+    `;
+  }
+
+  function toggleVisibilidad(campo) {
+    if (!configFacturaTemp) return;
+    configFacturaTemp[campo] = !configFacturaTemp[campo];
+    renderControlesConfigTicket();
+    renderPreviewConfigTicket();
+  }
+
+  function actualizarCampoTexto(campo, valor) {
+    if (!configFacturaTemp) return;
+    configFacturaTemp[campo] = valor;
+    renderPreviewConfigTicket();
+  }
+
+  function renderPreviewConfigTicket() {
+    const cont = document.getElementById('preview-ticket-live');
+    if (!cont || !configFacturaTemp) return;
+    const muestra = ultimaFacturaCreada || MUESTRA_FACTURA_DEFAULT;
+    cont.innerHTML = generarHtmlTicketInterno(muestra, configFacturaTemp);
+  }
+
+  async function guardarConfigTicket() {
+    if (!Auth.isAdmin()) {
+      showToast('Solo los administradores tienen permiso para modificar el formato de la factura.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('btn-guardar-config-ticket');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> <span>Guardando...</span>';
+    }
+
+    try {
+      const res = await apiFetch('/ventas/config-factura', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: configFacturaTemp })
+      });
+
+      if (res && res.ok && res.config) {
+        configFactura = Object.assign({}, res.config);
+        localStorage.setItem('jispi_config_factura', JSON.stringify(configFactura));
+        showToast('✓ Formato de factura guardado exitosamente.', 'success');
+        cerrarModalConfigTicket();
+
+        // Si el modal de ticket de factura está abierto, refrescar el ticket
+        if (ultimaFacturaCreada) {
+          const body = document.getElementById('ticket-body-container');
+          if (body) {
+            body.innerHTML = generarHtmlTicketInterno(ultimaFacturaCreada, configFactura);
+          }
+        }
+      } else {
+        showToast(res?.error || 'Error al guardar configuración de factura', 'error');
+      }
+    } catch (e) {
+      showToast('Error de conexión al guardar configuración', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>💾</span> <span>Guardar Formato</span>';
+      }
+    }
+  }
+
+  function restablecerConfigTicketDefault() {
+    if (!confirm('¿Deseas restablecer todos los elementos y visibilidad de la factura a sus valores originales?')) return;
+    configFacturaTemp = Object.assign({}, CONFIG_FACTURA_DEFAULT);
+    renderControlesConfigTicket();
+    renderPreviewConfigTicket();
+    showToast('Valores restablecidos en la vista previa. Haz clic en Guardar Formato para aplicar.', 'info');
+  }
+
+  function probarImpresionConfigTicket() {
+    const muestra = ultimaFacturaCreada || MUESTRA_FACTURA_DEFAULT;
+    const backup = Object.assign({}, configFactura);
+    configFactura = Object.assign({}, configFacturaTemp);
+    imprimirTicketDirecto(muestra);
+    configFactura = backup;
   }
 
   async function enviarAImpresoraTienda(facturaCustom) {
@@ -2070,6 +2591,16 @@ const ModuloVentas = (() => {
     abrirModalServidorImpresion,
     cerrarModalServidorImpresion,
     verificarEstadoServidorImpresion,
-    enviarAImpresoraTienda
+    enviarAImpresoraTienda,
+    abrirModalConfigTicket,
+    cerrarModalConfigTicket,
+    toggleVisibilidad,
+    actualizarCampoTexto,
+    renderControlesConfigTicket,
+    renderPreviewConfigTicket,
+    guardarConfigTicket,
+    restablecerConfigTicketDefault,
+    probarImpresionConfigTicket,
+    cargarConfigFactura
   };
 })();

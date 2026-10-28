@@ -374,6 +374,86 @@ router.get('/', (req, res) => {
 });
 
 // ------------------------------------------------------------------
+// CONFIGURACIÓN VISUAL DEL TICKET DE VENTA (EDICIÓN Y VISIBILIDAD)
+// ------------------------------------------------------------------
+const CONFIG_FACTURA_DEFAULT = {
+  mostrarLogo: true,
+  urlLogo: '/img/Logo.png',
+  mostrarNombreNegocio: true,
+  nombreNegocio: 'Jispiplast',
+  mostrarRazonSocial: true,
+  razonSocial: 'Olga Inés Bueno Pineda',
+  mostrarNit: true,
+  nitNegocio: '',
+  mostrarDireccion: true,
+  direccionNegocio: 'Calle 13 #15-20',
+  mostrarTelefono: true,
+  telefonoNegocio: '',
+  mostrarCiudad: true,
+  ciudadNegocio: 'Bucaramanga',
+  mostrarFecha: true,
+  mostrarNumeroFactura: true,
+  mostrarCliente: true,
+  mostrarTelefonoCliente: true,
+  mostrarDireccionCliente: true,
+  mostrarCajero: true,
+  mostrarListaPrecios: true,
+  mostrarSku: true,
+  mostrarPrecioUnitario: true,
+  mostrarSubtotalDescuento: true,
+  mostrarMetodoPago: true,
+  mostrarCambio: true,
+  mostrarPiePagina: true,
+  textoPiePagina: '*** ¡GRACIAS POR SU COMPRA! ***\nVuelva pronto',
+  tamanoPapel: '80mm'
+};
+
+// GET /api/ventas/config-factura
+router.get('/config-factura', (req, res) => {
+  try {
+    const row = db.prepare("SELECT valor FROM configuracion_app WHERE clave = 'ticket_factura'").get();
+    if (row && row.valor) {
+      try {
+        const parsed = JSON.parse(row.valor);
+        const configFinal = Object.assign({}, CONFIG_FACTURA_DEFAULT, parsed);
+        return res.json({ ok: true, config: configFinal });
+      } catch (e) {
+        return res.json({ ok: true, config: CONFIG_FACTURA_DEFAULT });
+      }
+    }
+    return res.json({ ok: true, config: CONFIG_FACTURA_DEFAULT });
+  } catch (err) {
+    console.error('Error al obtener config factura:', err);
+    res.json({ ok: true, config: CONFIG_FACTURA_DEFAULT });
+  }
+});
+
+// POST /api/ventas/config-factura
+router.post('/config-factura', (req, res) => {
+  try {
+    const nuevaConfig = req.body && typeof req.body === 'object' ? (req.body.config || req.body) : {};
+    const configFinal = Object.assign({}, CONFIG_FACTURA_DEFAULT, nuevaConfig);
+
+    const valorJson = JSON.stringify(configFinal);
+    const stmt = db.prepare(`
+      INSERT INTO configuracion_app (clave, valor, updated_at)
+      VALUES ('ticket_factura', ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, updated_at = CURRENT_TIMESTAMP
+    `);
+    stmt.run(valorJson);
+
+    res.json({
+      ok: true,
+      mensaje: 'Configuración de factura guardada exitosamente.',
+      config: configFinal
+    });
+  } catch (err) {
+    console.error('Error al guardar config factura:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
 // GET /api/ventas/:id -> Obtener una factura específica con sus ítems
 // ------------------------------------------------------------------
 router.get('/:id', (req, res) => {
@@ -778,3 +858,5 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
 });
 
 module.exports = router;
+
+

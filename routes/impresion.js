@@ -267,4 +267,31 @@ pause
   res.send(batContent);
 });
 
+// ------------------------------------------------------------------
+// GET /api/impresion/descargar-windows-directo -> Ejecutor nativo Windows (CERO instalaciones, sin Node.js)
+// ------------------------------------------------------------------
+router.get('/descargar-windows-directo', (req, res) => {
+  const host = req.get('host');
+  const protocol = req.protocol;
+  const baseUrl = `${protocol}://${host}`;
+
+  const batWindows = "@echo off\r\n" +
+    "title Impresora Tienda Jispiplast - Windows Nativo (Sin Node.js)\r\n" +
+    "color 0A\r\n" +
+    "echo ========================================================\r\n" +
+    "echo   SERVIDOR DE IMPRESION TIENDA JISPIPLAST\r\n" +
+    "echo   Modo Nativo Windows: No requiere instalar nada.\r\n" +
+    "echo ========================================================\r\n" +
+    `echo Conectando a: ${baseUrl}\r\n` +
+    "echo Esperando facturas desde celulares o computadores...\r\n" +
+    "echo Para detener, cierra esta ventana.\r\n" +
+    "echo.\r\n" +
+    `powershell -NoProfile -ExecutionPolicy Bypass -Command "$url = '${baseUrl}'; Write-Host 'Servidor de impresion conectado y listo.' -ForegroundColor Green; while ($true) { try { $resp = Invoke-RestMethod -Uri \\\"$url/api/impresion/pendientes\\\" -Method Get -TimeoutSec 6; if ($resp -and $resp.pendientes -and $resp.pendientes.Count -gt 0) { foreach ($t in $resp.pendientes) { Write-Host ('[NUEVO TICKET] Factura: ' + $t.numero_factura) -ForegroundColor Cyan; $tmp = [System.IO.Path]::GetTempFileName(); [System.IO.File]::WriteAllText($tmp, $t.contenido_ticket, [System.Text.Encoding]::GetEncoding(28591)); try { Get-Content -Path $tmp | Out-Printer; $body = @{ exito = $true } | ConvertTo-Json; Invoke-RestMethod -Uri \\\"$url/api/impresion/confirmar/$($t.id)\\\" -Method Post -Body $body -ContentType 'application/json'; } catch { } finally { if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue } } } } } catch { } Start-Sleep -Seconds 2; }"\r\n` +
+    "pause\r\n";
+
+  res.setHeader('Content-Type', 'application/x-bat');
+  res.setHeader('Content-Disposition', 'attachment; filename="imprimir_en_tienda_sin_instalar_nada.bat"');
+  res.send(batWindows);
+});
+
 module.exports = router;
