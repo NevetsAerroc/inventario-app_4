@@ -146,16 +146,48 @@ function imprimirEnWindows(texto) {
   const tmpFile = path.join(__dirname, 'ticket_temp.txt');
   fs.writeFileSync(tmpFile, texto, { encoding: 'latin1' });
 
+  // Impresión con márgenes 0 usando System.Drawing en PowerShell
+  const escapedPath = tmpFile.replace(/\\\\/g, '\\\\\\\\');
+  const psCode = [
+    'Add-Type -AssemblyName System.Drawing;',
+    '$doc = New-Object System.Drawing.Printing.PrintDocument;',
+    '$doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0);',
+    '$doc.OriginAtMargins = $false;',
+    "$lines = [System.IO.File]::ReadAllLines('" + escapedPath + "', [System.Text.Encoding]::GetEncoding(28591));",
+    '$maxLen = 0;',
+    'foreach ($l in $lines) { if ($l.Length -gt $maxLen) { $maxLen = $l.Length } };',
+    '$fontSize = if ($maxLen -le 34) { 8.5 } else { 7.5 };',
+    '$font = New-Object System.Drawing.Font("Lucida Console", $fontSize, [System.Drawing.FontStyle]::Regular);',
+    '$brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Black);',
+    '$idx = 0;',
+    '$doc.add_PrintPage({',
+    '  param($sender, $e);',
+    '  $y = 0;',
+    '  $lh = $font.GetHeight($e.Graphics);',
+    '  while ($idx -lt $lines.Length) {',
+    '    $e.Graphics.DrawString($lines[$idx], $font, $brush, 0, $y);',
+    '    $y += $lh;',
+    '    $idx++;',
+    '    if ($y + $lh -gt $e.PageBounds.Height -and $idx -lt $lines.Length) {',
+    '      $e.HasMorePages = $true;',
+    '      return;',
+    '    }',
+    '  };',
+    '  $e.HasMorePages = $false;',
+    '});',
+    '$doc.Print();'
+  ].join(' ');
+
+  const encoded = Buffer.from(psCode, 'utf16le').toString('base64');
+
   try {
-    // Imprime en la impresora predeterminada de Windows usando PowerShell
-    execSync(\`powershell -NoProfile -Command "Get-Content -Path '\${tmpFile}' | Out-Printer"\`, { stdio: 'ignore' });
+    execSync('powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + encoded, { stdio: 'ignore' });
     try { fs.unlinkSync(tmpFile); } catch (e) {}
     return true;
   } catch (err) {
-    console.error('⚠️ Error al imprimir con PowerShell:', err.message);
-    // Alternativa con comando print
+    console.error('⚠️ Reintentando con método de respaldo:', err.message);
     try {
-      execSync(\`print /D:PRN "\${tmpFile}"\`, { stdio: 'ignore' });
+      execSync('powershell -NoProfile -Command "Get-Content -Path \\'' + escapedPath + '\\' | Out-Printer"', { stdio: 'ignore' });
       try { fs.unlinkSync(tmpFile); } catch (e) {}
       return true;
     } catch (e2) {
@@ -275,18 +307,91 @@ router.get('/descargar-windows-directo', (req, res) => {
   const protocol = req.protocol;
   const baseUrl = `${protocol}://${host}`;
 
+  const psLoop = [
+    `$url = '${baseUrl}';`,
+    'Add-Type -AssemblyName System.Drawing;',
+    'function Print-Ticket([string]$filePath) {',
+    '  try {',
+    '    $doc = New-Object System.Drawing.Printing.PrintDocument;',
+    '    $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0);',
+    '    $doc.OriginAtMargins = $false;',
+    '    $lines = [System.IO.File]::ReadAllLines($filePath, [System.Text.Encoding]::GetEncoding(28591));',
+    '    $maxLen = 0;',
+    '    foreach ($l in $lines) { if ($l.Length -gt $maxLen) { $maxLen = $l.Length } };',
+    '    $fontSize = if ($maxLen -le 34) { 8.5 } else { 7.5 };',
+    '    $font = New-Object System.Drawing.Font("Lucida Console", $fontSize, [System.Drawing.FontStyle]::Regular);',
+    '    $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Black);',
+    '    $idx = 0;',
+    '    $doc.add_PrintPage({',
+    '      param($sender, $e);',
+    '      $y = 0;',
+    '      $lh = $font.GetHeight($e.Graphics);',
+    '      while ($idx -lt $lines.Length) {',
+    '        $e.Graphics.DrawString($lines[$idx], $font, $brush, 0, $y);',
+    '        $y += $lh;',
+    '        $idx++;',
+    '        if ($y + $lh -gt $e.PageBounds.Height -and $idx -lt $lines.Length) {',
+    '          $e.HasMorePages = $true;',
+    '          return;',
+    '        }',
+    '      };',
+    '      $e.HasMorePages = $false;',
+    '    });',
+    '    $doc.Print();',
+    '    return $true;',
+    '  } catch {',
+    '    try {',
+    '      Get-Content -Path $filePath | Out-Printer;',
+    '      return $true;',
+    '    } catch {',
+    '      return $false;',
+    '    }',
+    '  }',
+    '}',
+    'Write-Host "========================================================" -ForegroundColor Green;',
+    'Write-Host "  SERVIDOR DE IMPRESION TIENDA JISPIPLAST (CERO MARGENES)" -ForegroundColor Green;',
+    'Write-Host "========================================================" -ForegroundColor Green;',
+    'Write-Host "Conectando a: $url" -ForegroundColor Yellow;',
+    'Write-Host "Margenes configurados a 0 mm (ancho completo de rollo termico)." -ForegroundColor Cyan;',
+    'Write-Host "Esperando facturas desde celulares o computadores..." -ForegroundColor White;',
+    'Write-Host "Para detener, cierra esta ventana.`n" -ForegroundColor Gray;',
+    'while ($true) {',
+    '  try {',
+    '    $resp = Invoke-RestMethod -Uri "$url/api/impresion/pendientes" -Method Get -TimeoutSec 6;',
+    '    if ($resp -and $resp.pendientes -and $resp.pendientes.Count -gt 0) {',
+    '      foreach ($t in $resp.pendientes) {',
+    '        Write-Host ("[NUEVO TICKET] Factura: " + $t.numero_factura + " | Cajero: " + $t.usuario_nombre) -ForegroundColor Cyan;',
+    '        $tmp = [System.IO.Path]::GetTempFileName();',
+    '        [System.IO.File]::WriteAllText($tmp, $t.contenido_ticket, [System.Text.Encoding]::GetEncoding(28591));',
+    '        $ok = Print-Ticket $tmp;',
+    '        if ($ok) {',
+    '          Write-Host ("[IMPRESO OK] Factura " + $t.numero_factura + " impresa con exito.") -ForegroundColor Green;',
+    '          $body = @{ exito = $true } | ConvertTo-Json;',
+    '          Invoke-RestMethod -Uri "$url/api/impresion/confirmar/$($t.id)" -Method Post -Body $body -ContentType "application/json" | Out-Null;',
+    '        } else {',
+    '          Write-Host ("[ERROR] Fallo al imprimir factura " + $t.numero_factura) -ForegroundColor Red;',
+    '        }',
+    '        if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue };',
+    '      }',
+    '    }',
+    '  } catch {',
+    '  }',
+    '  Start-Sleep -Seconds 2;',
+    '}',
+    'pause;'
+  ].join('\r\n');
+
+  const encodedLoop = Buffer.from(psLoop, 'utf16le').toString('base64');
+
   const batWindows = "@echo off\r\n" +
-    "title Impresora Tienda Jispiplast - Windows Nativo (Sin Node.js)\r\n" +
+    "title Impresora Tienda Jispiplast (Sin Margenes)\r\n" +
     "color 0A\r\n" +
     "echo ========================================================\r\n" +
-    "echo   SERVIDOR DE IMPRESION TIENDA JISPIPLAST\r\n" +
-    "echo   Modo Nativo Windows: No requiere instalar nada.\r\n" +
+    "echo   INICIANDO IMPRESORA TIENDA JISPIPLAST\r\n" +
+    "echo   Modo Cero Margenes para Rollo Termico\r\n" +
     "echo ========================================================\r\n" +
-    `echo Conectando a: ${baseUrl}\r\n` +
-    "echo Esperando facturas desde celulares o computadores...\r\n" +
-    "echo Para detener, cierra esta ventana.\r\n" +
     "echo.\r\n" +
-    `powershell -NoProfile -ExecutionPolicy Bypass -Command "$url = '${baseUrl}'; Write-Host 'Servidor de impresion conectado y listo.' -ForegroundColor Green; while ($true) { try { $resp = Invoke-RestMethod -Uri \\\"$url/api/impresion/pendientes\\\" -Method Get -TimeoutSec 6; if ($resp -and $resp.pendientes -and $resp.pendientes.Count -gt 0) { foreach ($t in $resp.pendientes) { Write-Host ('[NUEVO TICKET] Factura: ' + $t.numero_factura) -ForegroundColor Cyan; $tmp = [System.IO.Path]::GetTempFileName(); [System.IO.File]::WriteAllText($tmp, $t.contenido_ticket, [System.Text.Encoding]::GetEncoding(28591)); try { Get-Content -Path $tmp | Out-Printer; $body = @{ exito = $true } | ConvertTo-Json; Invoke-RestMethod -Uri \\\"$url/api/impresion/confirmar/$($t.id)\\\" -Method Post -Body $body -ContentType 'application/json'; } catch { } finally { if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue } } } } } catch { } Start-Sleep -Seconds 2; }"\r\n` +
+    `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedLoop}\r\n` +
     "pause\r\n";
 
   res.setHeader('Content-Type', 'application/x-bat');
@@ -294,4 +399,60 @@ router.get('/descargar-windows-directo', (req, res) => {
   res.send(batWindows);
 });
 
+// ------------------------------------------------------------------
+// GET /api/impresion/descargar-auto-arranque -> Instalador automático de inicio con Windows
+// ------------------------------------------------------------------
+router.get('/descargar-auto-arranque', (req, res) => {
+  const host = req.get('host');
+  const protocol = req.protocol;
+  const baseUrl = `${protocol}://${host}`;
+
+  const autoBat = `@echo off
+title Configurar Inicio Automatico con Windows - Jispiplast
+color 0A
+echo ========================================================
+echo   CONFIGURADOR DE INICIO AUTOMATICO - JISPIPLAST
+echo ========================================================
+echo.
+echo Este instalador configurara tu computador para que el
+echo servidor de impresion arranque solo cada vez que prendas el PC.
+echo.
+
+set TARGET_DIR=%USERPROFILE%\\Jispiplast_Impresion
+if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
+
+echo [1/3] Descargando la version mas reciente del agente de impresion...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '${baseUrl}/api/impresion/descargar-windows-directo' -OutFile '%TARGET_DIR%\\imprimir_en_tienda.bat'"
+
+if not exist "%TARGET_DIR%\\imprimir_en_tienda.bat" (
+    echo [ERROR] No se pudo descargar el archivo. Verifica tu conexion a internet.
+    pause
+    exit /b
+)
+
+echo [2/3] Creando acceso directo en la carpeta de Inicio de Windows...
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine($env:APPDATA, 'Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Jispiplast_Impresora.lnk')); $s.TargetPath = '%TARGET_DIR%\\imprimir_en_tienda.bat'; $s.WorkingDirectory = '%TARGET_DIR%'; $s.WindowStyle = 7; $s.Description = 'Servidor de Impresion Tienda Jispiplast'; $s.Save()"
+
+echo [3/3] Iniciando el servicio ahora mismo...
+start "" /min "%TARGET_DIR%\\imprimir_en_tienda.bat"
+
+echo.
+echo ========================================================
+echo   EXITO: CONFIGURACION COMPLETADA!
+echo ========================================================
+echo 1. El servidor de impresion ya esta funcionando en segundo plano.
+echo 2. De ahora en adelante se encendera AUTOMATICAMENTE cada vez
+echo    que prendas este computador. No tendras que abrir nada.
+echo.
+echo Puedes cerrar esta ventana.
+echo ========================================================
+pause
+`;
+
+  res.setHeader('Content-Type', 'application/x-bat');
+  res.setHeader('Content-Disposition', 'attachment; filename="configurar_inicio_automatico.bat"');
+  res.send(autoBat);
+});
+
 module.exports = router;
+

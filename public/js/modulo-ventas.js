@@ -260,27 +260,53 @@ const ModuloVentas = (() => {
               </div>
             </div>
 
-            <!-- Pasos de Instalación -->
+            <!-- SECCIÓN DESTACADA: ENCENDIDO AUTOMÁTICO AL PRENDER EL COMPUTADOR -->
+            <div class="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 space-y-2.5">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">⚡</span>
+                <div>
+                  <h4 class="font-bold text-emerald-950 text-xs uppercase tracking-wider">¿Encender automáticamente cada vez que prendas el PC?</h4>
+                  <p class="text-[11px] text-emerald-800">Descarga este configurador para que arranque solo al prender Windows sin tener que abrir nada.</p>
+                </div>
+              </div>
+              <div class="pt-1">
+                <a href="/api/impresion/descargar-auto-arranque" download="configurar_inicio_automatico.bat" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow-sm transition-all">
+                  <span>🚀</span> Descargar Configurador de Inicio Automático (.bat)
+                </a>
+              </div>
+              <p class="text-[10px] text-emerald-700">Solo dale doble clic una vez y listo: se iniciará minimizado en segundo plano cada vez que enciendas tu equipo.</p>
+            </div>
+
+            <!-- Pasos de Instalación Normales -->
             <div class="space-y-2.5">
               <h4 class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                <span>🚀</span> ¿Cómo instalarlo en el computador de la tienda?
+                <span>📁</span> Opciones de Ejecución Manual
               </h4>
-              <p class="text-slate-600 leading-relaxed">
-                Solo toma 2 minutos. En el computador que tiene conectada la impresora térmica USB:
-              </p>
-              <div class="space-y-2 bg-indigo-50/70 border border-indigo-200 rounded-xl p-3 text-[11px]">
-                <p><b>1.</b> Asegúrate de tener instalado <b>Node.js</b> (si no lo tienes, descárgalo gratis de <a href="https://nodejs.org" target="_blank" class="text-indigo-600 underline font-bold">nodejs.org</a>).</p>
-                <p><b>2.</b> Descarga estos 2 archivos en una carpeta (por ejemplo en el Escritorio):</p>
-                <div class="flex flex-wrap gap-2 pt-1">
-                  <a href="/api/impresion/descargar-agente" download="agente-impresion.js" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1 shadow-2xs">
-                    <span>📥</span> Descargar agente-impresion.js
-                  </a>
-                  <a href="/api/impresion/descargar-bat" download="iniciar_impresora.bat" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold flex items-center gap-1 shadow-2xs">
-                    <span>⚡</span> Descargar iniciar_impresora.bat
+              <div class="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px]">
+                <p class="font-semibold text-slate-800">Opción A: Windows Nativo (Sin instalar nada, Cero márgenes)</p>
+                <div class="flex flex-wrap gap-2 pt-0.5">
+                  <a href="/api/impresion/descargar-windows-directo" download="imprimir_en_tienda_sin_instalar_nada.bat" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1 shadow-2xs">
+                    <span>⚡</span> Descargar imprimir_en_tienda_sin_instalar_nada.bat
                   </a>
                 </div>
-                <p class="pt-1"><b>3.</b> Haz <b>doble clic en <code>iniciar_impresora.bat</code></b>. ¡Listo! Verás que el estado cambia a <b class="text-emerald-700">🟢 En Línea</b> y cada venta que hagas desde tu celular se imprimirá automáticamente en la tienda.</p>
+                <div class="pt-2 border-t border-slate-200">
+                  <p class="font-semibold text-slate-800">Opción B: Con Node.js (Si ya tienes Node instalado)</p>
+                  <div class="flex flex-wrap gap-2 pt-1">
+                    <a href="/api/impresion/descargar-agente" download="agente-impresion.js" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-bold flex items-center gap-1 shadow-2xs">
+                      <span>📥</span> agente-impresion.js
+                    </a>
+                    <a href="/api/impresion/descargar-bat" download="iniciar_impresora.bat" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-bold flex items-center gap-1 shadow-2xs">
+                      <span>⚡</span> iniciar_impresora.bat
+                    </a>
+                  </div>
+                </div>
               </div>
+            </div>
+
+            <!-- Tip manual shell:startup -->
+            <div class="p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
+              <p class="font-bold flex items-center gap-1"><span>💡</span> Si prefieres hacerlo tú mismo manualmente en Windows:</p>
+              <p>Presiona <b>Windows + R</b> en el teclado, escribe <code>shell:startup</code> y dale Enter. Luego copia tu archivo <code>.bat</code> dentro de esa carpeta. ¡Windows lo abrirá automáticamente al iniciar!</p>
             </div>
           </div>
 
@@ -1998,7 +2024,8 @@ const ModuloVentas = (() => {
     const f = venta;
     const c = Object.assign({}, CONFIG_FACTURA_DEFAULT, cfg || configFactura);
     const items = f.items || [];
-    const ancho = 40;
+    const es58 = (c.tamanoPapel === '58mm');
+    const ancho = es58 ? 32 : 40;
     const sep = '='.repeat(ancho);
     const lin = '-'.repeat(ancho);
 
@@ -2046,25 +2073,48 @@ const ModuloVentas = (() => {
     if (c.mostrarListaPrecios) t += `Lista: ${getNombreLista(f.lista_precios || 'precio_1')}\n`;
 
     t += sep + '\n';
-    if (c.mostrarPrecioUnitario) {
-      t += 'DESCRIPCION       CANT  VR.UNI    TOTAL\n';
+    if (es58) {
+      if (c.mostrarPrecioUnitario) {
+        t += 'DESCRIPCION   CANT  VR.UNI TOTAL\n';
+      } else {
+        t += 'DESCRIPCION         CANT   TOTAL\n';
+      }
     } else {
-      t += 'DESCRIPCION                 CANT   TOTAL\n';
+      if (c.mostrarPrecioUnitario) {
+        t += 'DESCRIPCION       CANT  VR.UNI    TOTAL\n';
+      } else {
+        t += 'DESCRIPCION                 CANT   TOTAL\n';
+      }
     }
     t += lin + '\n';
 
     items.forEach(it => {
-      if (c.mostrarPrecioUnitario) {
-        const nom = (it.nombre_producto || 'Producto').substring(0, 16).padEnd(16, ' ');
-        const cant = String(it.cantidad || 1).padStart(4, ' ');
-        const uni = String(Math.round(it.precio_unitario || 0)).padStart(8, ' ');
-        const sub = String(Math.round(it.subtotal || 0)).padStart(9, ' ');
-        t += `${nom} ${cant} ${uni} ${sub}\n`;
+      if (es58) {
+        if (c.mostrarPrecioUnitario) {
+          const nom = (it.nombre_producto || 'Producto').substring(0, 11).padEnd(11, ' ');
+          const cant = String(it.cantidad || 1).padStart(4, ' ');
+          const uni = String(Math.round(it.precio_unitario || 0)).padStart(7, ' ');
+          const sub = String(Math.round(it.subtotal || 0)).padStart(7, ' ');
+          t += `${nom} ${cant} ${uni} ${sub}\n`;
+        } else {
+          const nom = (it.nombre_producto || 'Producto').substring(0, 18).padEnd(18, ' ');
+          const cant = String(it.cantidad || 1).padStart(4, ' ');
+          const sub = String(Math.round(it.subtotal || 0)).padStart(8, ' ');
+          t += `${nom} ${cant} ${sub}\n`;
+        }
       } else {
-        const nom = (it.nombre_producto || 'Producto').substring(0, 24).padEnd(24, ' ');
-        const cant = String(it.cantidad || 1).padStart(4, ' ');
-        const sub = String(Math.round(it.subtotal || 0)).padStart(10, ' ');
-        t += `${nom} ${cant} ${sub}\n`;
+        if (c.mostrarPrecioUnitario) {
+          const nom = (it.nombre_producto || 'Producto').substring(0, 16).padEnd(16, ' ');
+          const cant = String(it.cantidad || 1).padStart(4, ' ');
+          const uni = String(Math.round(it.precio_unitario || 0)).padStart(8, ' ');
+          const sub = String(Math.round(it.subtotal || 0)).padStart(9, ' ');
+          t += `${nom} ${cant} ${uni} ${sub}\n`;
+        } else {
+          const nom = (it.nombre_producto || 'Producto').substring(0, 24).padEnd(24, ' ');
+          const cant = String(it.cantidad || 1).padStart(4, ' ');
+          const sub = String(Math.round(it.subtotal || 0)).padStart(10, ' ');
+          t += `${nom} ${cant} ${sub}\n`;
+        }
       }
       if (c.mostrarSku && it.sku) {
         t += `  * SKU: ${it.sku}\n`;
@@ -2076,19 +2126,25 @@ const ModuloVentas = (() => {
     const subtotal = Math.round(Number(f.subtotal) || total);
     const descuento = Math.round(Number(f.descuento) || 0);
 
+    const alinearMoneda = (label, valor) => {
+      const v = '$ ' + formatMoney(valor);
+      const l = label.padEnd(ancho - v.length, ' ');
+      return l + v + '\n';
+    };
+
     if (c.mostrarSubtotalDescuento && descuento > 0) {
-      t += `SUBTOTAL:          $ ${formatMoney(subtotal)}\n`;
-      t += `DESCUENTO:        -$ ${formatMoney(descuento)}\n`;
+      t += alinearMoneda('SUBTOTAL:', subtotal);
+      t += alinearMoneda('DESCUENTO:', -descuento);
     }
-    t += `VALOR A PAGAR:     $ ${formatMoney(total)}\n`;
+    t += alinearMoneda('VALOR A PAGAR:', total);
     if (c.mostrarMetodoPago) {
       t += `Forma de Pago:     ${f.metodo_pago || 'EFECTIVO'}\n`;
     }
     if (c.mostrarCambio && f.metodo_pago === 'EFECTIVO') {
       const rec = Math.round(Number(f.monto_recibido) || total);
       const cam = Math.round(Number(f.cambio) || 0);
-      t += `Recibido:          $ ${formatMoney(rec)}\n`;
-      t += `Cambio:            $ ${formatMoney(cam)}\n`;
+      t += alinearMoneda('Recibido:', rec);
+      t += alinearMoneda('Cambio:', cam);
     }
 
     if (c.mostrarPiePagina && c.textoPiePagina) {
@@ -2201,6 +2257,27 @@ const ModuloVentas = (() => {
           </div>
         </div>
       ` : ''}
+
+      <!-- SECCIÓN 0: ANCHO DE ROLLO (58MM O 80MM) -->
+      <div class="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-4 shadow-2xs space-y-2">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2.5">
+            <span class="text-xl">🖨️</span>
+            <div>
+              <h4 class="font-bold text-xs uppercase tracking-wider text-indigo-950">Ancho de Rollo Térmico (Impresora POS)</h4>
+              <p class="text-[11px] text-indigo-700">Ajusta las columnas para que el ticket ocupe todo el ancho de tu papel sin partir palabras.</p>
+            </div>
+          </div>
+          <div class="inline-flex rounded-xl p-1 bg-white border border-indigo-200 shadow-2xs">
+            <button type="button" onclick="window.JispiVentas.cambiarTamanoPapel('80mm')" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${configFacturaTemp.tamanoPapel !== '58mm' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">
+              Rollo 80 mm (Estándar)
+            </button>
+            <button type="button" onclick="window.JispiVentas.cambiarTamanoPapel('58mm')" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${configFacturaTemp.tamanoPapel === '58mm' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">
+              Rollo 58 mm (Compacto)
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- SECCIÓN 1: CABECERA Y DATOS DEL NEGOCIO -->
       <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
@@ -2378,6 +2455,13 @@ const ModuloVentas = (() => {
         </div>
       </div>
     `;
+  }
+
+  function cambiarTamanoPapel(tam) {
+    if (!configFacturaTemp) return;
+    configFacturaTemp.tamanoPapel = tam;
+    renderControlesConfigTicket();
+    renderPreviewConfigTicket();
   }
 
   function toggleVisibilidad(campo) {
@@ -2594,6 +2678,7 @@ const ModuloVentas = (() => {
     enviarAImpresoraTienda,
     abrirModalConfigTicket,
     cerrarModalConfigTicket,
+    cambiarTamanoPapel,
     toggleVisibilidad,
     actualizarCampoTexto,
     renderControlesConfigTicket,
