@@ -45,7 +45,8 @@ const ModuloVentas = (() => {
     mostrarCambio: true,
     mostrarPiePagina: true,
     textoPiePagina: '*** ¡GRACIAS POR SU COMPRA! ***\nVuelva pronto',
-    tamanoPapel: '80mm'
+    tamanoPapel: '80mm',
+    margenLateral: '4mm'
   };
 
   let configFactura = Object.assign({}, CONFIG_FACTURA_DEFAULT);
@@ -1789,15 +1790,15 @@ const ModuloVentas = (() => {
 
       return `
         <tr>
-          <td style="text-align: left; padding: 3px 0; vertical-align: top;">
+          <td style="text-align: left; padding: 2px 0; vertical-align: top; word-break: break-word; font-size: 10px;">
             ${escapeHtml(it.nombre_producto)}
             ${c.mostrarSku && it.sku ? `<br><small style="font-size: 8px; color: #555;">SKU: ${escapeHtml(it.sku)}</small>` : ''}
           </td>
-          <td style="text-align: center; vertical-align: top; padding: 3px 0;">${cantidad}</td>
+          <td style="text-align: center; vertical-align: top; padding: 2px 0; font-size: 10px;">${cantidad}</td>
           ${c.mostrarPrecioUnitario ? `
-            <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(precioUnitario)}</td>
+            <td style="text-align: right; vertical-align: top; padding: 2px 0; white-space: nowrap; font-size: 10px;">$${formatMoney(precioUnitario)}</td>
           ` : ''}
-          <td style="text-align: right; vertical-align: top; padding: 3px 0;">$${formatMoney(itemSubtotal)}</td>
+          <td style="text-align: right; vertical-align: top; padding: 2px 0; white-space: nowrap; font-size: 10px;">$${formatMoney(itemSubtotal)}</td>
         </tr>
       `;
     }).join('');
@@ -1810,25 +1811,25 @@ const ModuloVentas = (() => {
       htmlCabecera = `
         <div style="text-align: center; margin-bottom: 4px;">
           ${c.mostrarLogo ? `
-            <img src="${c.urlLogo || '/img/Logo.png'}" style="max-width: 50mm; max-height: 24mm; margin: 0 auto 4px auto; display: block;" alt="Logo" onerror="this.style.display='none';" />
+            <img src="${c.urlLogo || '/img/Logo.png'}" style="max-width: 44mm; max-height: 22mm; margin: 0 auto 4px auto; display: block;" alt="Logo" onerror="this.style.display='none';" />
           ` : ''}
           ${c.mostrarNombreNegocio && c.nombreNegocio ? `
-            <p style="font-weight: bold; font-size: 15px; margin: 0; text-transform: uppercase;">${escapeHtml(c.nombreNegocio)}</p>
+            <p style="font-weight: bold; font-size: 14px; margin: 0; text-transform: uppercase;">${escapeHtml(c.nombreNegocio)}</p>
           ` : ''}
           ${c.mostrarRazonSocial && c.razonSocial ? `
-            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.razonSocial)}</p>
+            <p style="margin: 2px 0; font-size: 10.5px;">${escapeHtml(c.razonSocial)}</p>
           ` : ''}
           ${c.mostrarNit && c.nitNegocio ? `
-            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.nitNegocio)}</p>
+            <p style="margin: 2px 0; font-size: 10.5px;">${escapeHtml(c.nitNegocio)}</p>
           ` : ''}
           ${c.mostrarDireccion && c.direccionNegocio ? `
-            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.direccionNegocio)}</p>
+            <p style="margin: 2px 0; font-size: 10.5px;">${escapeHtml(c.direccionNegocio)}</p>
           ` : ''}
           ${c.mostrarTelefono && c.telefonoNegocio ? `
-            <p style="margin: 2px 0; font-size: 11px;">Tel: ${escapeHtml(c.telefonoNegocio)}</p>
+            <p style="margin: 2px 0; font-size: 10.5px;">Tel: ${escapeHtml(c.telefonoNegocio)}</p>
           ` : ''}
           ${c.mostrarCiudad && c.ciudadNegocio ? `
-            <p style="margin: 2px 0; font-size: 11px;">${escapeHtml(c.ciudadNegocio)}</p>
+            <p style="margin: 2px 0; font-size: 10.5px;">${escapeHtml(c.ciudadNegocio)}</p>
           ` : ''}
         </div>
         <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
@@ -1875,19 +1876,19 @@ const ModuloVentas = (() => {
     }
 
     return `
-      <div id="ticket-print-area" style="font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.25; color: #000; width: 100%; max-width: 300px; margin: 0 auto; background: #fff; padding: 6px; box-sizing: border-box;">
+      <div id="ticket-print-area" style="font-family: 'Courier New', Courier, monospace; font-size: 10.5px; line-height: 1.25; color: #000; width: 100%; max-width: 290px; margin: 0 auto; background: #fff; padding: 2px; box-sizing: border-box;">
         ${htmlCabecera}
         ${htmlDatosVenta}
 
-        <table style="width: 100%; border-collapse: collapse; margin: 4px 0;">
+        <table style="width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed;">
           <thead>
             <tr>
-              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: left;">DESCRIPCIÓN</th>
-              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: center; width: 22px;">CANT</th>
+              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: left; width: 44%;">DESCRIPCIÓN</th>
+              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: center; width: 14%;">CANT</th>
               ${c.mostrarPrecioUnitario ? `
-                <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 45px;">VR.UNI</th>
+                <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 21%; white-space: nowrap;">VR.UNI</th>
               ` : ''}
-              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: 50px;">TOTAL</th>
+              <th style="border-bottom: 1px solid #000; font-size: 9px; padding-bottom: 2px; text-align: right; width: ${c.mostrarPrecioUnitario ? '21%' : '42%'}; white-space: nowrap;">TOTAL</th>
             </tr>
           </thead>
           <tbody>
@@ -1897,35 +1898,35 @@ const ModuloVentas = (() => {
 
         <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
 
-        <table style="width: 100%; margin-top: 4px;">
+        <table style="width: 100%; margin-top: 4px; border-collapse: collapse;">
           ${c.mostrarSubtotalDescuento && descuento > 0 ? `
             <tr>
-              <td>Subtotal:</td>
-              <td style="text-align: right;">$${formatMoney(subtotal)}</td>
+              <td style="font-size: 10px; padding: 1px 0;">Subtotal:</td>
+              <td style="text-align: right; font-size: 10px; padding: 1px 0; white-space: nowrap;">$${formatMoney(subtotal)}</td>
             </tr>
             <tr>
-              <td>Descuento:</td>
-              <td style="text-align: right;">-$${formatMoney(descuento)}</td>
+              <td style="font-size: 10px; padding: 1px 0;">Descuento:</td>
+              <td style="text-align: right; font-size: 10px; padding: 1px 0; white-space: nowrap;">-$${formatMoney(descuento)}</td>
             </tr>
           ` : ''}
           <tr>
-            <td style="font-weight: bold; font-size: 12px;">VALOR A PAGAR:</td>
-            <td style="text-align: right; font-weight: bold; font-size: 13px;">$${formatMoney(totalFactura)}</td>
+            <td style="font-weight: bold; font-size: 11px; padding: 2px 0;">VALOR A PAGAR:</td>
+            <td style="text-align: right; font-weight: bold; font-size: 12px; padding: 2px 0; white-space: nowrap;">$${formatMoney(totalFactura)}</td>
           </tr>
           ${c.mostrarMetodoPago ? `
             <tr>
-              <td style="padding-top: 3px;">Forma de Pago:</td>
-              <td style="text-align: right; padding-top: 3px;">${escapeHtml(formaPago)}</td>
+              <td style="padding-top: 2px; font-size: 10px;">Forma de Pago:</td>
+              <td style="text-align: right; padding-top: 2px; font-size: 10px; white-space: nowrap;">${escapeHtml(formaPago)}</td>
             </tr>
           ` : ''}
           ${c.mostrarCambio && formaPago === 'EFECTIVO' ? `
             <tr>
-              <td style="padding-top: 2px;">Monto Recibido:</td>
-              <td style="text-align: right; padding-top: 2px;">$${formatMoney(f.monto_recibido || totalFactura)}</td>
+              <td style="padding-top: 1px; font-size: 10px;">Monto Recibido:</td>
+              <td style="text-align: right; padding-top: 1px; font-size: 10px; white-space: nowrap;">$${formatMoney(f.monto_recibido || totalFactura)}</td>
             </tr>
             <tr>
-              <td style="font-weight: bold; padding-top: 2px;">Cambio / Devuelta:</td>
-              <td style="text-align: right; font-weight: bold; padding-top: 2px;">$${formatMoney(f.cambio || 0)}</td>
+              <td style="font-weight: bold; padding-top: 1px; font-size: 10px;">Cambio / Devuelta:</td>
+              <td style="text-align: right; font-weight: bold; padding-top: 1px; font-size: 10px; white-space: nowrap;">$${formatMoney(f.cambio || 0)}</td>
             </tr>
           ` : ''}
         </table>
@@ -1974,6 +1975,14 @@ const ModuloVentas = (() => {
     const doc = iframe.contentWindow.document;
     doc.open();
 
+    const c = Object.assign({}, CONFIG_FACTURA_DEFAULT, configFactura);
+    const es58 = (c.tamanoPapel === '58mm');
+    const papelSize = es58 ? '58mm auto' : '80mm auto';
+    // Para 80mm con margen físico de 4mm a cada lado, el ancho útil es 72mm max.
+    // Usamos 64mm centrados con margen lateral de 4mm para garantizar 100% que no se corte ningún precio ni borde.
+    const anchoContenido = es58 ? '44mm' : '64mm';
+    const margenLat = c.margenLateral || '4mm';
+
     const ticketHtml = generarHtmlTicketInterno(f, configFactura);
 
     doc.write(`
@@ -1983,16 +1992,41 @@ const ModuloVentas = (() => {
         <meta charset="utf-8">
         <title>Factura POS - ${escapeHtml(f.numero_factura || 'Venta')}</title>
         <style>
-          @page { margin: 0; size: 80mm auto; }
+          @page {
+            margin: 0;
+            size: ${papelSize};
+          }
+          * {
+            box-sizing: border-box;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            background: #fff;
+          }
           body {
             font-family: 'Courier New', Courier, monospace;
-            width: 72mm;
-            margin: 0 auto;
-            padding: 4mm 0;
-            font-size: 11px;
+            font-size: 10px;
             color: #000;
-            line-height: 1.25;
-            background: #fff;
+            line-height: 1.22;
+            padding: 2mm ${margenLat} !important;
+            display: flex;
+            justify-content: center;
+          }
+          #ticket-print-area {
+            width: 100% !important;
+            max-width: ${anchoContenido} !important;
+            padding: 0 1mm !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+          }
+          table {
+            width: 100% !important;
+            border-collapse: collapse;
+          }
+          td, th {
+            word-break: break-word;
           }
         </style>
       </head>
@@ -2025,11 +2059,17 @@ const ModuloVentas = (() => {
     const c = Object.assign({}, CONFIG_FACTURA_DEFAULT, cfg || configFactura);
     const items = f.items || [];
     const es58 = (c.tamanoPapel === '58mm');
-    const ancho = es58 ? 32 : 40;
+    // Ancho seguro con 4mm de margen a lado y lado: 38 columnas para 80mm, 30 para 58mm
+    const ancho = es58 ? 30 : 38;
     const sep = '='.repeat(ancho);
     const lin = '-'.repeat(ancho);
 
     let t = '';
+
+    // Etiqueta de control para que el servidor de impresión imprima el logo si está activo
+    if (c.mostrarLogo) {
+      t += '[[IMPRIMIR_LOGO]]\n';
+    }
 
     // Encabezado
     if (c.mostrarNombreNegocio && c.nombreNegocio) {
@@ -2075,13 +2115,13 @@ const ModuloVentas = (() => {
     t += sep + '\n';
     if (es58) {
       if (c.mostrarPrecioUnitario) {
-        t += 'DESCRIPCION   CANT  VR.UNI TOTAL\n';
+        t += 'DESCRIPCION   CANT VR.UNI  TOTAL\n';
       } else {
         t += 'DESCRIPCION         CANT   TOTAL\n';
       }
     } else {
       if (c.mostrarPrecioUnitario) {
-        t += 'DESCRIPCION       CANT  VR.UNI    TOTAL\n';
+        t += 'DESCRIPCION      CANT  VR.UNI    TOTAL\n';
       } else {
         t += 'DESCRIPCION                 CANT   TOTAL\n';
       }
@@ -2093,11 +2133,11 @@ const ModuloVentas = (() => {
         if (c.mostrarPrecioUnitario) {
           const nom = (it.nombre_producto || 'Producto').substring(0, 11).padEnd(11, ' ');
           const cant = String(it.cantidad || 1).padStart(4, ' ');
-          const uni = String(Math.round(it.precio_unitario || 0)).padStart(7, ' ');
-          const sub = String(Math.round(it.subtotal || 0)).padStart(7, ' ');
+          const uni = String(Math.round(it.precio_unitario || 0)).padStart(6, ' ');
+          const sub = String(Math.round(it.subtotal || 0)).padStart(6, ' ');
           t += `${nom} ${cant} ${uni} ${sub}\n`;
         } else {
-          const nom = (it.nombre_producto || 'Producto').substring(0, 18).padEnd(18, ' ');
+          const nom = (it.nombre_producto || 'Producto').substring(0, 16).padEnd(16, ' ');
           const cant = String(it.cantidad || 1).padStart(4, ' ');
           const sub = String(Math.round(it.subtotal || 0)).padStart(8, ' ');
           t += `${nom} ${cant} ${sub}\n`;
@@ -2106,11 +2146,11 @@ const ModuloVentas = (() => {
         if (c.mostrarPrecioUnitario) {
           const nom = (it.nombre_producto || 'Producto').substring(0, 16).padEnd(16, ' ');
           const cant = String(it.cantidad || 1).padStart(4, ' ');
-          const uni = String(Math.round(it.precio_unitario || 0)).padStart(8, ' ');
-          const sub = String(Math.round(it.subtotal || 0)).padStart(9, ' ');
+          const uni = String(Math.round(it.precio_unitario || 0)).padStart(7, ' ');
+          const sub = String(Math.round(it.subtotal || 0)).padStart(8, ' ');
           t += `${nom} ${cant} ${uni} ${sub}\n`;
         } else {
-          const nom = (it.nombre_producto || 'Producto').substring(0, 24).padEnd(24, ' ');
+          const nom = (it.nombre_producto || 'Producto').substring(0, 22).padEnd(22, ' ');
           const cant = String(it.cantidad || 1).padStart(4, ' ');
           const sub = String(Math.round(it.subtotal || 0)).padStart(10, ' ');
           t += `${nom} ${cant} ${sub}\n`;
@@ -2258,8 +2298,8 @@ const ModuloVentas = (() => {
         </div>
       ` : ''}
 
-      <!-- SECCIÓN 0: ANCHO DE ROLLO (58MM O 80MM) -->
-      <div class="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-4 shadow-2xs space-y-2">
+      <!-- SECCIÓN 0: ANCHO DE ROLLO Y MÁRGENES DE SEGURIDAD -->
+      <div class="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-4 shadow-2xs space-y-3">
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <div class="flex items-center gap-2.5">
             <span class="text-xl">🖨️</span>
@@ -2274,6 +2314,24 @@ const ModuloVentas = (() => {
             </button>
             <button type="button" onclick="window.JispiVentas.cambiarTamanoPapel('58mm')" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${configFacturaTemp.tamanoPapel === '58mm' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">
               Rollo 58 mm (Compacto)
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-indigo-200/60 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <span class="font-bold text-xs text-indigo-950">Margen lateral físico (A lado y lado):</span>
+            <p class="text-[11px] text-indigo-700">Evita que el cabezal de la impresora corte los bordes o los precios a la derecha.</p>
+          </div>
+          <div class="inline-flex rounded-xl p-1 bg-white border border-indigo-200 shadow-2xs">
+            <button type="button" onclick="window.JispiVentas.cambiarMargenLateral('3mm')" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${configFacturaTemp.margenLateral === '3mm' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}">
+              3 mm
+            </button>
+            <button type="button" onclick="window.JispiVentas.cambiarMargenLateral('4mm')" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${(!configFacturaTemp.margenLateral || configFacturaTemp.margenLateral === '4mm') ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}">
+              4 mm (Predeterminado)
+            </button>
+            <button type="button" onclick="window.JispiVentas.cambiarMargenLateral('5mm')" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${configFacturaTemp.margenLateral === '5mm' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}">
+              5 mm
             </button>
           </div>
         </div>
@@ -2460,6 +2518,13 @@ const ModuloVentas = (() => {
   function cambiarTamanoPapel(tam) {
     if (!configFacturaTemp) return;
     configFacturaTemp.tamanoPapel = tam;
+    renderControlesConfigTicket();
+    renderPreviewConfigTicket();
+  }
+
+  function cambiarMargenLateral(margen) {
+    if (!configFacturaTemp) return;
+    configFacturaTemp.margenLateral = margen;
     renderControlesConfigTicket();
     renderPreviewConfigTicket();
   }
@@ -2679,6 +2744,7 @@ const ModuloVentas = (() => {
     abrirModalConfigTicket,
     cerrarModalConfigTicket,
     cambiarTamanoPapel,
+    cambiarMargenLateral,
     toggleVisibilidad,
     actualizarCampoTexto,
     renderControlesConfigTicket,
