@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "build": "echo 'No build step required'"
+    "build": "echo 'No build step required'",
+    "lint": "node -c server.js routes/clientes.js routes/inventario.js routes/pedidos.js routes/domicilios.js routes/ventas.js routes/auth.js"
   },
   "license": "MIT",
   "dependencies": {

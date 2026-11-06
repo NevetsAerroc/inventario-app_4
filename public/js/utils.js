@@ -474,3 +474,369 @@ function abrirModalNuevoCliente(nombreInicial, onClienteCreado) {
     }
   };
 }
+
+// ============================================================
+// Modal para Editar Cliente Existente
+// ============================================================
+function abrirModalEditarCliente(cliente, onClienteActualizado) {
+  if (!cliente || !cliente.id) {
+    showToast('Datos de cliente inválidos para editar', 'error');
+    return;
+  }
+
+  let modal = document.getElementById('modal-editar-cliente');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-editar-cliente';
+    modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="font-bold text-slate-800 text-base flex items-center gap-1.5">
+            <span>✏️</span> Editar Cliente #${cliente.id}
+          </h3>
+          <p class="text-xs text-slate-400">Modifica los datos del cliente y guarda los cambios.</p>
+        </div>
+        <button id="btn-cerrar-modal-edit-cliente" class="text-slate-400 hover:text-slate-600 font-bold text-lg p-1">✕</button>
+      </div>
+
+      <form id="form-modal-edit-cliente" class="space-y-3" onsubmit="return false;">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre Completo <span class="text-rose-500">*</span></label>
+          <input id="edit-c-nombre" type="text" value="${escapeHtml(cliente.nombre || '')}" required
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">Empresa / Negocio <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input id="edit-c-empresa" type="text" value="${escapeHtml(cliente.empresa || '')}" placeholder="Ej: Distribuidora Central"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">Dirección de Entrega <span class="text-slate-400 font-normal">(opcional)</span></label>
+          <input id="edit-c-direccion" type="text" value="${escapeHtml(cliente.direccion || '')}" placeholder="Ej: Calle 15 # 12-34, Local 2"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Teléfono <span class="text-slate-400 font-normal">(opcional)</span></label>
+            <input id="edit-c-telefono" type="text" value="${escapeHtml(cliente.telefono || '')}" placeholder="Ej: 3001234567"
+                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Ciudad <span class="text-slate-400 font-normal">(opcional)</span></label>
+            <input id="edit-c-ciudad" type="text" value="${escapeHtml(cliente.ciudad || '')}" placeholder="Ej: Armenia"
+                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+          </div>
+        </div>
+
+        <div id="edit-c-error" class="text-xs text-rose-600 hidden bg-rose-50 p-2 rounded-lg border border-rose-200"></div>
+
+        <div class="flex gap-2 pt-2">
+          <button id="btn-cancelar-modal-edit-cliente" type="button" class="flex-1 py-2.5 rounded-lg bg-slate-100 text-slate-700 font-semibold text-sm hover:bg-slate-200">Cancelar</button>
+          <button id="btn-guardar-modal-edit-cliente" type="button" class="flex-1 py-2.5 rounded-lg bg-emerald-600 text-white font-semibold text-sm shadow-sm hover:bg-emerald-700 flex items-center justify-center gap-1">
+            <span>💾</span> Guardar Cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  const inputNombre = document.getElementById('edit-c-nombre');
+  inputNombre.focus();
+  inputNombre.select();
+
+  const cerrar = () => modal.classList.add('hidden');
+  document.getElementById('btn-cerrar-modal-edit-cliente').onclick = cerrar;
+  document.getElementById('btn-cancelar-modal-edit-cliente').onclick = cerrar;
+
+  document.getElementById('btn-guardar-modal-edit-cliente').onclick = async () => {
+    const errorEl = document.getElementById('edit-c-error');
+    errorEl.classList.add('hidden');
+
+    const payload = {
+      nombre: inputNombre.value.trim(),
+      empresa: document.getElementById('edit-c-empresa').value.trim(),
+      direccion: document.getElementById('edit-c-direccion').value.trim(),
+      telefono: document.getElementById('edit-c-telefono').value.trim(),
+      ciudad: document.getElementById('edit-c-ciudad').value.trim(),
+    };
+
+    if (!payload.nombre) {
+      errorEl.textContent = 'El nombre del cliente es obligatorio.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const res = await apiFetch(`/clientes/${cliente.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      cerrar();
+      showToast(`Cliente "${payload.nombre}" actualizado con éxito`, 'success');
+      if (onClienteActualizado) onClienteActualizado(res.data || payload);
+    } else {
+      errorEl.textContent = res.error || 'No se pudo actualizar el cliente.';
+      errorEl.classList.remove('hidden');
+    }
+  };
+}
+
+// ============================================================
+// Modal Directorio Completo y Gestión de Clientes
+// ============================================================
+function abrirModalGestionClientes() {
+  let modal = document.getElementById('modal-gestion-clientes');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-gestion-clientes';
+    modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <!-- Encabezado -->
+      <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">👥</span>
+          <div>
+            <h3 class="font-bold text-slate-800 text-base sm:text-lg flex items-center gap-2">
+              Gestión de Clientes
+              <span id="gc-badge-total" class="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-semibold">Cargando...</span>
+            </h3>
+            <p class="text-xs text-slate-500">Consulta, edita, descarga y sube masivamente la base de clientes de Jispiplast.</p>
+          </div>
+        </div>
+        <button id="btn-cerrar-gestion-clientes" class="text-slate-400 hover:text-slate-600 font-bold text-xl px-2 py-1 rounded-lg hover:bg-slate-200">✕</button>
+      </div>
+
+      <!-- Barra de herramientas: Búsqueda y Botones de Acción -->
+      <div class="p-4 border-b border-slate-200 bg-white flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <!-- Buscador en tiempo real -->
+        <div class="relative flex-1">
+          <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-sm">🔍</span>
+          <input id="gc-input-buscar" type="text" placeholder="Buscar por nombre, empresa, teléfono, dirección o ciudad..."
+                 class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+        </div>
+
+        <!-- Botones de Acción -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Descargar Excel -->
+          <a href="/api/clientes/exportar" download="base_clientes.xlsx"
+             class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+             title="Descargar base de clientes en archivo Excel (.xlsx)">
+            <span>⬇️</span> Descargar Excel
+          </a>
+
+          <!-- Subir Masivo Excel/CSV -->
+          <label class="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                 title="Cargar o actualizar clientes desde archivo Excel (.xlsx/.csv)">
+            <span>📄</span> Subir Masivo
+            <input type="file" id="gc-file-importar" accept=".xlsx,.xls,.csv" class="hidden" />
+          </label>
+
+          <!-- Nuevo Cliente -->
+          <button id="gc-btn-nuevo-cliente"
+                  class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs">
+            <span>➕</span> Nuevo Cliente
+          </button>
+        </div>
+      </div>
+
+      <!-- Contenedor de la Tabla con scroll -->
+      <div class="flex-1 overflow-y-auto p-4 bg-slate-50">
+        <div id="gc-tabla-contenedor" class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          <div class="p-8 text-center text-slate-400 text-sm">Cargando lista de clientes...</div>
+        </div>
+      </div>
+
+      <!-- Pie de página informativo -->
+      <div class="p-3 border-t border-slate-200 bg-white flex items-center justify-between text-xs text-slate-500 px-4">
+        <span id="gc-info-conteo">Mostrando clientes...</span>
+        <button id="btn-cerrar-gestion-clientes-pie" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs">Cerrar</button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+
+  const inputBuscar = document.getElementById('gc-input-buscar');
+  const tablaContenedor = document.getElementById('gc-tabla-contenedor');
+  const badgeTotal = document.getElementById('gc-badge-total');
+  const infoConteo = document.getElementById('gc-info-conteo');
+  const fileImportar = document.getElementById('gc-file-importar');
+  const btnNuevo = document.getElementById('gc-btn-nuevo-cliente');
+
+  const cerrar = () => modal.classList.add('hidden');
+  document.getElementById('btn-cerrar-gestion-clientes').onclick = cerrar;
+  document.getElementById('btn-cerrar-gestion-clientes-pie').onclick = cerrar;
+
+  btnNuevo.onclick = () => {
+    abrirModalNuevoCliente('', () => cargarLista(inputBuscar.value));
+  };
+
+  // Subida masiva de archivo
+  fileImportar.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('archivo', file);
+    showToast('Procesando archivo masivo de clientes...', 'info');
+
+    tablaContenedor.innerHTML = `
+      <div class="p-8 text-center text-slate-500 text-sm animate-pulse">
+        ⏳ Procesando archivo de clientes... Por favor espera.
+      </div>
+    `;
+
+    const res = await apiFetch('/clientes/importar', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (res.ok) {
+      showToast(`¡Importación exitosa! ${res.resumen.creados} nuevos, ${res.resumen.actualizados} actualizados.`, 'success');
+      cargarLista();
+    } else {
+      showToast(res.error || 'Error al procesar el archivo', 'error');
+      cargarLista();
+    }
+    e.target.value = '';
+  };
+
+  let debounceTimer = null;
+  inputBuscar.oninput = () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      cargarLista(inputBuscar.value);
+    }, 250);
+  };
+
+  async function cargarLista(q = '') {
+    const queryStr = q ? `?q=${encodeURIComponent(q.trim())}` : '';
+    const res = await apiFetch(`/clientes${queryStr}`);
+
+    if (!res.ok) {
+      tablaContenedor.innerHTML = `
+        <div class="p-8 text-center text-rose-500 text-sm">
+          Error al cargar clientes: ${escapeHtml(res.error || 'Desconocido')}
+        </div>
+      `;
+      return;
+    }
+
+    const lista = res.data || [];
+    const total = res.total ?? lista.length;
+    badgeTotal.textContent = `${total} total`;
+    infoConteo.textContent = `Mostrando ${lista.length} de ${total} clientes`;
+
+    if (lista.length === 0) {
+      tablaContenedor.innerHTML = `
+        <div class="p-8 text-center space-y-3">
+          <p class="text-3xl">📭</p>
+          <p class="text-sm font-semibold text-slate-600">No se encontraron clientes${q ? ` para "${escapeHtml(q)}"` : ''}</p>
+          <p class="text-xs text-slate-400">Puedes agregar un nuevo cliente o importar una lista en Excel.</p>
+          <button onclick="abrirModalNuevoCliente('${escapeHtml(q)}', () => abrirModalGestionClientes())"
+                  class="px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700">
+            ➕ Crear cliente nuevo
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    let rowsHtml = lista.map((c) => {
+      const tel = c.telefono ? `<a href="tel:${escapeHtml(c.telefono)}" class="text-emerald-700 hover:underline font-mono">📞 ${escapeHtml(c.telefono)}</a>` : '<span class="text-slate-300 italic">Sin tel.</span>';
+      const dir = c.direccion ? escapeHtml(c.direccion) : '<span class="text-slate-300 italic">Sin dirección</span>';
+      const ciudad = c.ciudad ? `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium">${escapeHtml(c.ciudad)}</span>` : '<span class="text-slate-300 italic">-</span>';
+      const empresa = c.empresa ? `<span class="text-slate-500 font-medium">🏢 ${escapeHtml(c.empresa)}</span>` : '';
+
+      return `
+        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+          <td class="px-3.5 py-2.5 text-xs text-slate-400 font-mono">#${c.id}</td>
+          <td class="px-3.5 py-2.5 text-sm">
+            <div class="font-bold text-slate-800">${escapeHtml(c.nombre)}</div>
+            ${empresa ? `<div class="text-xs">${empresa}</div>` : ''}
+          </td>
+          <td class="px-3.5 py-2.5 text-xs">${tel}</td>
+          <td class="px-3.5 py-2.5 text-xs text-slate-600 max-w-xs truncate" title="${escapeHtml(c.direccion || '')}">${dir}</td>
+          <td class="px-3.5 py-2.5 text-xs">${ciudad}</td>
+          <td class="px-3.5 py-2.5 text-xs text-right whitespace-nowrap">
+            <button class="btn-editar-cliente px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-semibold border border-slate-200 transition-colors mr-1"
+                    data-id="${c.id}" title="Editar cliente">
+              ✏️ Editar
+            </button>
+            <button class="btn-eliminar-cliente px-2 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 font-semibold border border-slate-200 transition-colors"
+                    data-id="${c.id}" data-nombre="${escapeHtml(c.nombre)}" title="Eliminar cliente">
+              🗑️
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tablaContenedor.innerHTML = `
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+              <th class="px-3.5 py-2.5 w-12">ID</th>
+              <th class="px-3.5 py-2.5">Cliente / Negocio</th>
+              <th class="px-3.5 py-2.5">Teléfono</th>
+              <th class="px-3.5 py-2.5">Dirección</th>
+              <th class="px-3.5 py-2.5">Ciudad</th>
+              <th class="px-3.5 py-2.5 text-right w-28">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // Asignar listeners a los botones de editar y eliminar
+    tablaContenedor.querySelectorAll('.btn-editar-cliente').forEach(btn => {
+      btn.onclick = () => {
+        const id = Number(btn.dataset.id);
+        const cliente = lista.find(item => item.id === id);
+        if (cliente) {
+          abrirModalEditarCliente(cliente, () => cargarLista(inputBuscar.value));
+        }
+      };
+    });
+
+    tablaContenedor.querySelectorAll('.btn-eliminar-cliente').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.id;
+        const nombre = btn.dataset.nombre;
+        if (!confirm(`¿Estás seguro de eliminar al cliente "${nombre}"? Esta acción no se puede deshacer.`)) {
+          return;
+        }
+
+        const resDel = await apiFetch(`/clientes/${id}`, { method: 'DELETE' });
+        if (resDel.ok) {
+          showToast(`Cliente "${nombre}" eliminado`, 'success');
+          cargarLista(inputBuscar.value);
+        } else {
+          showToast(resDel.error || 'No se pudo eliminar el cliente', 'error');
+        }
+      };
+    });
+  }
+
+  // Primera carga
+  cargarLista();
+  setTimeout(() => inputBuscar.focus(), 100);
+}
