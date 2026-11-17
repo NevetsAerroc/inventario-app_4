@@ -195,7 +195,8 @@ const ModuloDomicilios = {
                   if (c.direccion) document.getElementById('dom-direccion').value = c.direccion;
                   if (c.ciudad) document.getElementById('dom-municipio').value = c.ciudad;
                   showToast('Cliente creado y seleccionado', 'success');
-                })" class="px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors" title="Crear cliente nuevo">➕</button>
+                })" class="px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer" title="Crear cliente nuevo">➕</button>
+                <button type="button" onclick="abrirModalGestionClientes()" class="px-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer" title="Ver directorio de clientes y usuarios">👥</button>
               </div>
               <div id="dom-autocomplete-cliente" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-48 overflow-y-auto"></div>
             </div>
@@ -1399,8 +1400,8 @@ const ModuloDomicilios = {
     if (inp) { inp.focus(); inp.select(); }
   },
 
-  /** Guarda el nuevo precio del pedido y recalcula "paga con" / devuelta. */
-  guardarPrecioPedido(pedidoId) {
+  /** Guarda el nuevo precio del pedido y recalcula "paga con" / devuelta, persistiendo de inmediato en SQLite y Firebase. */
+  async guardarPrecioPedido(pedidoId) {
     const chk = document.querySelector(`.chk-pedido[value="${pedidoId}"]`);
     if (!chk) return;
 
@@ -1417,6 +1418,18 @@ const ModuloDomicilios = {
 
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.add('hidden');
     document.getElementById(`precio-edit-${pedidoId}`)?.classList.remove('flex');
+
+    // Persistir de inmediato en servidor SQLite y en Firebase Firestore mientras está en el apartado de despacho
+    try {
+      const res = await apiFetch(`/pedidos/${pedidoId}/precio-despacho`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ total: nuevoTotal })
+      });
+      if (res?.ok && window.FirebaseClient?.guardarPedido) {
+        window.FirebaseClient.guardarPedido(res.pedido || { id: pedidoId, total: nuevoTotal });
+      }
+    } catch (_) {}
   },
 
   cancelarPrecioPedido(pedidoId) {
@@ -2128,7 +2141,17 @@ const ModuloDomicilios = {
       });
 
       if (res && res.ok) {
-        showToast('Ruta despachada exitosamente');
+        if (window.FirebaseClient?.guardarRuta) {
+          try {
+            await window.FirebaseClient.guardarRuta(
+              res.ruta || { id: res.rutaId, domiciliario_id: domId, base_efectivo: base, estado: 'EN_RUTA' },
+              res.pedidosActualizados || pedidos
+            );
+          } catch (e) {
+            console.warn('[Firebase Domicilios]', e);
+          }
+        }
+        showToast('Ruta despachada exitosamente y guardada en Firebase Firestore', 'success');
         this.cambiarSubTab('rutas');
       } else {
         alert((res && res.error) || 'No se pudo despachar');
@@ -5529,7 +5552,17 @@ async guardarAjusteTotal(pedidoId) {
       if (modal) modal.remove();
 
       if (res && res.ok) {
-        showToast('Ruta liquidada exitosamente', 'success');
+        if (window.FirebaseClient?.guardarRuta) {
+          try {
+            await window.FirebaseClient.guardarRuta(
+              res.ruta || { id: rutaId, total_recolectado: totalEfectivoEntregado, estado: 'LIQUIDADA' },
+              res.pedidosActualizados || pedidosLiquidacion
+            );
+          } catch (e) {
+            console.warn('[Firebase Liquidar]', e);
+          }
+        }
+        showToast('Ruta liquidada exitosamente y actualizada en Firebase Firestore', 'success');
         this.rutaSeleccionadaId = null;
         await this.cambiarSubTab('auditoria');
       } else {

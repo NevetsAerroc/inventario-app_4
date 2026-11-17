@@ -15,9 +15,10 @@ const pedidosRouter = require('./routes/pedidos');
 const clientesRouter = require('./routes/clientes');
 const ventasRouter = require('./routes/ventas');
 const impresionRouter = require('./routes/impresion');
+const backupRouter = require('./routes/backup');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = (process.env.PORT && process.env.PORT !== '8080') ? (Number(process.env.PORT) || 3000) : 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 const CERT_DIR = path.join(__dirname, 'certs');
 
@@ -31,6 +32,15 @@ app.use(authMiddleware);
 // Frontend estático
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/firebase-applet-config.json', (req, res) => {
+  const configPath = path.join(__dirname, 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    res.sendFile(configPath);
+  } else {
+    res.status(404).json({ error: 'Configuración de Firebase no encontrada' });
+  }
+});
+
 // API Base
 app.use('/api/auth', authRouter);
 app.use('/api/usuarios', usuariosRouter);
@@ -39,7 +49,14 @@ app.use('/api/pedidos', pedidosRouter);
 app.use('/api/clientes', clientesRouter);
 app.use('/api/ventas', ventasRouter);
 app.use('/api/impresion', impresionRouter);
-app.get('/api/health', (req, res) => res.json({ ok: true, status: 'up', time: new Date().toISOString() }));
+app.use('/api/backup', backupRouter);
+app.get('/api/health', (req, res) => res.json({
+  ok: true,
+  status: 'up',
+  zona: 'America/Bogota (UTC-5)',
+  hora_bogota: db.getFechaHoraBogota ? db.getFechaHoraBogota() : new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
+  time: new Date().toISOString()
+}));
 
 // ==========================================
 // RUTAS MÓDULO D: DOMICILIOS & LIQUIDACIÓN
@@ -363,11 +380,52 @@ app.post('/api/rutas/despachar', (req, res) => {
       return infoRuta.lastInsertRowid;
     });
 
-    res.json({ ok: true, rutaId: tx() });
+    const rutaId = tx();
+    const rutaGuardada = db.prepare(`
+      SELECT r.*, d.nombre as domiciliario_nombre 
+      FROM rutas_domicilio r 
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id 
+      WHERE r.id = ?
+    `).get(rutaId);
+    const pedidosActualizados = db.prepare(`
+      SELECT p.*, d.nombre as domiciliario_nombre 
+      FROM pedidos p 
+      LEFT JOIN domiciliarios d ON p.domiciliario_id = d.id 
+      WHERE p.ruta_id = ?
+    `).all(rutaId);
+
+    res.json({
+      ok: true,
+      rutaId,
+      ruta: rutaGuardada,
+      pedidosActualizados
+    });
   } catch (err) {
     const msg = err.message || 'Error al despachar';
     const status = /no válido|no encontrado|aún no está|ya está en una ruta/i.test(msg) ? 400 : 500;
     res.status(status).json({ ok: false, error: msg });
+  }
+});
+
+// Actualizar precio de un pedido directamente en el apartado de despacho
+app.patch('/api/pedidos/:id/precio-despacho', (req, res) => {
+  try {
+    const pedidoId = req.params.id;
+    const { total } = req.body || {};
+    if (total === undefined || total === null || isNaN(Number(total)) || Number(total) < 0) {
+      return res.status(400).json({ ok: false, error: 'Total inválido' });
+    }
+    const totalNum = Math.round(Number(total));
+    db.prepare(`
+      UPDATE pedidos 
+      SET total = ?, total_original = COALESCE(NULLIF(total_original, 0), ?)
+      WHERE id = ?
+    `).run(totalNum, totalNum, pedidoId);
+
+    const ped = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
+    res.json({ ok: true, pedido: ped });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -720,7 +778,27 @@ app.post('/api/rutas/liquidar', (req, res) => {
       `).run(Number(totalEfectivoEntregado) || 0, usuarioLiquidaId, usuarioLiquida, rutaId);
     });
     tx();
-    res.json({ ok: true, mensaje: 'Ruta liquidada exitosamente' });
+
+    const rutaLiquidada = db.prepare(`
+      SELECT r.*, d.nombre as domiciliario_nombre 
+      FROM rutas_domicilio r 
+      LEFT JOIN domiciliarios d ON r.domiciliario_id = d.id 
+      WHERE r.id = ?
+    `).get(rutaId);
+    const pedidosLiquidados = db.prepare(`
+      SELECT p.*, d.nombre as domiciliario_nombre 
+      FROM pedidos p 
+      LEFT JOIN domiciliarios d ON p.domiciliario_id = d.id 
+      WHERE p.ruta_id = ?
+    `).all(rutaId);
+
+    res.json({
+      ok: true,
+      rutaId,
+      mensaje: 'Ruta liquidada exitosamente',
+      ruta: rutaLiquidada,
+      pedidosActualizados: pedidosLiquidados
+    });
   } catch (err) {
     console.error('Error al liquidar ruta:', err);
     res.status(500).json({ ok: false, error: err.message });

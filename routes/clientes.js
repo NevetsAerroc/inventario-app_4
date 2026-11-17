@@ -13,11 +13,32 @@ try {
   // La columna ya existe, ignorar error
 }
 
+// Sincronizar usuarios activos del sistema a la lista de clientes si no existen
+function sincronizarUsuariosAClientes() {
+  try {
+    const usuarios = db.prepare('SELECT id, username, nombre FROM usuarios WHERE activo = 1').all();
+    const insertCliente = db.prepare(`
+      INSERT INTO clientes (nombre, empresa, direccion, telefono, ciudad)
+      SELECT ?, '', '', '', ''
+      WHERE NOT EXISTS (SELECT 1 FROM clientes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)))
+    `);
+    for (const u of usuarios) {
+      if (u.nombre && u.nombre.trim()) {
+        insertCliente.run(u.nombre.trim(), u.nombre.trim());
+      }
+    }
+  } catch (e) {
+    // Si la tabla no existe o ya está
+  }
+}
+sincronizarUsuariosAClientes();
+
 // ------------------------------------------------------------------
 // GET /api/clientes -> Listar clientes con búsqueda opcional
 // ------------------------------------------------------------------
 router.get('/', (req, res) => {
   try {
+    sincronizarUsuariosAClientes();
     const q = (req.query.q || '').trim();
     let clientes;
     if (q) {
@@ -157,16 +178,32 @@ router.post('/importar', upload.single('archivo'), (req, res) => {
 // GET /api/clientes/sugerencias?q=texto -> Autocompletado rápido
 // ------------------------------------------------------------------
 router.get('/sugerencias', (req, res) => {
-  const q = (req.query.q || '').trim();
-  if (!q) return res.json({ ok: true, data: [] });
+  try {
+    sincronizarUsuariosAClientes();
+    const q = (req.query.q || '').trim();
 
-  const clientes = db.prepare(`
-    SELECT * FROM clientes
-    WHERE nombre LIKE ? OR empresa LIKE ? OR ciudad LIKE ? OR direccion LIKE ? OR telefono LIKE ?
-    ORDER BY nombre ASC LIMIT 10
-  `).all(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    if (!q) {
+      // Devolver los últimos clientes/usuarios para selección rápida al hacer click/focus
+      const recientes = db.prepare(`
+        SELECT id, nombre, empresa, direccion, telefono, ciudad
+        FROM clientes
+        ORDER BY id DESC LIMIT 15
+      `).all();
+      return res.json({ ok: true, data: recientes });
+    }
 
-  res.json({ ok: true, data: clientes });
+    const clientes = db.prepare(`
+      SELECT id, nombre, empresa, direccion, telefono, ciudad
+      FROM clientes
+      WHERE nombre LIKE ? OR empresa LIKE ? OR ciudad LIKE ? OR direccion LIKE ? OR telefono LIKE ?
+      ORDER BY nombre ASC LIMIT 15
+    `).all(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+
+    res.json({ ok: true, data: clientes });
+  } catch (err) {
+    console.error('Error en sugerencias clientes:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // ------------------------------------------------------------------

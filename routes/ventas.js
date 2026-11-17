@@ -12,6 +12,11 @@ if (!fs.existsSync(uploadDir)) {
 }
 const upload = multer({ dest: uploadDir });
 
+// Asegurar que la columna cliente_direccion exista en ventas
+try {
+  db.prepare("ALTER TABLE ventas ADD COLUMN cliente_direccion TEXT DEFAULT ''").run();
+} catch (e) {}
+
 function parsePrecio(val) {
   if (val === null || val === undefined || val === '') return 0;
   if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val));
@@ -107,38 +112,115 @@ router.get('/consecutivo', (req, res) => {
 
 // ------------------------------------------------------------------
 // GET /api/ventas/productos-sugerencias -> Búsqueda rápida / auto-llenado
+function normalizarTextoBusqueda(str) {
+  if (!str) return '';
+  return String(str)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+// ------------------------------------------------------------------
+// GET /api/ventas/productos-sugerencias -> Búsqueda rápida, dinámica y por palabras intermedias
 // ------------------------------------------------------------------
 router.get('/productos-sugerencias', (req, res) => {
   try {
-    const q = (req.query.q || '').trim();
-    if (!q) return res.json({ ok: true, productos: [] });
+    const qRaw = (req.query.q || '').trim();
+    if (!qRaw) return res.json({ ok: true, productos: [] });
 
-    const like = `%${q}%`;
-    const qNorm = db.normalizarCodigoBarras ? (db.normalizarCodigoBarras(q) || q) : q;
-    const likeNorm = `%${qNorm}%`;
+    const qNorm = normalizarTextoBusqueda(qRaw);
+    const tokens = qNorm.split(/\s+/).filter(Boolean);
+    if (!tokens.length) return res.json({ ok: true, productos: [] });
 
-    const productos = db.prepare(`
+    const qBarNorm = db.normalizarCodigoBarras ? (db.normalizarCodigoBarras(qRaw) || qRaw) : qRaw;
+
+    // 1. Intento de búsqueda exacta por código de barras o SKU
+    let prodExacto = null;
+    try {
+      prodExacto = db.prepare(`
+        SELECT id, sku, nombre, categoria, subcategoria, ubicacion, stock,
+               COALESCE(NULLIF(precio_1, 0), precio, 0) AS precio_1,
+               COALESCE(precio_2, 0) AS precio_2,
+               COALESCE(precio_3, 0) AS precio_3,
+               COALESCE(precio, 0) AS precio,
+               COALESCE(iva, 0) AS iva,
+               codigo_barras, codigo_caja, unidades_por_caja, codigo_interno
+        FROM productos
+        WHERE codigo_barras = ? OR codigo_barras = ? OR sku = ? OR codigo_caja = ? OR codigo_interno = ?
+        LIMIT 1
+      `).get(qRaw, qBarNorm, qRaw, qRaw, qRaw);
+    } catch (_) {}
+
+    // 2. Cargar todos los productos para filtrar y buscar sin problemas de tildes, mayúsculas o substrings
+    const todosProds = db.prepare(`
       SELECT id, sku, nombre, categoria, subcategoria, ubicacion, stock,
              COALESCE(NULLIF(precio_1, 0), precio, 0) AS precio_1,
              COALESCE(precio_2, 0) AS precio_2,
              COALESCE(precio_3, 0) AS precio_3,
              COALESCE(precio, 0) AS precio,
              COALESCE(iva, 0) AS iva,
-             codigo_barras, codigo_caja, unidades_por_caja
+             codigo_barras, codigo_caja, unidades_por_caja, codigo_interno
       FROM productos
-      WHERE (sku LIKE ? OR nombre LIKE ? OR codigo_barras LIKE ? OR codigo_barras LIKE ? OR codigo_caja LIKE ? OR codigo_interno LIKE ?)
-      ORDER BY
-        CASE
-          WHEN codigo_barras = ? OR sku = ? THEN 0
-          WHEN codigo_barras = ? THEN 0
-          WHEN nombre LIKE ? THEN 1
-          ELSE 2
-        END,
-        nombre ASC
-      LIMIT 12
-    `).all(like, like, like, likeNorm, like, like, q, q, qNorm, `${q}%`);
+    `).all();
 
-    res.json({ ok: true, productos });
+    const scored = [];
+    for (const p of todosProds) {
+      const nomNorm = normalizarTextoBusqueda(p.nombre || '');
+      const skuNorm = normalizarTextoBusqueda(p.sku || '');
+      const barNorm = normalizarTextoBusqueda(p.codigo_barras || '');
+      const cajaNorm = normalizarTextoBusqueda(p.codigo_caja || '');
+      const internoNorm = normalizarTextoBusqueda(p.codigo_interno || '');
+      const catNorm = normalizarTextoBusqueda(p.categoria || '');
+      const subNorm = normalizarTextoBusqueda(p.subcategoria || '');
+      const ubicNorm = normalizarTextoBusqueda(p.ubicacion || '');
+
+      let match = false;
+      let score = 0;
+
+      if (barNorm === qNorm || skuNorm === qNorm || cajaNorm === qNorm || internoNorm === qNorm) {
+        match = true;
+        score += 3000;
+      } else if (barNorm.startsWith(qNorm) || skuNorm.startsWith(qNorm) || cajaNorm.startsWith(qNorm)) {
+        match = true;
+        score += 1500;
+      }
+
+      let tokensCoincidentes = 0;
+      tokens.forEach(t => {
+        const enNombre = nomNorm.includes(t);
+        const enSku = skuNorm.includes(t);
+        const enCat = catNorm.includes(t) || subNorm.includes(t);
+        const enUbic = ubicNorm.includes(t);
+        const enBar = barNorm.includes(t) || cajaNorm.includes(t);
+
+        if (enNombre || enSku || enCat || enUbic || enBar) {
+          tokensCoincidentes++;
+          if (enNombre) score += 200;
+          if (enSku) score += 150;
+          if (enCat || enUbic) score += 50;
+        }
+      });
+
+      if (tokensCoincidentes === tokens.length || nomNorm.includes(qNorm)) {
+        match = true;
+        score += 500;
+      }
+
+      if (match || tokensCoincidentes > 0) {
+        if ((p.stock || 0) > 0) score += 50;
+        scored.push({ p, score });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score || a.p.nombre.localeCompare(b.p.nombre));
+    let finalProds = scored.map(s => s.p).slice(0, 15);
+
+    if (prodExacto && !finalProds.some(r => r.id === prodExacto.id)) {
+      finalProds.unshift(prodExacto);
+    }
+
+    res.json({ ok: true, productos: finalProds });
   } catch (err) {
     console.error('Error al buscar productos para venta:', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -189,6 +271,7 @@ router.post('/', (req, res) => {
       cliente_nombre,
       cliente_documento,
       cliente_telefono,
+      cliente_direccion,
       lista_precios = 'precio_1',
       items = [],
       metodo_pago = 'EFECTIVO',
@@ -248,19 +331,22 @@ router.post('/', (req, res) => {
 
       const usrId = req.user ? req.user.id : null;
       const usrNom = req.user ? req.user.nombre : 'Vendedor Caja';
+      const fechaBogota = db.getFechaHoraBogota ? db.getFechaHoraBogota() : new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
 
       const infoVenta = db.prepare(`
         INSERT INTO ventas (
-          numero_factura, fecha, cliente_id, cliente_nombre, cliente_documento, cliente_telefono,
+          numero_factura, fecha, cliente_id, cliente_nombre, cliente_documento, cliente_telefono, cliente_direccion,
           usuario_id, usuario_nombre, lista_precios, subtotal, descuento, total,
           metodo_pago, monto_recibido, cambio, comprobante, observacion, estado
-        ) VALUES (?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETADA')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETADA')
       `).run(
         numeroFactura,
+        fechaBogota,
         cliente_id || null,
         (cliente_nombre || 'Consumidor Final').trim(),
         (cliente_documento || '').trim(),
         (cliente_telefono || '').trim(),
+        (cliente_direccion || '').trim(),
         usrId,
         usrNom,
         lista_precios,
@@ -736,6 +822,7 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
 
     let procesadas = 0;
     let actualizados = 0;
+    let sinCambios = 0;
     let noEncontrados = 0;
     const detallesActualizados = [];
     const noEncontradosList = [];
@@ -805,30 +892,42 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
           const nuevoP2 = p2 > 0 ? p2 : (nuevoP1);
           const nuevoP3 = p3 > 0 ? p3 : (nuevoP2);
 
-          // Actualizar SOLO los precios y vincular codigo_interno si no lo tenía
-          updatePrecios.run(nuevoP1, nuevoP1, nuevoP2, nuevoP3, valCodigo, valCodigo, prod.id);
-          actualizados++;
+          const actualP1 = Number(prod.precio_1 || prod.precio || 0);
+          const actualP2 = Number(prod.precio_2 || actualP1);
+          const actualP3 = Number(prod.precio_3 || actualP2);
 
-          if (detallesActualizados.length < 50) {
-            detallesActualizados.push({
-              id: prod.id,
-              sku: prod.sku,
-              nombre: prod.nombre,
-              precio_1_anterior: prod.precio_1 || prod.precio,
-              precio_1_nuevo: nuevoP1,
-              precio_2_nuevo: nuevoP2,
-              precio_3_nuevo: nuevoP3
-            });
+          // Verificar si al menos uno de los 3 precios cambia realmente respecto a lo que hay en la BD
+          const hayCambio = (nuevoP1 !== actualP1) || (nuevoP2 !== actualP2) || (nuevoP3 !== actualP3);
+
+          if (hayCambio) {
+            updatePrecios.run(nuevoP1, nuevoP1, nuevoP2, nuevoP3, valCodigo, valCodigo, prod.id);
+            actualizados++;
+
+            if (detallesActualizados.length < 50) {
+              detallesActualizados.push({
+                id: prod.id,
+                sku: prod.sku,
+                nombre: prod.nombre,
+                precio_1_anterior: actualP1,
+                precio_1_nuevo: nuevoP1,
+                precio_2_nuevo: nuevoP2,
+                precio_3_nuevo: nuevoP3
+              });
+            }
+          } else {
+            sinCambios++;
           }
         } else {
           noEncontrados++;
-          if (noEncontradosList.length < 20) {
-            noEncontradosList.push({
-              codigo: valCodigo,
-              articulo: valArticulo,
-              barcode: valCodBarras
-            });
-          }
+          // Retornar TODOS los no encontrados para que el botón 'Agregar TODOS a la BD' cree el 100% de productos faltantes
+          noEncontradosList.push({
+            codigo: valCodigo,
+            articulo: valArticulo,
+            barcode: valCodBarras,
+            precio_1: p1,
+            precio_2: p2,
+            precio_3: p3
+          });
         }
       }
     });
@@ -838,12 +937,20 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
     // Eliminar archivo temporal
     try { fs.unlinkSync(filePath); } catch (e) {}
 
+    let mensajeRes = '';
+    if (actualizados > 0) {
+      mensajeRes = `Precios actualizados: ${actualizados} producto(s) modificado(s) (${sinCambios} ya estaban al día).`;
+    } else {
+      mensajeRes = `Todos los precios están al día. 0 productos modificados (${sinCambios} con precios al día).`;
+    }
+
     res.json({
       ok: true,
-      mensaje: `Precios actualizados: ${actualizados} producto(s) modificado(s).`,
+      mensaje: mensajeRes,
       stats: {
         filas_procesadas: procesadas,
         productos_actualizados: actualizados,
+        precios_sin_cambio: sinCambios,
         no_encontrados: noEncontrados,
         columnas_precios_detectadas: colVentas.length
       },
@@ -853,6 +960,68 @@ router.post('/actualizar-precios-archivo', upload.single('archivo'), (req, res) 
   } catch (err) {
     try { fs.unlinkSync(filePath); } catch (e) {}
     console.error('Error al actualizar precios desde archivo:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
+// POST /api/ventas/crear-producto-precios -> Crear producto directamente desde el módulo de precios
+// ------------------------------------------------------------------
+router.post('/crear-producto-precios', (req, res) => {
+  try {
+    const {
+      nombre,
+      sku,
+      categoria = 'General',
+      subcategoria = '',
+      ubicacion = '',
+      stock = 0,
+      precio_1 = 0,
+      precio_2 = 0,
+      precio_3 = 0,
+      codigo_barras = '',
+      codigo_interno = ''
+    } = req.body;
+
+    const nombreLimpio = String(nombre || '').trim();
+    if (!nombreLimpio) {
+      return res.status(400).json({ ok: false, error: 'El nombre del producto es obligatorio.' });
+    }
+
+    let skuFinal = String(sku || '').trim();
+    if (!skuFinal) {
+      const ultimo = db.prepare('SELECT id FROM productos ORDER BY id DESC LIMIT 1').get();
+      const nextId = (ultimo ? ultimo.id : 0) + 1;
+      skuFinal = `P${String(nextId).padStart(4, '0')}`;
+    }
+
+    const existeSku = db.prepare('SELECT id, nombre FROM productos WHERE UPPER(TRIM(sku)) = ?').get(skuFinal.toUpperCase());
+    if (existeSku) {
+      return res.status(409).json({ ok: false, error: `Ya existe un producto con el SKU "${skuFinal}" (${existeSku.nombre}).` });
+    }
+
+    let barFinal = db.normalizarCodigoBarras ? db.normalizarCodigoBarras(codigo_barras) : (codigo_barras || '').trim();
+    if (barFinal) {
+      const existeBar = db.prepare('SELECT id, nombre, sku FROM productos WHERE codigo_barras = ?').get(barFinal);
+      if (existeBar) {
+        return res.status(409).json({ ok: false, error: `El código de barras ya está registrado en "${existeBar.nombre}" (SKU ${existeBar.sku}).` });
+      }
+    }
+
+    const p1Num = Math.max(0, Math.round(parseFloat(precio_1) || 0));
+    const p2Num = Math.max(0, Math.round(parseFloat(precio_2) || p1Num));
+    const p3Num = Math.max(0, Math.round(parseFloat(precio_3) || p2Num));
+    const stockNum = Math.max(0, parseInt(stock, 10) || 0);
+
+    const info = db.prepare(`
+      INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, precio_1, precio_2, precio_3, codigo_barras, codigo_interno)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(skuFinal, nombreLimpio, categoria.trim() || 'General', subcategoria.trim(), ubicacion.trim(), stockNum, p1Num, p1Num, p2Num, p3Num, barFinal || null, String(codigo_interno || '').trim() || null);
+
+    const creado = db.prepare('SELECT * FROM productos WHERE id = ?').get(info.lastInsertRowid);
+    res.status(201).json({ ok: true, mensaje: `Producto "${creado.nombre}" agregado con éxito.`, producto: creado });
+  } catch (err) {
+    console.error('Error al crear producto desde precios:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

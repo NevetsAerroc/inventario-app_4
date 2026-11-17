@@ -435,10 +435,24 @@ const Auth = (() => {
             <span class="text-xs font-bold text-slate-700">Usuarios Activos</span>
             <span id="badge-total-usuarios" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 font-bold text-slate-700">0</span>
           </div>
-          <button onclick="Auth.mostrarFormularioUsuario(null)"
-                  class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
-            <span>+</span> <span>Nuevo Usuario</span>
-          </button>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <label class="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-xs" title="Cargar usuarios masivamente desde archivo Excel (.xlsx / .csv)">
+              <span>📄</span> <span>Subir Excel</span>
+              <input type="file" id="file-usuarios-masivo" accept=".xlsx,.xls,.csv" class="hidden" onchange="Auth.handleUploadUsuariosMasivo(event)" />
+            </label>
+            <a href="/api/clientes/exportar" download="usuarios_clientes.xlsx"
+               class="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors shadow-xs" title="Descargar base de usuarios/clientes en Excel">
+              <span>⬇️</span> <span>Exportar</span>
+            </a>
+            <button type="button" onclick="abrirModalGestionClientes()"
+                    class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors cursor-pointer" title="Directorio completo de clientes y destinatarios">
+              <span>👥</span> <span>Clientes</span>
+            </button>
+            <button onclick="Auth.mostrarFormularioUsuario(null)"
+                    class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer">
+              <span>+</span> <span>Nuevo Usuario</span>
+            </button>
+          </div>
         </div>
 
         <!-- CONTENEDOR DE CONTENIDO (LISTA O FORMULARIO) -->
@@ -1177,9 +1191,32 @@ const Auth = (() => {
     }
   }
 
+  async function handleUploadUsuariosMasivo(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('archivo', file);
+    showToast('Procesando archivo masivo de usuarios...', 'info');
+
+    const res = await apiFetch('/usuarios/importar', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (res.ok) {
+      showToast(`¡Importación exitosa! ${res.resumen.creados} nuevos, ${res.resumen.actualizados} actualizados.`, 'success');
+      cargarListaUsuarios();
+    } else {
+      showToast(res.error || 'Error al procesar archivo', 'error');
+    }
+    e.target.value = '';
+  }
+
   return {
     init: verificarSesion,
     verificarSesion,
+    handleUploadUsuariosMasivo,
     login,
     logout,
     onSubmitLogin,

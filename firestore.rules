@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.:]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAppAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'stevencorrea.1995@gmail.com' ||
+        request.auth.token.email_verified == true
+      );
+    }
+
+    function isValidProducto(data) {
+      return data.keys().hasAll(['sku', 'nombre']) &&
+             data.sku is string && data.sku.size() <= 100 &&
+             data.nombre is string && data.nombre.size() <= 200;
+    }
+
+    function isValidCliente(data) {
+      return data.keys().hasAll(['nombre']) &&
+             data.nombre is string && data.nombre.size() <= 200;
+    }
+
+    function isValidPedido(data) {
+      return data.keys().hasAll(['codigo_pedido']) &&
+             data.codigo_pedido is string && data.codigo_pedido.size() <= 100;
+    }
+
+    function isValidVenta(data) {
+      return data.keys().hasAll(['numero_factura']) &&
+             data.numero_factura is string && data.numero_factura.size() <= 100;
+    }
+
+    function isValidDomiciliario(data) {
+      return data.keys().hasAll(['nombre']) &&
+             data.nombre is string && data.nombre.size() <= 150;
+    }
+
+    function isValidRuta(data) {
+      return data.keys().hasAll(['estado']) &&
+             data.estado is string && data.estado.size() <= 50;
+    }
+
+    function isValidUsuario(data) {
+      return data.keys().hasAll(['username', 'nombre']) &&
+             data.username is string && data.username.size() <= 100 &&
+             data.nombre is string && data.nombre.size() <= 150;
+    }
+
+    function isValidConfiguracion(data) {
+      return data.keys().hasAll(['tipo']) &&
+             data.tipo is string && data.tipo.size() <= 100;
+    }
+
+    function isValidRespaldo(data) {
+      return data.keys().hasAll(['fecha']) &&
+             data.fecha is string && data.fecha.size() <= 50;
+    }
+
+    // Default deny para cualquier ruta no mapeada
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Productos: Conexión permanente garantizada para consulta y actualización
+    match /productos/{productoId} {
+      allow read: if true;
+      allow create, update: if isValidId(productoId) && isValidProducto(request.resource.data);
+      allow delete: if isValidId(productoId);
+    }
+
+    // Clientes: Conexión permanente garantizada
+    match /clientes/{clienteId} {
+      allow read: if true;
+      allow create, update: if isValidId(clienteId) && isValidCliente(request.resource.data);
+      allow delete: if isValidId(clienteId);
+    }
+
+    // Pedidos: Conexión permanente garantizada (despacho, alistamiento y empaque)
+    match /pedidos/{pedidoId} {
+      allow read: if true;
+      allow create, update: if isValidId(pedidoId) && isValidPedido(request.resource.data);
+      allow delete: if isValidId(pedidoId);
+    }
+
+    // Ventas: Conexión permanente garantizada
+    match /ventas/{ventaId} {
+      allow read: if true;
+      allow create, update: if isValidId(ventaId) && isValidVenta(request.resource.data);
+      allow delete: if isValidId(ventaId);
+    }
+
+    // Domiciliarios y Rutas
+    match /domiciliarios/{domiciliarioId} {
+      allow read: if true;
+      allow create, update: if isValidId(domiciliarioId) && isValidDomiciliario(request.resource.data);
+      allow delete: if isValidId(domiciliarioId);
+    }
+
+    match /rutas_domicilio/{rutaId} {
+      allow read: if true;
+      allow create, update: if isValidId(rutaId) && isValidRuta(request.resource.data);
+      allow delete: if isValidId(rutaId);
+    }
+
+    // Usuarios: Lectura y escritura con validación de esquema
+    match /usuarios/{usuarioId} {
+      allow read: if true;
+      allow create, update: if isValidId(usuarioId) && isValidUsuario(request.resource.data);
+      allow delete: if isValidId(usuarioId);
+    }
+
+    // Configuraciones de factura, impresora y tienda
+    match /configuracion/{configId} {
+      allow read: if true;
+      allow create, update: if isValidId(configId) && isValidConfiguracion(request.resource.data);
+      allow delete: if isValidId(configId);
+    }
+
+    // Respaldos y Sincronización
+    match /respaldos/{respaldoId} {
+      allow read: if true;
+      allow create, update: if isValidId(respaldoId) && isValidRespaldo(request.resource.data);
+      allow delete: if isValidId(respaldoId);
+    }
+
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

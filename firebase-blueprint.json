@@ -1,0 +1,194 @@
+{
+  "entities": {
+    "producto": {
+      "title": "Producto",
+      "description": "Artículos del inventario de Jispiplast Express",
+      "type": "object",
+      "properties": {
+        "sku": { "type": "string", "maxLength": 100 },
+        "nombre": { "type": "string", "maxLength": 200 },
+        "categoria": { "type": "string", "maxLength": 100 },
+        "subcategoria": { "type": "string", "maxLength": 100 },
+        "stock": { "type": "number" },
+        "precio": { "type": "number" },
+        "precio_1": { "type": "number" },
+        "precio_2": { "type": "number" },
+        "precio_3": { "type": "number" },
+        "iva": { "type": "number" },
+        "codigo_barras": { "type": "string", "maxLength": 100 },
+        "codigo_caja": { "type": "string", "maxLength": 100 },
+        "unidades_por_caja": { "type": "number" },
+        "ubicacion": { "type": "string", "maxLength": 100 },
+        "codigo_interno": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["sku", "nombre"]
+    },
+    "cliente": {
+      "title": "Cliente",
+      "description": "Clientes registrados en el sistema",
+      "type": "object",
+      "properties": {
+        "nombre": { "type": "string", "maxLength": 200 },
+        "telefono": { "type": "string", "maxLength": 50 },
+        "empresa": { "type": "string", "maxLength": 200 },
+        "ciudad": { "type": "string", "maxLength": 100 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["nombre"]
+    },
+    "pedido": {
+      "title": "Pedido",
+      "description": "Pedidos para alistamiento, empaque y domicilios",
+      "type": "object",
+      "properties": {
+        "codigo_pedido": { "type": "string", "maxLength": 100 },
+        "cliente": { "type": "string", "maxLength": 200 },
+        "telefono": { "type": "string", "maxLength": 50 },
+        "direccion": { "type": "string", "maxLength": 300 },
+        "municipio": { "type": "string", "maxLength": 100 },
+        "empresa": { "type": "string", "maxLength": 200 },
+        "estado": { "type": "string", "maxLength": 50 },
+        "tipo_entrega": { "type": "string", "maxLength": 50 },
+        "total": { "type": "number" },
+        "total_original": { "type": "number" },
+        "paga_con": { "type": "number" },
+        "devuelta_calculada": { "type": "number" },
+        "ruta_id": { "type": "number" },
+        "domiciliario_id": { "type": "number" },
+        "domiciliario_nombre": { "type": "string", "maxLength": 150 },
+        "metodo_pago_final": { "type": "string", "maxLength": 50 },
+        "estado_liquidacion": { "type": "string", "maxLength": 50 },
+        "estado_entrega": { "type": "string", "maxLength": 50 },
+        "observacion": { "type": "string", "maxLength": 500 },
+        "fecha_creacion": { "type": "string", "maxLength": 50 },
+        "fecha_despacho": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["codigo_pedido"]
+    },
+    "venta": {
+      "title": "Venta",
+      "description": "Facturas y ventas de mostrador POS",
+      "type": "object",
+      "properties": {
+        "numero_factura": { "type": "string", "maxLength": 100 },
+        "fecha": { "type": "string", "maxLength": 50 },
+        "cliente_nombre": { "type": "string", "maxLength": 200 },
+        "cliente_documento": { "type": "string", "maxLength": 50 },
+        "cliente_telefono": { "type": "string", "maxLength": 50 },
+        "usuario_nombre": { "type": "string", "maxLength": 100 },
+        "total": { "type": "number" },
+        "metodo_pago": { "type": "string", "maxLength": 50 },
+        "estado": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["numero_factura"]
+    },
+    "domiciliario": {
+      "title": "Domiciliario",
+      "description": "Repartidores y domiciliarios de ruta",
+      "type": "object",
+      "properties": {
+        "nombre": { "type": "string", "maxLength": 150 },
+        "telefono": { "type": "string", "maxLength": 50 },
+        "activo": { "type": "number" }
+      },
+      "required": ["nombre"]
+    },
+    "ruta_domicilio": {
+      "title": "Ruta Domicilio",
+      "description": "Rutas despachadas y liquidadas",
+      "type": "object",
+      "properties": {
+        "domiciliario_id": { "type": "number" },
+        "domiciliario_nombre": { "type": "string", "maxLength": 150 },
+        "fecha_creacion": { "type": "string", "maxLength": 50 },
+        "fecha_liquidacion": { "type": "string", "maxLength": 50 },
+        "estado": { "type": "string", "maxLength": 50 },
+        "base_efectivo": { "type": "number" },
+        "total_recolectado": { "type": "number" },
+        "pedidos_count": { "type": "number" },
+        "usuario_liquidacion_nombre": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["estado"]
+    },
+    "usuario": {
+      "title": "Usuario",
+      "description": "Usuarios del sistema",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 100 },
+        "nombre": { "type": "string", "maxLength": 150 },
+        "rol": { "type": "string", "maxLength": 50 },
+        "activo": { "type": "number" }
+      },
+      "required": ["username", "nombre"]
+    },
+    "configuracion": {
+      "title": "Configuración del Sistema",
+      "description": "Configuraciones globales de factura, impresora y tienda",
+      "type": "object",
+      "properties": {
+        "tipo": { "type": "string", "maxLength": 100 },
+        "updated_at": { "type": "string", "maxLength": 100 },
+        "nombreComercial": { "type": "string", "maxLength": 200 },
+        "razonSocial": { "type": "string", "maxLength": 200 },
+        "nit": { "type": "string", "maxLength": 100 },
+        "direccion": { "type": "string", "maxLength": 300 },
+        "telefono": { "type": "string", "maxLength": 100 },
+        "ciudad": { "type": "string", "maxLength": 100 },
+        "textoPiePagina": { "type": "string", "maxLength": 500 },
+        "tamanoPapel": { "type": "string", "maxLength": 50 },
+        "impresoraSeleccionada": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["tipo"]
+    },
+    "respaldo_db": {
+      "title": "Respaldo DB",
+      "description": "Respaldo y sincronización integral de base de datos",
+      "type": "object",
+      "properties": {
+        "fecha": { "type": "string", "maxLength": 50 },
+        "total_tablas": { "type": "number" },
+        "usuario": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["fecha"]
+    }
+  },
+  "firestore": {
+    "/productos/{productoId}": {
+      "schema": "producto",
+      "description": "Inventario de productos de Jispiplast Express"
+    },
+    "/clientes/{clienteId}": {
+      "schema": "cliente",
+      "description": "Clientes registrados"
+    },
+    "/pedidos/{pedidoId}": {
+      "schema": "pedido",
+      "description": "Pedidos de alistamiento y despacho"
+    },
+    "/ventas/{ventaId}": {
+      "schema": "venta",
+      "description": "Ventas y facturas POS"
+    },
+    "/domiciliarios/{domiciliarioId}": {
+      "schema": "domiciliario",
+      "description": "Domiciliarios de la empresa"
+    },
+    "/rutas_domicilio/{rutaId}": {
+      "schema": "ruta_domicilio",
+      "description": "Rutas de entrega"
+    },
+    "/usuarios/{usuarioId}": {
+      "schema": "usuario",
+      "description": "Usuarios y permisos"
+    },
+    "/configuracion/{configId}": {
+      "schema": "configuracion",
+      "description": "Configuraciones de factura, impresora y tienda"
+    },
+    "/respaldos/{respaldoId}": {
+      "schema": "respaldo_db",
+      "description": "Copias de seguridad completas de la base de datos"
+    }
+  }
+}

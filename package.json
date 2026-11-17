@@ -6,14 +6,15 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "build": "echo 'No build step required'",
-    "lint": "node -c server.js routes/clientes.js routes/inventario.js routes/pedidos.js routes/domicilios.js routes/ventas.js routes/auth.js"
+    "build": "node -e \"const db = require('./db/database'); if (typeof db.checkpointSync === 'function') db.checkpointSync(); console.log('Base de datos SQLite consolidada para despliegue.');\"",
+    "lint": "node -c server.js routes/*.js && for f in public/js/*.js; do node -c \"$f\" || exit 1; done"
   },
   "license": "MIT",
   "dependencies": {
     "better-sqlite3": "^11.3.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "firebase": "^13.2.0",
     "multer": "^2.0.1",
     "xlsx": "^0.18.5"
   }

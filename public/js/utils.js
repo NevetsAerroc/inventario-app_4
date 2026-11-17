@@ -40,10 +40,14 @@ async function apiFetch(url, options = {}) {
   }
   if (!res.ok && data.ok !== false) data.ok = false;
 
-  // Si la sesión expiró o es inválida, invocar cierre automático
-  if (res.status === 401 && !url.includes('/auth/login')) {
-    if (typeof Auth !== 'undefined' && typeof Auth.handleUnauthorized === 'function') {
-      Auth.handleUnauthorized();
+  // Replicar automáticamente mutaciones a Firebase Firestore
+  if (data && data.ok && options.method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method.toUpperCase())) {
+    try {
+      if (window.FirebaseClient && typeof window.FirebaseClient.handleMutation === 'function') {
+        window.FirebaseClient.handleMutation(url, options.body, data, options.method.toUpperCase());
+      }
+    } catch (e) {
+      console.warn('[Firebase Auto-Replication]', e);
     }
   }
 
@@ -65,6 +69,8 @@ function showToast(mensaje, tipo = 'info') {
   clearTimeout(el._timeout);
   el._timeout = setTimeout(() => el.classList.add('hidden'), 3000);
 }
+window.showToast = showToast;
+window.mostrarToast = showToast;
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -309,26 +315,45 @@ function attachAutocompleteProductos(inputEl, dropdownEl, onSelect, opts = {}) {
 function attachAutocompleteClientes(inputEl, dropdownEl, onSelect, onClienteCreado) {
   let debounceTimer = null;
   let clientes = [];
+  let activeIndex = -1;
 
   function ocultar() {
     dropdownEl.classList.add('hidden');
     dropdownEl.innerHTML = '';
     clientes = [];
+    activeIndex = -1;
   }
 
   function pintar(query) {
-    let html = clientes.map((c, i) => `
-      <div class="autocomplete-cliente-item px-3 py-2 text-sm cursor-pointer border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
-           data-idx="${i}">
-        <p class="font-medium text-slate-800">${escapeHtml(c.nombre)} ${c.empresa ? '· ' + escapeHtml(c.empresa) : ''}</p>
-        <p class="text-xs text-slate-400">${c.ciudad ? escapeHtml(c.ciudad) : ''} ${c.telefono ? '· 📞 ' + escapeHtml(c.telefono) : ''}</p>
-      </div>
-    `).join('');
+    if (!clientes.length && (!query || !query.trim().length)) {
+      ocultar();
+      return;
+    }
 
-    if (query && query.trim().length > 0) {
+    let html = clientes.map((c, i) => {
+      const extraItems = [];
+      if (c.empresa) extraItems.push(`🏢 ${escapeHtml(c.empresa)}`);
+      if (c.telefono) extraItems.push(`📞 ${escapeHtml(c.telefono)}`);
+      if (c.direccion) extraItems.push(`📍 ${escapeHtml(c.direccion)}`);
+      if (c.ciudad) extraItems.push(`🌆 ${escapeHtml(c.ciudad)}`);
+      const extra = extraItems.join(' · ');
+
+      return `
+        <div class="autocomplete-cliente-item px-3 py-2 text-sm cursor-pointer border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors ${i === activeIndex ? 'bg-slate-100' : ''}"
+             data-idx="${i}">
+          <div class="flex items-center justify-between">
+            <p class="font-bold text-slate-800 text-xs sm:text-sm">👤 ${escapeHtml(c.nombre)}</p>
+            <span class="text-[10px] text-slate-400 font-mono">#${c.id || ''}</span>
+          </div>
+          ${extra ? `<p class="text-[11px] text-slate-500 truncate mt-0.5">${extra}</p>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    if (query && query.trim().length > 0 && query.trim().toLowerCase() !== 'consumidor final') {
       html += `
-        <div id="btn-crear-cliente-sug" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 cursor-pointer text-sm text-emerald-800 font-semibold border-t border-slate-100 flex items-center gap-1">
-          ➕ Registrar "${escapeHtml(query)}" como cliente nuevo
+        <div id="btn-crear-cliente-sug" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 cursor-pointer text-xs sm:text-sm text-emerald-800 font-semibold border-t border-slate-200 flex items-center gap-1.5 transition-colors">
+          <span>➕</span> Registrar "${escapeHtml(query)}" como nuevo cliente
         </div>
       `;
     }
@@ -356,10 +381,11 @@ function attachAutocompleteClientes(inputEl, dropdownEl, onSelect, onClienteCrea
   }
 
   async function buscar(q) {
-    if (!q || q.trim().length === 0) { ocultar(); return; }
-    const res = await apiFetch('/clientes/sugerencias?q=' + encodeURIComponent(q.trim()));
+    const cleanQ = (q || '').trim();
+    const queryParam = (cleanQ && cleanQ.toLowerCase() !== 'consumidor final') ? `?q=${encodeURIComponent(cleanQ)}` : '';
+    const res = await apiFetch(`/clientes/sugerencias${queryParam}`);
     clientes = (res.ok && res.data) ? res.data : [];
-    pintar(q);
+    pintar(cleanQ);
   }
 
   inputEl.addEventListener('input', () => {
@@ -367,7 +393,43 @@ function attachAutocompleteClientes(inputEl, dropdownEl, onSelect, onClienteCrea
     debounceTimer = setTimeout(() => buscar(inputEl.value), 200);
   });
 
-  inputEl.addEventListener('blur', () => setTimeout(ocultar, 150));
+  inputEl.addEventListener('focus', () => {
+    buscar(inputEl.value);
+  });
+
+  inputEl.addEventListener('click', () => {
+    if (dropdownEl.classList.contains('hidden')) {
+      buscar(inputEl.value);
+    }
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (dropdownEl.classList.contains('hidden') || !clientes.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, clientes.length - 1);
+      dropdownEl.querySelectorAll('.autocomplete-cliente-item').forEach((el, i) => {
+        el.classList.toggle('bg-slate-100', i === activeIndex);
+      });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      dropdownEl.querySelectorAll('.autocomplete-cliente-item').forEach((el, i) => {
+        el.classList.toggle('bg-slate-100', i === activeIndex);
+      });
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && clientes[activeIndex]) {
+        e.preventDefault();
+        const c = clientes[activeIndex];
+        ocultar();
+        onSelect(c);
+      }
+    } else if (e.key === 'Escape') {
+      ocultar();
+    }
+  });
+
+  inputEl.addEventListener('blur', () => setTimeout(ocultar, 200));
 }
 
 // Ventana Modal superpuesta para registrar nuevo cliente
@@ -839,4 +901,167 @@ function abrirModalGestionClientes() {
   // Primera carga
   cargarLista();
   setTimeout(() => inputBuscar.focus(), 100);
+}
+
+// ============================================================
+// Modal de Respaldo y Persistencia de la Base de Datos
+// ============================================================
+function abrirModalBackup() {
+  let modal = document.getElementById('modal-backup-bd');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-backup-bd';
+    modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <!-- Encabezado -->
+      <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">💾</span>
+          <div>
+            <h3 class="font-bold text-base leading-tight">Copia de Seguridad &amp; Base de Datos</h3>
+            <p class="text-xs text-slate-300">Protege tu información y descárgala en tu computador</p>
+          </div>
+        </div>
+        <button id="btn-cerrar-backup" class="text-slate-400 hover:text-white font-bold text-xl px-2 py-1 rounded-lg">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <!-- Tarjeta de Zona Horaria -->
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <div class="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+              <span>🕒</span> Zona Horaria Configurada
+            </div>
+            <div class="text-[11px] text-emerald-700">Bogotá, Colombia (UTC-5)</div>
+          </div>
+          <span id="backup-hora-bogota" class="text-xs font-mono font-bold bg-white text-emerald-800 px-2.5 py-1 rounded-lg border border-emerald-200">
+            Cargando...
+          </span>
+        </div>
+
+        <!-- Estadísticas de la base de datos -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700 flex items-center gap-1">
+              <span>📦</span> Base de Datos Actual (inventario.db)
+            </span>
+            <span id="backup-db-size" class="text-[11px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+              Calculando...
+            </span>
+          </div>
+
+          <div id="backup-resumen-conteos" class="grid grid-cols-3 gap-2 text-center text-xs">
+            <div class="bg-white p-2 rounded-lg border border-slate-200">
+              <span class="block text-slate-400 text-[10px]">Productos</span>
+              <strong id="b-cant-prod" class="text-slate-800 text-sm">--</strong>
+            </div>
+            <div class="bg-white p-2 rounded-lg border border-slate-200">
+              <span class="block text-slate-400 text-[10px]">Clientes</span>
+              <strong id="b-cant-cli" class="text-slate-800 text-sm">--</strong>
+            </div>
+            <div class="bg-white p-2 rounded-lg border border-slate-200">
+              <span class="block text-slate-400 text-[10px]">Ventas</span>
+              <strong id="b-cant-ventas" class="text-slate-800 text-sm">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Acciones Principales -->
+        <div class="space-y-2.5">
+          <!-- Botón 1: Descargar Copia de Seguridad -->
+          <a href="/api/backup/descargar" download
+             class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all text-center">
+            <span>⬇️</span>
+            <span>Descargar Copia de Seguridad (.db)</span>
+          </a>
+
+          <!-- Botón 2: Restaurar Copia de Seguridad -->
+          <label class="block cursor-pointer">
+            <input type="file" id="file-restaurar-db" accept=".db,.sqlite,.sqlite3" class="hidden" />
+            <div class="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all text-center">
+              <span>⬆️</span>
+              <span>Restaurar Copia de Seguridad desde Archivo</span>
+            </div>
+          </label>
+          <!-- Botón 3: Firebase Cloud Sync -->
+          <button type="button" onclick="document.getElementById('modal-backup-bd').classList.add('hidden'); window.FirebaseClient.abrirModalFirebase();"
+                  class="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all text-center">
+            <span>🔥</span>
+            <span>Pasar Toda la BD a Firebase (Nube &amp; Consultas)</span>
+          </button>
+        </div>
+
+        <!-- Garantía de persistencia al republicar -->
+        <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 space-y-1">
+          <p class="font-bold flex items-center gap-1.5">
+            <span>🛡️</span> Persistencia de versiones y Nube
+          </p>
+          <p class="text-[11px] text-blue-800 leading-relaxed">
+            Tu base de datos está respaldada localmente y ahora conectada con <strong>Firebase Firestore</strong>, permitiendo sincronizar toda la información a la nube para que nunca se borre al republicar versiones.
+          </p>
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button id="btn-cerrar-backup-pie" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-semibold text-xs transition-colors">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+
+  const cerrar = () => modal.classList.add('hidden');
+  document.getElementById('btn-cerrar-backup').onclick = cerrar;
+  document.getElementById('btn-cerrar-backup-pie').onclick = cerrar;
+
+  // Cargar datos del servidor
+  (async () => {
+    try {
+      const res = await apiFetch('/backup/info');
+      if (res && res.ok) {
+        document.getElementById('backup-hora-bogota').textContent = res.hora_actual_servidor || 'OK';
+        document.getElementById('backup-db-size').textContent = `${res.tamano_kb} KB`;
+        if (res.resumen) {
+          document.getElementById('b-cant-prod').textContent = res.resumen.productos || 0;
+          document.getElementById('b-cant-cli').textContent = res.resumen.clientes || 0;
+          document.getElementById('b-cant-ventas').textContent = res.resumen.ventas || 0;
+        }
+      }
+    } catch (_) {}
+  })();
+
+  // Restaurar archivo de respaldo
+  const fileInput = document.getElementById('file-restaurar-db');
+  fileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!confirm(`¿Estás seguro de restaurar la base de datos con "${file.name}"? Los datos actuales serán reemplazados por el archivo de respaldo.`)) {
+      e.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('archivo', file);
+    showToast('Restaurando base de datos...', 'info');
+
+    const res = await apiFetch('/backup/restaurar', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (res && res.ok) {
+      showToast('¡Base de datos restaurada exitosamente! Recargando...', 'success');
+      setTimeout(() => window.location.reload(), 1500);
+    } else {
+      showToast(res.error || 'Error al restaurar la base de datos', 'error');
+    }
+    e.target.value = '';
+  };
 }

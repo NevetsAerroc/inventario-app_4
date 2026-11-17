@@ -106,7 +106,7 @@ router.get('/', (req, res) => {
 // POST /api/productos -> Crea UN producto manualmente
 // ------------------------------------------------------------------
 router.post('/', (req, res) => {
-  const { sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras } = req.body;
+  const { sku, nombre, categoria, subcategoria, ubicacion, stock, precio, precio_1, precio_2, precio_3, codigo_barras, codigo_interno } = req.body;
 
   const skuLimpio = String(sku || '').trim();
   const nombreLimpio = String(nombre || '').trim();
@@ -120,11 +120,17 @@ router.post('/', (req, res) => {
   }
 
   const stockNum = parseInt(stock, 10);
-  const precioNum = parseFloat(precio);
-  const stockFinal = Number.isInteger(stockNum) && stockNum >= 0 ? stockNum : 0;
-  const precioFinal = !isNaN(precioNum) && precioNum >= 0 ? precioNum : 0;
+  const p1Num = parseFloat(precio_1 !== undefined ? precio_1 : precio);
+  const p2Num = parseFloat(precio_2 !== undefined ? precio_2 : p1Num);
+  const p3Num = parseFloat(precio_3 !== undefined ? precio_3 : p2Num);
 
-  let codigoFinal = db.normalizarCodigoBarras(codigo_barras);
+  const stockFinal = Number.isInteger(stockNum) && stockNum >= 0 ? stockNum : 0;
+  const p1Final = !isNaN(p1Num) && p1Num >= 0 ? Math.round(p1Num) : 0;
+  const p2Final = !isNaN(p2Num) && p2Num >= 0 ? Math.round(p2Num) : p1Final;
+  const p3Final = !isNaN(p3Num) && p3Num >= 0 ? Math.round(p3Num) : p2Final;
+  const precioPrincipal = p1Final;
+
+  let codigoFinal = codigo_barras ? (db.normalizarCodigoBarras(codigo_barras) || null) : null;
   if (codigoFinal) {
     const yaUsado = db.prepare('SELECT sku, nombre FROM productos WHERE codigo_barras = ?').get(codigoFinal);
     if (yaUsado) {
@@ -132,13 +138,99 @@ router.post('/', (req, res) => {
     }
   }
 
+  const codigoInternoLimpio = String(codigo_interno || '').trim();
+
   const info = db.prepare(`
-    INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras, precio_1)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(skuLimpio, nombreLimpio, (categoria || '').trim(), (subcategoria || '').trim(), (ubicacion || '').trim(), stockFinal, precioFinal, codigoFinal, precioFinal);
+    INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, codigo_barras, precio_1, precio_2, precio_3, codigo_interno)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(skuLimpio, nombreLimpio, (categoria || 'General').trim(), (subcategoria || '').trim(), (ubicacion || '').trim(), stockFinal, precioPrincipal, codigoFinal, p1Final, p2Final, p3Final, codigoInternoLimpio);
 
   const creado = db.prepare('SELECT * FROM productos WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ ok: true, data: creado });
+});
+
+// ------------------------------------------------------------------
+// POST /api/productos/crear-lote -> Crea múltiples productos en lote (Ej: desde ventas / archivo)
+// ------------------------------------------------------------------
+router.post('/crear-lote', (req, res) => {
+  try {
+    const { productos = [], sin_barcodes = true } = req.body;
+    if (!Array.isArray(productos) || !productos.length) {
+      return res.status(400).json({ ok: false, error: 'No se enviaron productos para crear.' });
+    }
+
+    const rowMax = db.prepare(
+      "SELECT sku FROM productos WHERE sku LIKE 'P%' ORDER BY LENGTH(sku) DESC, sku DESC LIMIT 1"
+    ).get();
+    let numSkuActual = 1;
+    if (rowMax && rowMax.sku) {
+      const num = parseInt(rowMax.sku.replace(/\D/g, ''), 10);
+      if (!isNaN(num)) numSkuActual = num + 1;
+    }
+
+    const buscarExistenteSku = db.prepare('SELECT id, sku FROM productos WHERE sku = ?');
+    const insertStmt = db.prepare(`
+      INSERT INTO productos (sku, nombre, categoria, subcategoria, ubicacion, stock, precio, precio_1, precio_2, precio_3, codigo_barras)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const selectById = db.prepare('SELECT * FROM productos WHERE id = ?');
+
+    const creados = [];
+
+    const tx = db.transaction(() => {
+      for (const p of productos) {
+        const nombre = String(p.articulo || p.nombre || p.codigo || '').trim();
+        if (!nombre) continue;
+
+        let sku = String(p.codigo || p.sku || '').trim();
+        if (!sku || buscarExistenteSku.get(sku)) {
+          sku = `P${String(numSkuActual++).padStart(3, '0')}`;
+          while (buscarExistenteSku.get(sku)) {
+            sku = `P${String(numSkuActual++).padStart(3, '0')}`;
+          }
+        }
+
+        const p1 = Math.max(0, Math.round(parseFloat(p.precio_1 || p.precio) || 0));
+        const p2 = Math.max(0, Math.round(parseFloat(p.precio_2) || p1));
+        const p3 = Math.max(0, Math.round(parseFloat(p.precio_3) || p2));
+        const categoria = String(p.categoria || 'General').trim();
+        const stock = Math.max(0, parseInt(p.stock, 10) || 0);
+
+        // Si sin_barcodes es verdadero o no hay código, enviar null para no violar UNIQUE constraint en SQLite
+        const rawBar = sin_barcodes ? null : String(p.barcode || p.codigo_barras || '').trim();
+        const codigo_barras = rawBar ? (db.normalizarCodigoBarras ? (db.normalizarCodigoBarras(rawBar) || rawBar) : rawBar) : null;
+
+        const info = insertStmt.run(
+          sku,
+          nombre,
+          categoria,
+          '',
+          '',
+          stock,
+          p1,
+          p1,
+          p2,
+          p3,
+          codigo_barras
+        );
+
+        const nuevo = selectById.get(info.lastInsertRowid);
+        if (nuevo) creados.push(nuevo);
+      }
+    });
+
+    tx();
+
+    res.status(201).json({
+      ok: true,
+      mensaje: `Se crearon ${creados.length} productos exitosamente.`,
+      creados,
+      total: creados.length
+    });
+  } catch (err) {
+    console.error('Error al crear productos en lote:', err);
+    res.status(500).json({ ok: false, error: 'Error procesando lote: ' + err.message });
+  }
 });
 
 // ------------------------------------------------------------------

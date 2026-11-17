@@ -15,7 +15,9 @@ router.post('/encolar', (req, res) => {
       referencia_id = null,
       numero_factura = '',
       contenido_ticket = '',
-      usuario_nombre = ''
+      usuario_nombre = '',
+      copias = 1,
+      forzar = false
     } = req.body;
 
     if (!contenido_ticket || !contenido_ticket.trim()) {
@@ -24,17 +26,53 @@ router.post('/encolar', (req, res) => {
 
     const usrNom = usuario_nombre || (req.user ? req.user.nombre : 'Ventas');
     const ticketLimpio = contenido_ticket.replace(/^[\r\n]+/, '').trimEnd();
+    const numCopias = Math.min(10, Math.max(1, parseInt(copias, 10) || 1));
+
+    // Si es 1 sola copia y no es forzado, evitar duplicados automáticos en ventana de 60s
+    if (numero_factura && numCopias === 1 && !forzar) {
+      const existente = db.prepare(`
+        SELECT id, estado FROM cola_impresion 
+        WHERE numero_factura = ? AND (
+          estado IN ('PENDIENTE', 'EN_PROCESO') 
+          OR (estado = 'IMPRESO' AND datetime(printed_at) >= datetime('now', '-60 seconds'))
+        )
+        LIMIT 1
+      `).get(numero_factura);
+
+      if (existente) {
+        return res.json({
+          ok: true,
+          id: existente.id,
+          duplicado: true,
+          mensaje: `La factura ${numero_factura} ya fue enviada a la impresora (estado: ${existente.estado}). Si deseas otra copia, sube el contador a 2 copias.`
+        });
+      }
+    }
 
     const stmt = db.prepare(`
       INSERT INTO cola_impresion (tipo, referencia_id, numero_factura, contenido_ticket, estado, usuario_nombre)
       VALUES (?, ?, ?, ?, 'PENDIENTE', ?)
     `);
-    const info = stmt.run(tipo, referencia_id, numero_factura, ticketLimpio, usrNom);
+
+    const idsCreados = [];
+    for (let i = 0; i < numCopias; i++) {
+      let contenidoConCopia = ticketLimpio;
+      if (numCopias > 1) {
+        // Añadir pie discreto con número de copia si son múltiples
+        contenidoConCopia += `\n[ COPIA ${i + 1} DE ${numCopias} ]\n`;
+      }
+      const info = stmt.run(tipo, referencia_id, numero_factura, contenidoConCopia, usrNom);
+      idsCreados.push(info.lastInsertRowid);
+    }
 
     res.json({
       ok: true,
-      id: info.lastInsertRowid,
-      mensaje: `Ticket para ${numero_factura || 'documento'} encolado para impresión en tienda.`
+      id: idsCreados[0],
+      ids: idsCreados,
+      copias: numCopias,
+      mensaje: numCopias > 1 
+        ? `¡${numCopias} copias de ${numero_factura || 'ticket'} enviadas a la impresora en tienda!` 
+        : `Ticket para ${numero_factura || 'documento'} encolado para impresión en tienda.`
     });
   } catch (err) {
     console.error('Error al encolar ticket:', err);
@@ -43,7 +81,8 @@ router.post('/encolar', (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// GET /api/impresion/pendientes -> El agente local consulta tickets por imprimir
+// GET /api/impresion/pendientes -> El agente local consulta 1 solo ticket a la vez
+// ATÓMICAMENTE lo marca 'EN_PROCESO' para que JAMÁS se imprima doble
 // ------------------------------------------------------------------
 router.get('/pendientes', (req, res) => {
   try {
@@ -52,13 +91,35 @@ router.get('/pendientes', (req, res) => {
       nombreImpresoraAgente = req.query.impresora;
     }
 
-    const tickets = db.prepare(`
-      SELECT id, tipo, referencia_id, numero_factura, contenido_ticket, usuario_nombre, created_at
-      FROM cola_impresion
-      WHERE estado = 'PENDIENTE'
-      ORDER BY id ASC
-      LIMIT 10
-    `).all();
+    // Auto-limpieza de tickets trabados en proceso por más de 5 minutos
+    db.prepare(`
+      UPDATE cola_impresion 
+      SET estado = 'EXPIRADO' 
+      WHERE estado = 'EN_PROCESO' AND datetime(printed_at) <= datetime('now', '-5 minutes')
+    `).run();
+
+    // Transacción atómica: Selecciona el ticket más antiguo y lo marca EN_PROCESO de inmediato
+    const tx = db.transaction(() => {
+      const ticket = db.prepare(`
+        SELECT id, tipo, referencia_id, numero_factura, contenido_ticket, usuario_nombre, created_at
+        FROM cola_impresion
+        WHERE estado = 'PENDIENTE'
+        ORDER BY id ASC
+        LIMIT 1
+      `).get();
+
+      if (ticket) {
+        db.prepare(`
+          UPDATE cola_impresion 
+          SET estado = 'EN_PROCESO', printed_at = datetime('now')
+          WHERE id = ?
+        `).run(ticket.id);
+        return [ticket];
+      }
+      return [];
+    });
+
+    const tickets = tx();
 
     res.json({
       ok: true,
@@ -91,6 +152,26 @@ router.post('/confirmar/:id', (req, res) => {
     res.json({ ok: true, id, estado: estadoFinal });
   } catch (err) {
     console.error('Error al confirmar ticket impreso:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
+// POST /api/impresion/limpiar-cola -> Cancela todos los tickets pendientes/trabados
+// ------------------------------------------------------------------
+router.post('/limpiar-cola', (req, res) => {
+  try {
+    const info = db.prepare(`
+      UPDATE cola_impresion 
+      SET estado = 'CANCELADO', printed_at = datetime('now')
+      WHERE estado IN ('PENDIENTE', 'EN_PROCESO')
+    `).run();
+
+    res.json({
+      ok: true,
+      mensaje: `Se cancelaron ${info.changes} tickets pendientes en la cola de impresión.`
+    });
+  } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -400,12 +481,16 @@ router.get('/descargar-windows-directo', (req, res) => {
     'Write-Host "Conectando a: $url" -ForegroundColor Yellow;',
     'Write-Host "Margenes ajustados a 4 mm (impresion centrada sin cortes)." -ForegroundColor Cyan;',
     'Write-Host "Esperando facturas desde celulares o computadores..." -ForegroundColor White;',
-    'Write-Host "Para detener, cierra esta ventana.`n" -ForegroundColor Gray;',
+    'Write-Host "Modo seguro: 1 solo ticket por impresion garantizado.`n" -ForegroundColor Gray;',
+    '$printedCache = New-Object "System.Collections.Generic.HashSet[string]";',
     'while ($true) {',
     '  try {',
     '    $resp = Invoke-RestMethod -Uri "$url/api/impresion/pendientes" -Method Get -TimeoutSec 6;',
     '    if ($resp -and $resp.pendientes -and $resp.pendientes.Count -gt 0) {',
     '      foreach ($t in $resp.pendientes) {',
+    '        $idStr = $t.id.ToString();',
+    '        if ($printedCache.Contains($idStr)) { continue; }',
+    '        $printedCache.Add($idStr);',
     '        Write-Host ("[NUEVO TICKET] Factura: " + $t.numero_factura + " | Cajero: " + $t.usuario_nombre) -ForegroundColor Cyan;',
     '        $tmp = [System.IO.Path]::GetTempFileName();',
     '        [System.IO.File]::WriteAllText($tmp, $t.contenido_ticket, [System.Text.Encoding]::GetEncoding(28591));',
@@ -413,16 +498,17 @@ router.get('/descargar-windows-directo', (req, res) => {
     '        if ($ok) {',
     '          Write-Host ("[IMPRESO OK] Factura " + $t.numero_factura + " impresa con exito.") -ForegroundColor Green;',
     '          $body = @{ exito = $true } | ConvertTo-Json;',
-    '          Invoke-RestMethod -Uri "$url/api/impresion/confirmar/$($t.id)" -Method Post -Body $body -ContentType "application/json" | Out-Null;',
+    '          try { Invoke-RestMethod -Uri "$url/api/impresion/confirmar/$($t.id)" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 5 | Out-Null; } catch {}',
     '        } else {',
     '          Write-Host ("[ERROR] Fallo al imprimir factura " + $t.numero_factura) -ForegroundColor Red;',
     '        }',
     '        if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue };',
+    '        Start-Sleep -Seconds 2;',
     '      }',
     '    }',
     '  } catch {',
     '  }',
-    '  Start-Sleep -Seconds 2;',
+    '  Start-Sleep -Seconds 3;',
     '}',
     'pause;'
   ].join('\r\n');
@@ -500,5 +586,59 @@ pause
   res.send(autoBat);
 });
 
+// ------------------------------------------------------------------
+// GET /api/impresion/config -> Obtener configuración de la impresora
+// ------------------------------------------------------------------
+router.get('/config', (req, res) => {
+  try {
+    const row = db.prepare("SELECT valor FROM configuracion_app WHERE clave = 'impresora'").get();
+    let config = {
+      servidor_url: '',
+      impresora_seleccionada: nombreImpresoraAgente || 'Predeterminada de Windows',
+      auto_imprimir: true,
+      tamano_papel: '80mm'
+    };
+    if (row && row.valor) {
+      try {
+        config = Object.assign(config, JSON.parse(row.valor));
+      } catch (_) {}
+    }
+    res.json({ ok: true, config });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
+// POST /api/impresion/config -> Guardar configuración de la impresora
+// ------------------------------------------------------------------
+router.post('/config', (req, res) => {
+  try {
+    const cfg = req.body && typeof req.body === 'object' ? (req.body.config || req.body) : {};
+    const configFinal = {
+      servidor_url: cfg.servidor_url || '',
+      impresora_seleccionada: cfg.impresora_seleccionada || nombreImpresoraAgente || 'Predeterminada de Windows',
+      auto_imprimir: cfg.auto_imprimir !== false,
+      tamano_papel: cfg.tamano_papel || '80mm',
+      updated_at: new Date().toISOString()
+    };
+
+    if (configFinal.impresora_seleccionada && configFinal.impresora_seleccionada !== 'Predeterminada de Windows') {
+      nombreImpresoraAgente = configFinal.impresora_seleccionada;
+    }
+
+    db.prepare(`
+      INSERT INTO configuracion_app (clave, valor, updated_at)
+      VALUES ('impresora', ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, updated_at = CURRENT_TIMESTAMP
+    `).run(JSON.stringify(configFinal));
+
+    res.json({ ok: true, mensaje: 'Configuración de impresora guardada.', config: configFinal });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;
+
 

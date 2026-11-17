@@ -1,5 +1,4 @@
-process.env.TZ = process.env.TZ || 'America/Bogota';
-//const db = require('./db');
+process.env.TZ = 'America/Bogota';
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
@@ -10,6 +9,49 @@ const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+db.pragma('busy_timeout = 5000');
+db.pragma('wal_autocheckpoint = 50');
+
+// Función que genera siempre fecha y hora en zona horaria America/Bogota (UTC-5)
+function getFechaHoraBogota(fechaBase) {
+  const d = fechaBase ? new Date(fechaBase) : new Date();
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(d).replace('T', ' ');
+}
+
+function checkpointSync() {
+  try {
+    // Si SQLite está en medio de una transacción activa, no intentar checkpoint para evitar table locked
+    if (db.inTransaction) {
+      return;
+    }
+    // Checkpoint PASSIVE vuelca páginas sin requerir bloqueo exclusivo
+    db.pragma('wal_checkpoint(PASSIVE)');
+    // Intentar truncar el archivo WAL si no hay bloqueos de lectura
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch (_) {}
+  } catch (e) {
+    console.warn('[db] wal_checkpoint diferido:', e.message);
+  }
+}
+
+// Ejecutar checkpoint al apagar el proceso para que inventario.db contenga todo
+process.on('SIGINT', () => { checkpointSync(); process.exit(0); });
+process.on('SIGTERM', () => { checkpointSync(); process.exit(0); });
+process.on('beforeExit', () => { checkpointSync(); });
+
+db.getFechaHoraBogota = getFechaHoraBogota;
+db.checkpointSync = checkpointSync;
+db.DB_PATH = DB_PATH;
 
 // Ejecuta el esquema al iniciar (CREATE TABLE IF NOT EXISTS es idempotente)
 const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
@@ -39,9 +81,11 @@ agregarColumnaSiNoExiste('productos', 'precio_3', "REAL DEFAULT 0");
 agregarColumnaSiNoExiste('productos', 'iva', "REAL DEFAULT 0");
 agregarColumnaSiNoExiste('productos', 'codigo_interno', "TEXT DEFAULT ''");
 
-// Sincronizar precio_1 con precio si es 0
+// Sincronizar precio_1 con precio si es 0 y convertir cadenas vacías de códigos de barras a NULL
 try {
   db.exec(`UPDATE productos SET precio_1 = precio WHERE (precio_1 IS NULL OR precio_1 = 0) AND precio > 0;`);
+  db.exec(`UPDATE productos SET codigo_barras = NULL WHERE codigo_barras = '' OR codigo_barras = 'null' OR codigo_barras = 'undefined';`);
+  db.exec(`UPDATE productos SET codigo_caja = NULL WHERE codigo_caja = '' OR codigo_caja = 'null' OR codigo_caja = 'undefined';`);
 } catch (e) {}
 
 // ==========================================

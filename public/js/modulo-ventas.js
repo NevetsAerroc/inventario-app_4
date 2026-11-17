@@ -14,6 +14,10 @@ const ModuloVentas = (() => {
   let facturasHistorial = [];
   let statsHistorial = null;
   let ultimaFacturaCreada = null;
+  let clienteSeleccionado = null; // { id, nombre, telefono, direccion, empresa }
+  let ultimosNoEncontrados = [];
+  let posProductosSugeridos = [];
+  let posIndexSeleccionado = -1;
 
   // Configuración de formato y visibilidad de factura (80mm)
   const CONFIG_FACTURA_DEFAULT = {
@@ -149,14 +153,32 @@ const ModuloVentas = (() => {
             <!-- Contenido del ticket -->
           </div>
 
-          <div class="p-3 bg-slate-100 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-            <button onclick="ModuloVentas.imprimirTicketDirecto()" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer" title="Imprimir en este dispositivo mediante el navegador">
-              <span>🖨️</span> <span>Imprimir Aquí</span>
-            </button>
-            <button onclick="ModuloVentas.enviarAImpresoraTienda()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer" title="Enviar directamente a la impresora térmica conectada al PC de la tienda">
-              <span>⚡</span> <span>Imprimir en Tienda</span>
-            </button>
-            <button onclick="ModuloVentas.cerrarModalTicket()" class="px-3 py-2.5 rounded-xl bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold text-xs cursor-pointer">
+          <div class="p-3 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
+            <!-- SELECTOR DE COPIAS A IMPRIMIR (Al ladito de los botones) -->
+            <div class="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 shadow-2xs shrink-0 self-center" title="Número de copias a imprimir de este comprobante">
+              <span class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <span>📄</span> <span class="text-[11px] font-extrabold text-slate-600">Copias:</span>
+              </span>
+              <button type="button" onclick="ModuloVentas.ajustarCopiasImpresion(-1)"
+                      class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm flex items-center justify-center cursor-pointer select-none active:scale-90">-</button>
+              <input type="number" id="ticket-input-copias" min="1" max="10" value="1"
+                     onchange="ModuloVentas.fijarCopiasImpresion(this.value)"
+                     class="w-8 text-center text-xs font-black font-mono border-0 p-0 text-slate-900 focus:outline-none" />
+              <button type="button" onclick="ModuloVentas.ajustarCopiasImpresion(1)"
+                      class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm flex items-center justify-center cursor-pointer select-none active:scale-90">+</button>
+            </div>
+
+            <!-- BOTONES DE IMPRESIÓN -->
+            <div class="flex items-center gap-2 flex-1 min-w-[260px]">
+              <button onclick="ModuloVentas.imprimirTicketDirecto()" class="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-colors" title="Imprimir en este dispositivo mediante el navegador">
+                <span>🖨️</span> <span>Imprimir Aquí</span>
+              </button>
+              <button onclick="ModuloVentas.enviarAImpresoraTienda()" class="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-colors" title="Enviar directamente a la impresora térmica conectada al PC de la tienda">
+                <span>⚡</span> <span>Imprimir en Tienda</span>
+              </button>
+            </div>
+
+            <button onclick="ModuloVentas.cerrarModalTicket()" class="px-3.5 py-2.5 rounded-xl bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold text-xs cursor-pointer shrink-0">
               Cerrar
             </button>
           </div>
@@ -256,8 +278,50 @@ const ModuloVentas = (() => {
                 </span>
               </div>
               <div class="text-[11px] text-slate-500 space-y-1">
-                <p>• <b>Impresora:</b> <span id="info-impresora-nombre" class="font-mono text-slate-700 font-bold">Predeterminada de Windows</span></p>
+                <p>• <b>Impresora activa:</b> <span id="info-impresora-nombre" class="font-mono text-slate-700 font-bold">Predeterminada de Windows</span></p>
                 <p>• <b>Tickets en espera:</b> <span id="info-tickets-cola" class="font-bold text-slate-700">0</span></p>
+              </div>
+            </div>
+
+            <!-- CONFIGURACIÓN DE LA IMPRESORA (GUARDADO PERMANENTE EN FIREBASE) -->
+            <div class="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3.5 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-lg">🖨️</span>
+                  <div>
+                    <h4 class="font-bold text-indigo-950 text-xs uppercase tracking-wider">Ajustes de Impresora (Guardado en Firebase)</h4>
+                    <p class="text-[11px] text-indigo-800">Se almacena en la nube para que no se pierda al reiniciar o cambiar de dispositivo.</p>
+                  </div>
+                </div>
+                <span class="text-[10px] bg-indigo-200 text-indigo-900 font-extrabold px-2 py-0.5 rounded-full">🔥 Cloud Sync</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">Nombre de la Impresora en Windows:</label>
+                  <input type="text" id="impresora-config-nombre" placeholder="Predeterminada de Windows o POS-80"
+                         class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-slate-800 focus:ring-1 focus:ring-indigo-500" />
+                  <span class="text-[10px] text-slate-400">Escribe el nombre tal como aparece en impresoras de Windows.</span>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">Ancho de Papel Térmico:</label>
+                  <select id="impresora-config-papel" class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500">
+                    <option value="80mm">80 mm (Ticket estándar de tienda)</option>
+                    <option value="58mm">58 mm (Ticket angosto / mini printer)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between pt-1">
+                <label class="flex items-center gap-2 cursor-pointer text-[11px] font-semibold text-slate-700">
+                  <input type="checkbox" id="impresora-config-auto" checked class="rounded text-indigo-600 focus:ring-indigo-500" />
+                  <span>Imprimir automáticamente al completar cada factura</span>
+                </label>
+
+                <button type="button" id="btn-guardar-config-impresora" onclick="ModuloVentas.guardarConfigImpresora()"
+                        class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-transform active:scale-95">
+                  <span>💾</span> <span>Guardar en Firebase</span>
+                </button>
               </div>
             </div>
 
@@ -311,12 +375,17 @@ const ModuloVentas = (() => {
             </div>
           </div>
 
-          <div class="p-3.5 bg-slate-100 border-t border-slate-200 flex justify-between items-center gap-2">
-            <button onclick="ModuloVentas.verificarEstadoServidorImpresion(true)" class="px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer">
-              <span>🔄</span> Actualizar Estado
-            </button>
+          <div class="p-3.5 bg-slate-100 border-t border-slate-200 flex justify-between items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div class="flex items-center gap-2">
+              <button onclick="ModuloVentas.verificarEstadoServidorImpresion(true)" class="px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer">
+                <span>🔄</span> Actualizar
+              </button>
+              <button onclick="ModuloVentas.limpiarColaImpresion()" class="px-3 py-2 rounded-xl bg-rose-50 border border-rose-300 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer" title="Cancela cualquier ticket pendiente o trabado en la cola">
+                <span>🧹</span> Limpiar Cola
+              </button>
+            </div>
             <button onclick="ModuloVentas.cerrarModalServidorImpresion()" class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer">
-              Entendido
+              Cerrar
             </button>
           </div>
         </div>
@@ -338,10 +407,122 @@ const ModuloVentas = (() => {
           </div>
         </div>
       </div>
+
+      <!-- MODAL PARA AGREGAR NUEVO PRODUCTO DESDE LA SECCIÓN DE PRECIOS -->
+      <div id="modal-nuevo-producto-precios" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh] border border-slate-200">
+          <div class="bg-slate-900 text-white p-4 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <span class="text-2xl">➕</span>
+              <div>
+                <h3 class="font-bold text-sm sm:text-base">Nuevo Producto en Base de Datos</h3>
+                <p class="text-xs text-slate-400">Guarda en SQLite y se sincroniza en Firebase Firestore</p>
+              </div>
+            </div>
+            <button type="button" onclick="ModuloVentas.cerrarModalNuevoProductoPrecios()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">✕</button>
+          </div>
+
+          <div class="p-5 overflow-y-auto space-y-4 text-xs text-slate-700 flex-1">
+            <!-- Nombre del Producto -->
+            <div>
+              <label class="block font-bold text-slate-800 mb-1">Nombre / Descripción del Artículo <span class="text-rose-500">*</span></label>
+              <input type="text" id="prod-precios-nombre" placeholder="Ej: Vaso Domo 7oz Transparente x 50 un"
+                     class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+            </div>
+
+            <!-- SKU y Generador Automático -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="font-bold text-slate-800">SKU / Código</label>
+                  <button type="button" onclick="ModuloVentas.generarSiguienteSKUPrecios()"
+                          class="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer">
+                    ⚡ Auto-generar
+                  </button>
+                </div>
+                <input type="text" id="prod-precios-sku" placeholder="P001 o Código ERP"
+                       class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono font-bold text-indigo-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-800 mb-1">Código de Barras (Opcional)</label>
+                <input type="text" id="prod-precios-barcode" placeholder="Escanear o escribir..."
+                       class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </div>
+            </div>
+
+            <!-- Categoría y Stock -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block font-bold text-slate-800 mb-1">Categoría</label>
+                <input type="text" id="prod-precios-categoria" value="General" placeholder="General, Vasos, Bolsas..."
+                       class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block font-bold text-slate-800 mb-1">Stock Inicial (Existencias)</label>
+                <input type="number" id="prod-precios-stock" min="0" value="0"
+                       class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </div>
+            </div>
+
+            <!-- Los 3 Precios de Venta -->
+            <div class="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 space-y-3">
+              <div class="flex items-center gap-2">
+                <span class="text-base">🏷️</span>
+                <div>
+                  <h4 class="font-bold text-emerald-950 text-xs">Precios de Venta (3 Listas)</h4>
+                  <p class="text-[11px] text-emerald-800">Define los precios para cobrar en POS o por mayor.</p>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">Precio 1 (General) <span class="text-rose-500">*</span></label>
+                  <div class="relative">
+                    <span class="absolute left-2.5 inset-y-0 my-auto h-4 flex items-center text-emerald-700 font-bold">$</span>
+                    <input type="number" id="prod-precios-p1" min="0" placeholder="0" oninput="ModuloVentas.autoSincronizarPreciosNuevos(this.value)"
+                           class="w-full text-xs pl-6 pr-2 py-1.5 rounded-lg border border-emerald-300 bg-white font-mono font-bold text-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">Precio 2</label>
+                  <div class="relative">
+                    <span class="absolute left-2.5 inset-y-0 my-auto h-4 flex items-center text-slate-500 font-bold">$</span>
+                    <input type="number" id="prod-precios-p2" min="0" placeholder="0"
+                           class="w-full text-xs pl-6 pr-2 py-1.5 rounded-lg border border-slate-300 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">Precio 3</label>
+                  <div class="relative">
+                    <span class="absolute left-2.5 inset-y-0 my-auto h-4 flex items-center text-slate-500 font-bold">$</span>
+                    <input type="number" id="prod-precios-p3" min="0" placeholder="0"
+                           class="w-full text-xs pl-6 pr-2 py-1.5 rounded-lg border border-slate-300 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+            <button type="button" onclick="ModuloVentas.cerrarModalNuevoProductoPrecios()"
+                    class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer">
+              Cancelar
+            </button>
+            <button type="button" id="btn-guardar-nuevo-prod-precios" onclick="ModuloVentas.guardarNuevoProductoPrecios()"
+                    class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs flex items-center gap-2 shadow-sm cursor-pointer transition-transform">
+              <span>💾</span> <span>Guardar en Base de Datos &amp; Firebase</span>
+            </button>
+          </div>
+        </div>
+      </div>
     `;
 
     await cargarConsecutivo();
     await cargarConfigFactura();
+    await cargarConfigImpresora();
     cambiarSubtab(subtabActiva);
     iniciarListenerTecladoCodigoBarras();
     verificarEstadoServidorImpresion();
@@ -350,6 +531,7 @@ const ModuloVentas = (() => {
   function onEnterTab() {
     cargarConsecutivo();
     cargarConfigFactura();
+    cargarConfigImpresora();
     verificarEstadoServidorImpresion();
     if (subtabActiva === 'precios') cargarCatalogoPrecios();
     if (subtabActiva === 'historial') cargarHistorialFacturas();
@@ -403,6 +585,42 @@ const ModuloVentas = (() => {
   // ------------------------------------------------------------
   function renderSubtabPOS(container) {
     container.innerHTML = `
+      <!-- BARRA SUPERIOR DESTACADA DE FACTURACIÓN RÁPIDA (SOLO ESCRITORIO / TABLET) -->
+      <div id="bar-facturacion-rapida" class="hidden lg:flex sticky top-14 z-30 bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white p-4 rounded-2xl shadow-xl items-center justify-between flex-wrap gap-2.5 mb-4 border border-emerald-500/30 backdrop-blur-md">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-xl shrink-0">
+            🧾
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-bold text-emerald-100 uppercase tracking-wider">Factura en Curso</span>
+              <span id="pos-top-items-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/25 text-white">
+                ${carrito.length} ítems
+              </span>
+            </div>
+            <div class="flex items-baseline gap-1.5 mt-0.5">
+              <span class="text-xs text-emerald-100 font-medium">Total:</span>
+              <span id="pos-top-txt-total" class="text-2xl font-black font-mono text-white tracking-tight">$ 0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="ModuloVentas.vaciarCarrito()" 
+                  class="px-3 py-2.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  title="Vaciar carrito de factura">
+            <span>🗑️</span> <span>Vaciar</span>
+          </button>
+          <button type="button" onclick="ModuloVentas.procesarVenta()"
+                  id="btn-completar-factura-top"
+                  class="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 font-black text-sm rounded-xl shadow-lg transition-transform flex items-center gap-2 cursor-pointer">
+            <span class="text-lg">⚡</span>
+            <span>Facturar Ahora</span>
+            <span id="pos-top-btn-total" class="font-mono bg-slate-950/15 px-2 py-0.5 rounded text-xs font-black">($ 0)</span>
+          </button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
         <!-- COLUMNA IZQUIERDA / PRINCIPAL: BÚSQUEDA Y CARRITO DE FACTURACIÓN -->
@@ -435,22 +653,73 @@ const ModuloVentas = (() => {
                 </div>
               </div>
 
-              <!-- DATOS RÁPIDOS DEL CLIENTE -->
-              <div class="flex items-center gap-2 flex-1 max-w-sm justify-end">
-                <div class="relative w-full">
-                  <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs">👤</span>
-                  <input type="text" id="pos-cliente-nombre" value="Consumidor Final"
-                         placeholder="Nombre del cliente / Consumidor Final..."
-                         class="w-full pl-7 pr-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              <!-- DATOS DEL CLIENTE / FACTURAR A NOMBRE DE -->
+              <div class="flex items-center gap-1.5 flex-1 max-w-md justify-end">
+                <div class="relative flex-1">
+                  <div class="flex gap-1 items-center">
+                    <div class="relative flex-1">
+                      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs pointer-events-none">👤</span>
+                      <input type="text" id="pos-cliente-nombre" value="${clienteSeleccionado ? escapeHtml(clienteSeleccionado.nombre) : 'Consumidor Final'}"
+                             placeholder="Buscar cliente o usuario..." autocomplete="off"
+                             class="w-full pl-7 pr-6 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all font-medium text-slate-800" />
+                      <button type="button" id="btn-pos-limpiar-cliente" onclick="ModuloVentas.restablecerConsumidorFinal()"
+                              class="${clienteSeleccionado ? '' : 'hidden'} absolute right-1.5 inset-y-0 my-auto h-5 w-5 flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-full hover:bg-slate-200 text-xs cursor-pointer"
+                              title="Restablecer a Consumidor Final">✕</button>
+                    </div>
+                    <button type="button" onclick="ModuloVentas.abrirModalNuevoClientePOS()"
+                            class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-colors shrink-0 cursor-pointer"
+                            title="Registrar nuevo cliente">
+                      <span>➕</span> <span class="hidden sm:inline">Nuevo</span>
+                    </button>
+                    <button type="button" onclick="abrirModalGestionClientes()"
+                            class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-colors shrink-0 cursor-pointer"
+                            title="Directorio de clientes y usuarios">
+                      <span>👥</span>
+                    </button>
+                  </div>
+                  <!-- Dropdown de autocompletado para clientes y usuarios -->
+                  <div id="pos-autocomplete-cliente"
+                       class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto"></div>
                 </div>
               </div>
             </div>
+
+            <!-- BADGE DETALLE CLIENTE SELECCIONADO -->
+            <div id="pos-cliente-badge-detalle" class="${clienteSeleccionado ? '' : 'hidden'} mt-2 bg-indigo-50 border border-indigo-200 text-indigo-950 px-3 py-1.5 rounded-xl flex items-center justify-between gap-2 text-xs">
+              <div class="flex items-center gap-1.5 truncate">
+                <span class="font-bold text-indigo-700">🧾 Factura a nombre de:</span>
+                <span id="pos-cliente-badge-nombre" class="font-bold">${clienteSeleccionado ? escapeHtml(clienteSeleccionado.nombre) : ''}</span>
+                <span id="pos-cliente-badge-extra" class="text-slate-500 text-[11px] truncate">${clienteSeleccionado ? escapeHtml([clienteSeleccionado.empresa, clienteSeleccionado.telefono, clienteSeleccionado.direccion, clienteSeleccionado.ciudad].filter(Boolean).join(' · ')) : ''}</span>
+              </div>
+              <button type="button" onclick="ModuloVentas.restablecerConsumidorFinal()" class="text-indigo-600 hover:text-rose-600 font-bold text-[11px] underline shrink-0 cursor-pointer">
+                Restablecer a General
+              </button>
+            </div>
           </div>
 
-          <!-- BARRA DE BÚSQUEDA AUTO-COMPLETADO Y CÓDIGO DE BARRAS -->
-          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm relative">
-            <div class="flex items-center gap-2">
-              <div class="relative flex-1">
+          <!-- BARRA DE BÚSQUEDA AUTO-COMPLETADO, CÓDIGO DE BARRAS Y SELECTOR VISIBLE DE CANTIDAD -->
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm relative space-y-2.5">
+            <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              
+              <!-- SELECTOR DE CANTIDAD VISIBLE -->
+              <div class="flex items-center gap-1 bg-indigo-50/80 border border-indigo-200 p-1 rounded-xl shrink-0" title="Cantidad que se agregará al elegir o escanear un producto">
+                <span class="text-[11px] font-black text-indigo-900 px-1 flex items-center gap-0.5">
+                  <span>🔢</span> <span class="hidden xs:inline">Cant:</span>
+                </span>
+                <button type="button" onclick="ModuloVentas.ajustarCantidadEntrada(-1)"
+                        class="w-7 h-8 bg-white hover:bg-indigo-100 text-indigo-900 font-black rounded-lg text-sm flex items-center justify-center border border-indigo-200 shadow-2xs active:scale-90 cursor-pointer select-none">
+                  -
+                </button>
+                <input type="number" id="pos-input-cant" min="1" max="9999" value="1"
+                       class="w-12 sm:w-14 text-center py-1 bg-white border border-indigo-200 rounded-lg text-sm font-black font-mono text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                <button type="button" onclick="ModuloVentas.ajustarCantidadEntrada(1)"
+                        class="w-7 h-8 bg-white hover:bg-indigo-100 text-indigo-900 font-black rounded-lg text-sm flex items-center justify-center border border-indigo-200 shadow-2xs active:scale-90 cursor-pointer select-none">
+                  +
+                </button>
+              </div>
+
+              <!-- BUSCADOR -->
+              <div class="relative flex-1 min-w-[200px]">
                 <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 text-sm">🔍</span>
                 <input type="text" id="pos-input-busqueda" autocomplete="off"
                        placeholder="Escanear código de barras o escribir nombre/SKU del producto..."
@@ -468,21 +737,33 @@ const ModuloVentas = (() => {
               <!-- BOTÓN CÁMARA ESCÁNER -->
               <button type="button" onclick="ModuloVentas.abrirCamaraScanner()"
                       title="Escanear con cámara"
-                      class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 active:scale-95 text-white flex items-center gap-1.5 text-xs font-bold transition-all shadow-sm">
+                      class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 active:scale-95 text-white flex items-center gap-1.5 text-xs font-bold transition-all shadow-sm shrink-0 cursor-pointer">
                 <span class="text-base">📷</span>
                 <span class="hidden sm:inline">Escanear</span>
               </button>
             </div>
 
+            <!-- CHIPS RÁPIDOS DE CANTIDAD -->
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-500 overflow-x-auto pb-0.5">
+              <span class="font-bold text-[10px] uppercase tracking-wider text-slate-400 shrink-0">Cant. rápida:</span>
+              <button type="button" onclick="ModuloVentas.fijarCantidadEntrada(1)" class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 font-mono font-bold text-slate-700 transition-colors cursor-pointer">1 un</button>
+              <button type="button" onclick="ModuloVentas.fijarCantidadEntrada(3)" class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 font-mono font-bold text-slate-700 transition-colors cursor-pointer">3 un</button>
+              <button type="button" onclick="ModuloVentas.fijarCantidadEntrada(6)" class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 font-mono font-bold text-slate-700 transition-colors cursor-pointer">6 un</button>
+              <button type="button" onclick="ModuloVentas.fijarCantidadEntrada(12)" class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 font-mono font-bold text-slate-700 transition-colors cursor-pointer">12 (Docena)</button>
+              <button type="button" onclick="ModuloVentas.fijarCantidadEntrada(24)" class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 font-mono font-bold text-slate-700 transition-colors cursor-pointer">24 un</button>
+              <button type="button" onclick="ModuloVentas.fijarCantidadEntrada(50)" class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 font-mono font-bold text-slate-700 transition-colors cursor-pointer">50 un</button>
+              <button type="button" onclick="ModuloVentas.fijarCantidadEntrada(100)" class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 font-mono font-bold text-slate-700 transition-colors cursor-pointer">100 un</button>
+            </div>
+
             <!-- MENÚ FLOTANTE DE RESULTADOS / AUTO-COMPLETADO -->
             <div id="pos-sugerencias-dropdown"
-                 class="hidden absolute left-4 right-4 top-[64px] z-30 bg-white rounded-xl shadow-2xl border border-slate-200 max-h-80 overflow-y-auto divide-y divide-slate-100">
+                 class="hidden absolute left-4 right-4 top-[85px] z-30 bg-white rounded-xl shadow-2xl border border-slate-200 max-h-80 overflow-y-auto divide-y divide-slate-100">
               <!-- Renderizado dinámico de sugerencias -->
             </div>
           </div>
 
           <!-- TABLA DEL CARRITO DE LA FACTURA -->
-          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-16 lg:mb-0">
             <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="font-bold text-xs text-slate-700 uppercase tracking-wider">Productos en Factura</span>
@@ -491,7 +772,7 @@ const ModuloVentas = (() => {
                 </span>
               </div>
               <button type="button" onclick="ModuloVentas.vaciarCarrito()"
-                      class="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 hover:underline">
+                      class="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 hover:underline cursor-pointer">
                 <span>🗑️</span> <span>Vaciar</span>
               </button>
             </div>
@@ -505,7 +786,7 @@ const ModuloVentas = (() => {
         </div>
 
         <!-- COLUMNA DERECHA: RESUMEN DE TOTALES Y COBRO -->
-        <div class="lg:col-span-4 space-y-4">
+        <div class="lg:col-span-4 space-y-4 mb-20 lg:mb-0">
 
           <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 sticky top-16">
             <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
@@ -543,22 +824,22 @@ const ModuloVentas = (() => {
               <div class="grid grid-cols-2 gap-1.5" id="pos-metodos-pago">
                 <button type="button" onclick="ModuloVentas.seleccionarMetodoPago('EFECTIVO')"
                         id="btn-pago-efectivo"
-                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-emerald-50 border-emerald-500 text-emerald-800">
+                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-emerald-50 border-emerald-500 text-emerald-800 cursor-pointer">
                   💵 Efectivo
                 </button>
                 <button type="button" onclick="ModuloVentas.seleccionarMetodoPago('TRANSFERENCIA')"
                         id="btn-pago-transferencia"
-                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100">
+                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer">
                   📲 Transferencia
                 </button>
                 <button type="button" onclick="ModuloVentas.seleccionarMetodoPago('DATAFONO')"
                         id="btn-pago-datafono"
-                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100">
+                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer">
                   💳 Datáfono
                 </button>
                 <button type="button" onclick="ModuloVentas.seleccionarMetodoPago('CREDITO')"
                         id="btn-pago-credito"
-                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100">
+                        class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer">
                   📝 Crédito
                 </button>
               </div>
@@ -576,11 +857,11 @@ const ModuloVentas = (() => {
 
               <!-- BOTONES RÁPIDOS DE BILLETES -->
               <div class="flex items-center gap-1 flex-wrap text-[10px]">
-                <button type="button" onclick="ModuloVentas.ponerEfectivoExacto()" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-bold text-slate-700">Exacto</button>
-                <button type="button" onclick="ModuloVentas.sumarEfectivo(10000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700">$10k</button>
-                <button type="button" onclick="ModuloVentas.sumarEfectivo(20000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700">$20k</button>
-                <button type="button" onclick="ModuloVentas.sumarEfectivo(50000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700">$50k</button>
-                <button type="button" onclick="ModuloVentas.sumarEfectivo(100000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700">$100k</button>
+                <button type="button" onclick="ModuloVentas.ponerEfectivoExacto()" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-bold text-slate-700 cursor-pointer">Exacto</button>
+                <button type="button" onclick="ModuloVentas.sumarEfectivo(10000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700 cursor-pointer">$10k</button>
+                <button type="button" onclick="ModuloVentas.sumarEfectivo(20000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700 cursor-pointer">$20k</button>
+                <button type="button" onclick="ModuloVentas.sumarEfectivo(50000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700 cursor-pointer">$50k</button>
+                <button type="button" onclick="ModuloVentas.sumarEfectivo(100000)" class="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 font-mono font-bold text-slate-700 cursor-pointer">$100k</button>
               </div>
 
               <div class="pt-2 border-t border-slate-200 flex justify-between items-center">
@@ -595,10 +876,10 @@ const ModuloVentas = (() => {
               <span>Descontar inventario automáticamente</span>
             </label>
 
-            <!-- BOTÓN PRINCIPAL FACTURAR -->
+            <!-- BOTÓN PRINCIPAL FACTURAR EN COLUMNA DERECHA -->
             <button type="button" id="btn-completar-factura"
                     onclick="ModuloVentas.procesarVenta()"
-                    class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2">
+                    class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
               <span class="text-lg">🧾</span>
               <span>Completar Venta &amp; Facturar</span>
             </button>
@@ -607,9 +888,26 @@ const ModuloVentas = (() => {
         </div>
 
       </div>
+
+      <!-- BARRA FLOTANTE / STICKY INFERIOR PARA VISTA DE CELULAR (NUNCA TENER QUE BAJAR) -->
+      <div id="pos-mobile-bottom-bar" class="fixed bottom-[58px] left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-700 px-4 py-2.5 shadow-2xl flex items-center justify-between gap-3 block lg:hidden">
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] uppercase font-bold text-slate-400 block leading-none">Total Factura</span>
+            <span id="pos-mobile-items-badge" class="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-white/20 text-white">${carrito.length} ítems</span>
+          </div>
+          <span id="pos-mobile-txt-total" class="text-lg font-black font-mono text-emerald-400 leading-tight">$ 0</span>
+        </div>
+        <button type="button" onclick="ModuloVentas.procesarVenta()"
+                class="flex-1 max-w-[210px] py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-transform">
+          <span class="text-base">⚡</span>
+          <span>Facturar Ahora</span>
+        </button>
+      </div>
     `;
 
     iniciarAutocompletadoPOS();
+    iniciarAutocompletadoClientesPOS();
     actualizarTotales();
   }
 
@@ -662,17 +960,42 @@ const ModuloVentas = (() => {
                 </select>
               </td>
               <td class="py-2.5 px-3 text-right font-mono font-semibold text-slate-800">
-                $ ${formatMoney(it.precio_unitario)}
+                ${it.editandoPrecio ? `
+                  <div class="flex items-center justify-end gap-1">
+                    <span class="text-xs font-bold text-slate-400">$</span>
+                    <input type="number" min="0" id="inp-precio-cart-${idx}" value="${it.precio_unitario}"
+                           onchange="ModuloVentas.guardarPrecioUnitarioItem(${idx}, this.value)"
+                           onkeydown="if(event.key==='Enter'){ ModuloVentas.guardarPrecioUnitarioItem(${idx}, this.value); }"
+                           class="w-20 text-right py-0.5 px-1.5 border-2 border-indigo-500 rounded-lg bg-indigo-50 text-indigo-900 font-mono font-bold text-xs focus:outline-none shadow-inner"
+                           autofocus />
+                    <button type="button" onclick="ModuloVentas.guardarPrecioUnitarioItem(${idx}, document.getElementById('inp-precio-cart-${idx}').value)"
+                            class="p-1 rounded-lg bg-emerald-600 text-white font-bold text-xs cursor-pointer shadow-2xs hover:bg-emerald-700"
+                            title="Confirmar precio">
+                      ✓
+                    </button>
+                  </div>
+                ` : `
+                  <div class="flex items-center justify-end gap-1.5">
+                    <span>$ ${formatMoney(it.precio_unitario)}</span>
+                    <button type="button" onclick="ModuloVentas.toggleEditarPrecioItem(${idx})"
+                            class="p-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs cursor-pointer transition-colors shadow-2xs"
+                            title="Editar precio unitario de este producto directamente aquí">
+                      ✏️
+                    </button>
+                  </div>
+                `}
               </td>
               <td class="py-2.5 px-3 text-center">
-                <div class="inline-flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden shadow-xs">
+                <div class="inline-flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
                   <button type="button" onclick="ModuloVentas.modificarCantidad(${idx}, -1)"
-                          class="px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold text-xs">-</button>
+                          title="Restar una unidad"
+                          class="min-w-[32px] min-h-[32px] px-2 py-1 text-slate-700 hover:bg-slate-100 font-extrabold text-sm cursor-pointer select-none transition-colors active:bg-slate-200">-</button>
                   <input type="number" min="1" value="${it.cantidad}"
                          onchange="ModuloVentas.fijarCantidad(${idx}, this.value)"
-                         class="w-12 text-center py-1 text-xs font-mono font-bold text-slate-800 border-x border-slate-200 focus:outline-none" />
+                         class="w-14 text-center py-1 text-xs font-mono font-bold text-slate-900 border-x border-slate-200 focus:bg-indigo-50/50 focus:outline-none" />
                   <button type="button" onclick="ModuloVentas.modificarCantidad(${idx}, 1)"
-                          class="px-2 py-1 text-slate-600 hover:bg-slate-100 font-bold text-xs">+</button>
+                          title="Sumar una unidad"
+                          class="min-w-[32px] min-h-[32px] px-2 py-1 text-slate-700 hover:bg-slate-100 font-extrabold text-sm cursor-pointer select-none transition-colors active:bg-slate-200">+</button>
                 </div>
               </td>
               <td class="py-2.5 px-3 text-right font-mono font-bold text-indigo-700">
@@ -748,8 +1071,8 @@ const ModuloVentas = (() => {
               <p class="text-xs text-slate-500">Consulta los 3 precios de cada producto y edítalos manualmente si lo deseas.</p>
             </div>
 
-            <!-- BUSCADOR EN EL CATÁLOGO DE PRECIOS -->
-            <div class="flex items-center gap-2 w-full sm:w-auto">
+            <!-- BUSCADOR Y ACCIONES EN EL CATÁLOGO DE PRECIOS -->
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
               <div class="relative w-full sm:w-72">
                 <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">🔍</span>
                 <input type="text" id="catalogo-precios-busq"
@@ -759,8 +1082,13 @@ const ModuloVentas = (() => {
               </div>
               <button onclick="ModuloVentas.cargarCatalogoPrecios()"
                       title="Refrescar lista"
-                      class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold">
+                      class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold cursor-pointer">
                 🔄
+              </button>
+              <button type="button" onclick="ModuloVentas.abrirModalNuevoProductoPrecios()"
+                      class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-transform cursor-pointer shrink-0"
+                      title="Crear un nuevo producto en la base de datos con sus 3 precios">
+                <span>➕</span> <span>Nuevo Producto</span>
               </button>
             </div>
           </div>
@@ -861,8 +1189,17 @@ const ModuloVentas = (() => {
     }
   }
 
-  function agregarProductoAlCarrito(prod) {
+  function agregarProductoAlCarrito(prod, cantidadParam) {
     if (!prod) return;
+
+    let cantAAgregar = 1;
+    if (cantidadParam !== undefined && cantidadParam !== null && Number(cantidadParam) > 0) {
+      cantAAgregar = Number(cantidadParam);
+    } else {
+      const inpCant = document.getElementById('pos-input-cant');
+      const val = inpCant ? parseInt(inpCant.value, 10) : 1;
+      cantAAgregar = (val && !isNaN(val) && val > 0) ? val : 1;
+    }
 
     const p1 = Number(prod.precio_1) || Number(prod.precio) || 0;
     const p2 = Number(prod.precio_2) || p1;
@@ -872,7 +1209,7 @@ const ModuloVentas = (() => {
     const idx = carrito.findIndex(it => it.producto_id === prod.id || (it.sku && it.sku === prod.sku));
 
     if (idx !== -1) {
-      carrito[idx].cantidad += 1;
+      carrito[idx].cantidad += cantAAgregar;
       carrito[idx].subtotal = Math.round(carrito[idx].cantidad * carrito[idx].precio_unitario);
     } else {
       const tipoP = listaPreciosDefault;
@@ -890,8 +1227,8 @@ const ModuloVentas = (() => {
         precio_3: p3,
         tipo_precio: tipoP,
         precio_unitario: unitario,
-        cantidad: 1,
-        subtotal: Math.round(unitario),
+        cantidad: cantAAgregar,
+        subtotal: Math.round(cantAAgregar * unitario),
         codigo_barras: prod.codigo_barras || ''
       });
     }
@@ -900,10 +1237,40 @@ const ModuloVentas = (() => {
       Sound.beep();
     }
 
+    // Restablecer el selector de cantidad visible a 1 para el próximo producto
+    const inpCant = document.getElementById('pos-input-cant');
+    if (inpCant) inpCant.value = '1';
+    actualizarCantidadEnDropdown();
+
     renderTablaCarrito();
     actualizarTotales();
     limpiarBuscador();
     enfocarBuscador();
+  }
+
+  function ajustarCantidadEntrada(delta) {
+    const inp = document.getElementById('pos-input-cant');
+    if (!inp) return;
+    let actual = parseInt(inp.value, 10) || 1;
+    actual = Math.max(1, actual + delta);
+    inp.value = actual;
+    actualizarCantidadEnDropdown();
+  }
+
+  function fijarCantidadEntrada(n) {
+    const inp = document.getElementById('pos-input-cant');
+    if (!inp) return;
+    inp.value = Math.max(1, parseInt(n, 10) || 1);
+    actualizarCantidadEnDropdown();
+  }
+
+  function actualizarCantidadEnDropdown() {
+    const inp = document.getElementById('pos-input-cant');
+    const cant = inp ? (parseInt(inp.value, 10) || 1) : 1;
+    const badges = document.querySelectorAll('.pos-sugg-cant-badge');
+    badges.forEach(b => {
+      b.textContent = `+${cant} un`;
+    });
   }
 
   function cambiarTipoPrecioItem(idx, nuevoTipo) {
@@ -914,6 +1281,35 @@ const ModuloVentas = (() => {
     carrito[idx].subtotal = Math.round(carrito[idx].cantidad * nuevoUnitario);
     renderTablaCarrito();
     actualizarTotales();
+  }
+
+  function toggleEditarPrecioItem(idx) {
+    if (!carrito[idx]) return;
+    carrito[idx].editandoPrecio = !carrito[idx].editandoPrecio;
+    renderTablaCarrito();
+    if (carrito[idx].editandoPrecio) {
+      setTimeout(() => {
+        const inp = document.getElementById(`inp-precio-cart-${idx}`);
+        if (inp) { inp.focus(); inp.select(); }
+      }, 50);
+    }
+  }
+
+  function guardarPrecioUnitarioItem(idx, val) {
+    if (!carrito[idx]) return;
+    const num = parseFloat(val);
+    if (!isNaN(num) && num >= 0) {
+      carrito[idx].precio_unitario = Math.round(num);
+      carrito[idx].subtotal = Math.round(carrito[idx].cantidad * carrito[idx].precio_unitario);
+    }
+    carrito[idx].editandoPrecio = false;
+    renderTablaCarrito();
+    actualizarTotales();
+    showToast(`Precio unitario actualizado`, 'success');
+  }
+
+  function editarPrecioItem(idx) {
+    toggleEditarPrecioItem(idx);
   }
 
   function modificarCantidad(idx, delta) {
@@ -997,6 +1393,20 @@ const ModuloVentas = (() => {
     if (txtSub) txtSub.textContent = `$ ${formatMoney(subtotal)}`;
     if (txtTot) txtTot.textContent = `$ ${formatMoney(total)}`;
 
+    // Sincronizar barra superior destacada
+    const topTot = document.getElementById('pos-top-txt-total');
+    const topBtnTot = document.getElementById('pos-top-btn-total');
+    const topBadge = document.getElementById('pos-top-items-badge');
+    if (topTot) topTot.textContent = `$ ${formatMoney(total)}`;
+    if (topBtnTot) topBtnTot.textContent = `($ ${formatMoney(total)})`;
+    if (topBadge) topBadge.textContent = `${carrito.length} ítems`;
+
+    // Sincronizar barra flotante inferior en celular
+    const mobTot = document.getElementById('pos-mobile-txt-total');
+    const mobBadge = document.getElementById('pos-mobile-items-badge');
+    if (mobTot) mobTot.textContent = `$ ${formatMoney(total)}`;
+    if (mobBadge) mobBadge.textContent = `${carrito.length} ítems`;
+
     calcularDevuelta();
   }
 
@@ -1072,8 +1482,15 @@ const ModuloVentas = (() => {
     }
 
     try {
+      const clienteId = clienteSeleccionado ? clienteSeleccionado.id : null;
+      const clienteTel = clienteSeleccionado ? (clienteSeleccionado.telefono || '') : '';
+      const clienteDir = clienteSeleccionado ? (clienteSeleccionado.direccion || '') : '';
+
       const payload = {
+        cliente_id: clienteId,
         cliente_nombre: clienteNombre,
+        cliente_telefono: clienteTel,
+        cliente_direccion: clienteDir,
         lista_precios: listaPreciosDefault,
         items: carrito,
         metodo_pago: metodoPagoSeleccionado,
@@ -1096,7 +1513,7 @@ const ModuloVentas = (() => {
         carrito = [];
         renderTablaCarrito();
         actualizarTotales();
-        if (clienteInp) clienteInp.value = 'Consumidor Final';
+        restablecerConsumidorFinal();
         if (inpRec) inpRec.value = '';
         await cargarConsecutivo();
 
@@ -1112,6 +1529,84 @@ const ModuloVentas = (() => {
         btn.disabled = false;
         btn.innerHTML = '<span class="text-lg">🧾</span><span>Completar Venta &amp; Facturar</span>';
       }
+    }
+  }
+
+  // ------------------------------------------------------------
+  // GESTIÓN DE CLIENTES / FACTURAR A NOMBRE DE
+  // ------------------------------------------------------------
+  function iniciarAutocompletadoClientesPOS() {
+    const input = document.getElementById('pos-cliente-nombre');
+    const dropdown = document.getElementById('pos-autocomplete-cliente');
+    if (!input || !dropdown) return;
+
+    if (typeof attachAutocompleteClientes === 'function') {
+      attachAutocompleteClientes(
+        input,
+        dropdown,
+        (cliente) => {
+          seleccionarClientePOS(cliente);
+        },
+        (clienteNuevo) => {
+          seleccionarClientePOS(clienteNuevo);
+        }
+      );
+    }
+  }
+
+  function seleccionarClientePOS(c) {
+    if (!c) {
+      restablecerConsumidorFinal();
+      return;
+    }
+
+    clienteSeleccionado = {
+      id: c.id || null,
+      nombre: c.nombre || 'Consumidor Final',
+      telefono: c.telefono || '',
+      direccion: c.direccion || '',
+      empresa: c.empresa || '',
+      ciudad: c.ciudad || ''
+    };
+
+    const input = document.getElementById('pos-cliente-nombre');
+    if (input) input.value = clienteSeleccionado.nombre;
+
+    const btnLimpiar = document.getElementById('btn-pos-limpiar-cliente');
+    if (btnLimpiar) btnLimpiar.classList.remove('hidden');
+
+    const badgeDetalle = document.getElementById('pos-cliente-badge-detalle');
+    const badgeNombre = document.getElementById('pos-cliente-badge-nombre');
+    const badgeExtra = document.getElementById('pos-cliente-badge-extra');
+    if (badgeDetalle && badgeNombre && badgeExtra) {
+      badgeNombre.textContent = clienteSeleccionado.nombre;
+      const extra = [clienteSeleccionado.empresa, clienteSeleccionado.telefono, clienteSeleccionado.direccion, clienteSeleccionado.ciudad].filter(Boolean).join(' · ');
+      badgeExtra.textContent = extra ? `(${extra})` : '';
+      badgeDetalle.classList.remove('hidden');
+    }
+
+    showToast(`Factura a nombre de "${clienteSeleccionado.nombre}"`, 'success');
+  }
+
+  function restablecerConsumidorFinal() {
+    clienteSeleccionado = null;
+    const input = document.getElementById('pos-cliente-nombre');
+    if (input) input.value = 'Consumidor Final';
+
+    const btnLimpiar = document.getElementById('btn-pos-limpiar-cliente');
+    if (btnLimpiar) btnLimpiar.classList.add('hidden');
+
+    const badgeDetalle = document.getElementById('pos-cliente-badge-detalle');
+    if (badgeDetalle) badgeDetalle.classList.add('hidden');
+  }
+
+  function abrirModalNuevoClientePOS() {
+    const input = document.getElementById('pos-cliente-nombre');
+    const valorActual = (input && input.value !== 'Consumidor Final') ? input.value.trim() : '';
+    if (typeof abrirModalNuevoCliente === 'function') {
+      abrirModalNuevoCliente(valorActual, (nuevo) => {
+        seleccionarClientePOS(nuevo);
+      });
     }
   }
 
@@ -1134,6 +1629,8 @@ const ModuloVentas = (() => {
       if (!q) {
         dropdown.classList.add('hidden');
         dropdown.innerHTML = '';
+        posProductosSugeridos = [];
+        posIndexSeleccionado = -1;
         return;
       }
 
@@ -1143,6 +1640,8 @@ const ModuloVentas = (() => {
           if (res && res.ok && res.productos && res.productos.length > 0) {
             renderSugerenciasDropdown(res.productos);
           } else {
+            posProductosSugeridos = [];
+            posIndexSeleccionado = -1;
             dropdown.innerHTML = `
               <div class="p-3 text-center text-xs text-slate-400">
                 No se encontraron productos coincidentes con "<strong>${escapeHtml(q)}</strong>"
@@ -1154,9 +1653,30 @@ const ModuloVentas = (() => {
       }, 150);
     });
 
-    // Evento Enter para pistola lectora física o teclado
+    // Navegación por teclado (Flecha abajo, Flecha arriba, Enter, Escape)
     input.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter') {
+      const dropdownVisible = dropdown && !dropdown.classList.contains('hidden');
+
+      if (e.key === 'ArrowDown') {
+        if (dropdownVisible && posProductosSugeridos.length > 0) {
+          e.preventDefault();
+          posIndexSeleccionado = Math.min(posIndexSeleccionado + 1, posProductosSugeridos.length - 1);
+          actualizarHighlightPOS();
+        }
+      } else if (e.key === 'ArrowUp') {
+        if (dropdownVisible && posProductosSugeridos.length > 0) {
+          e.preventDefault();
+          posIndexSeleccionado = Math.max(posIndexSeleccionado - 1, 0);
+          actualizarHighlightPOS();
+        }
+      } else if (e.key === 'Enter') {
+        if (dropdownVisible && posIndexSeleccionado >= 0 && posProductosSugeridos[posIndexSeleccionado]) {
+          e.preventDefault();
+          agregarProductoPorId(posProductosSugeridos[posIndexSeleccionado]);
+          posIndexSeleccionado = -1;
+          return;
+        }
+
         e.preventDefault();
         const raw = input.value.trim();
         if (!raw) return;
@@ -1178,6 +1698,7 @@ const ModuloVentas = (() => {
         }
       } else if (e.key === 'Escape') {
         dropdown.classList.add('hidden');
+        posIndexSeleccionado = -1;
       }
     });
 
@@ -1185,6 +1706,20 @@ const ModuloVentas = (() => {
     document.addEventListener('click', (e) => {
       if (!input.contains(e.target) && !dropdown.contains(e.target)) {
         dropdown.classList.add('hidden');
+        posIndexSeleccionado = -1;
+      }
+    });
+  }
+
+  function actualizarHighlightPOS() {
+    const items = document.querySelectorAll('.pos-sugg-item');
+    items.forEach((item, idx) => {
+      const activo = idx === posIndexSeleccionado;
+      item.classList.toggle('bg-indigo-100', activo);
+      item.classList.toggle('border-l-4', activo);
+      item.classList.toggle('border-indigo-600', activo);
+      if (activo) {
+        item.scrollIntoView({ block: 'nearest' });
       }
     });
   }
@@ -1193,32 +1728,50 @@ const ModuloVentas = (() => {
     const dropdown = document.getElementById('pos-sugerencias-dropdown');
     if (!dropdown) return;
 
+    posProductosSugeridos = productos;
+    posIndexSeleccionado = -1;
+
+    const inpCant = document.getElementById('pos-input-cant');
+    const cantActual = inpCant ? (parseInt(inpCant.value, 10) || 1) : 1;
+
     dropdown.innerHTML = productos.map((p, idx) => {
       const p1 = Number(p.precio_1) || Number(p.precio) || 0;
       const p2 = Number(p.precio_2) || p1;
       const p3 = Number(p.precio_3) || p1;
 
       return `
-        <div onclick='ModuloVentas.agregarProductoPorId(${JSON.stringify(p).replace(/'/g, "&apos;")})'
-             class="p-3 hover:bg-indigo-50/70 cursor-pointer transition-colors flex items-center justify-between gap-3 text-xs">
-          <div class="space-y-0.5 min-w-0">
-            <div class="font-bold text-slate-800 truncate">${escapeHtml(p.nombre)}</div>
-            <div class="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
-              <span class="text-indigo-600 font-bold">${escapeHtml(p.sku)}</span>
-              ${p.codigo_barras ? `<span>• 🏷️ ${escapeHtml(p.codigo_barras)}</span>` : ''}
-              <span class="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-sans">Stock: ${p.stock}</span>
+        <div data-pos-idx="${idx}"
+             onclick='ModuloVentas.agregarProductoPorId(${JSON.stringify(p).replace(/'/g, "&apos;")})'
+             class="pos-sugg-item p-3 hover:bg-indigo-50/90 cursor-pointer transition-colors border-b border-slate-100 last:border-b-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
+          
+          <div class="space-y-1 flex-1 pr-2">
+            <!-- Nombre Completo Sin Recortar / Truncar -->
+            <div class="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug break-words">
+              ${escapeHtml(p.nombre)}
+            </div>
+            <div class="flex items-center flex-wrap gap-2 text-[11px] text-slate-500 font-mono">
+              <span class="text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">${escapeHtml(p.sku)}</span>
+              ${p.codigo_barras ? `<span class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">🏷️ ${escapeHtml(p.codigo_barras)}</span>` : ''}
+              <span class="px-1.5 py-0.5 rounded font-bold ${p.stock > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'}">
+                Stock: ${p.stock}
+              </span>
             </div>
           </div>
 
-          <div class="text-right flex-shrink-0 space-y-0.5">
-            <div class="font-bold font-mono text-emerald-700 text-sm">
-              $ ${formatMoney(p1)}
-              <span class="text-[9px] text-slate-400 font-sans font-normal">(P1)</span>
+          <div class="text-right flex-shrink-0 flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+            <div class="space-y-0.5">
+              <div class="font-black font-mono text-emerald-700 text-sm">
+                $ ${formatMoney(p1)}
+                <span class="text-[9px] text-slate-400 font-sans font-normal">(P1)</span>
+              </div>
+              <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5 justify-end">
+                <span>P2: $${formatMoney(p2)}</span>
+                <span>• P3: $${formatMoney(p3)}</span>
+              </div>
             </div>
-            <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5 justify-end">
-              <span>P2: $${formatMoney(p2)}</span>
-              <span>• P3: $${formatMoney(p3)}</span>
-            </div>
+            <span class="pos-sugg-cant-badge px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-xs shrink-0">
+              +${cantActual} un
+            </span>
           </div>
         </div>
       `;
@@ -1256,7 +1809,87 @@ const ModuloVentas = (() => {
 
   function iniciarListenerTecladoCodigoBarras() {
     window.addEventListener('keydown', (e) => {
-      // Si el foco está en un input que no sea el buscador, no interceptar
+      // Verificar si el módulo de ventas está activo en pantalla
+      const viewVentas = document.getElementById('view-ventas');
+      if (!viewVentas || viewVentas.classList.contains('hidden')) return;
+
+      const key = (e.key || '').toUpperCase();
+      const ctrl = e.ctrlKey || e.metaKey;
+      const alt = e.altKey;
+
+      // 1. Facturar / Completar Venta: Ctrl + P, F2, Ctrl + Enter
+      if ((ctrl && key === 'P') || e.key === 'F2' || (ctrl && e.key === 'Enter')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (subtabActiva === 'pos') {
+          procesarVenta();
+        }
+        return;
+      }
+
+      // 2. Ir al Buscador: Ctrl + F, F4
+      if ((ctrl && key === 'F') || e.key === 'F4') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (subtabActiva === 'pos') {
+          enfocarBuscador();
+        }
+        return;
+      }
+
+      // 3. Efectivo Exacto: Ctrl + E, F9
+      if ((ctrl && key === 'E') || e.key === 'F9') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (subtabActiva === 'pos') {
+          ponerEfectivoExacto();
+        }
+        return;
+      }
+
+      // 4. Alternar Método de Pago: F8, Ctrl + M
+      if (e.key === 'F8' || (ctrl && key === 'M')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (subtabActiva === 'pos') {
+          const metodos = ['EFECTIVO', 'TRANSFERENCIA', 'DATAFONO', 'CREDITO'];
+          const idxActual = metodos.indexOf(metodoPagoSeleccionado);
+          const sigMetodo = metodos[(idxActual + 1) % metodos.length];
+          seleccionarMetodoPago(sigMetodo);
+          showToast(`Método de pago cambiado a: ${sigMetodo}`, 'info');
+        }
+        return;
+      }
+
+      // 5. Vaciar Carrito: Alt + V o Ctrl + Delete
+      if ((alt && key === 'V') || (ctrl && e.key === 'Delete')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (subtabActiva === 'pos') {
+          vaciarCarrito();
+        }
+        return;
+      }
+
+      // 6. Cambiar Lista de Precios: Alt + 1, Alt + 2, Alt + 3
+      if (alt && (key === '1' || key === '2' || key === '3')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (subtabActiva === 'pos') {
+          seleccionarListaPreciosGlobal(`precio_${key}`);
+        }
+        return;
+      }
+
+      // 7. Abrir Guía de Atajos de Teclado: F1 o Ctrl + H
+      if (e.key === 'F1' || (ctrl && key === 'H')) {
+        e.preventDefault();
+        e.stopPropagation();
+        abrirModalAyudaAtajosPOS();
+        return;
+      }
+
+      // Si el foco está en un input que no sea el buscador, no acumular buffer de código de barras
       const activeEl = document.activeElement;
       if (activeEl && activeEl.tagName === 'INPUT' && activeEl.id !== 'pos-input-busqueda') {
         return;
@@ -1410,16 +2043,16 @@ const ModuloVentas = (() => {
                   <div class="font-mono font-bold text-white">${res.stats.filas_procesadas}</div>
                 </div>
                 <div class="bg-emerald-950/40 border border-emerald-500/30 p-2 rounded-lg">
-                  <div class="text-emerald-300 text-[10px]">Actualizados</div>
+                  <div class="text-emerald-300 text-[10px]">Precios Modificados</div>
                   <div class="font-mono font-bold text-emerald-400">${res.stats.productos_actualizados}</div>
                 </div>
                 <div class="bg-black/20 p-2 rounded-lg">
-                  <div class="text-slate-400 text-[10px]">No encontrados</div>
-                  <div class="font-mono font-bold text-amber-300">${res.stats.no_encontrados}</div>
+                  <div class="text-slate-400 text-[10px]">Al día (Sin cambio)</div>
+                  <div class="font-mono font-bold text-slate-300">${res.stats.precios_sin_cambio || 0}</div>
                 </div>
-                <div class="bg-black/20 p-2 rounded-lg">
-                  <div class="text-slate-400 text-[10px]">Columnas Venta</div>
-                  <div class="font-mono font-bold text-indigo-300">${res.stats.columnas_precios_detectadas}</div>
+                <div class="bg-amber-950/40 border border-amber-500/30 p-2 rounded-lg">
+                  <div class="text-amber-300 text-[10px]">No encontrados</div>
+                  <div class="font-mono font-bold text-amber-300">${res.stats.no_encontrados}</div>
                 </div>
               </div>
 
@@ -1436,6 +2069,45 @@ const ModuloVentas = (() => {
                   </div>
                 </div>
               ` : ''}
+
+              ${res.muestra_no_encontrados && res.muestra_no_encontrados.length > 0 ? (() => {
+                ultimosNoEncontrados = res.muestra_no_encontrados;
+                return `
+                  <div id="box-no-encontrados-precios" class="mt-3 p-3 bg-amber-500/15 border border-amber-400/30 rounded-xl space-y-2.5">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                      <span class="font-bold text-[11px] text-amber-300 flex items-center gap-1.5">
+                        <span>⚠️</span> <span>${res.stats.no_encontrados} producto(s) en el archivo no existen en la base de datos:</span>
+                      </span>
+                      <button type="button" id="btn-agregar-todos-no-encontrados" onclick="ModuloVentas.agregarTodosNoEncontradosBD()"
+                              class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5">
+                        <span>⚡</span> <span>Agregar TODOS a la BD</span>
+                      </button>
+                    </div>
+                    <p class="text-[11px] text-slate-300">Haz clic en <strong>Agregar TODOS a la BD</strong> para registrarlos al instante con los precios del archivo (sin código de barras):</p>
+                    <div class="max-h-48 overflow-y-auto divide-y divide-white/10 rounded-lg bg-black/40 p-2 font-mono text-[11px]">
+                      ${res.muestra_no_encontrados.map(ne => {
+                        const nomEsc = escapeHtml(ne.articulo || ne.codigo || 'Sin nombre');
+                        const codEsc = escapeHtml(ne.codigo || '');
+                        const p1 = Number(ne.precio_1) || 0;
+                        const p2 = Number(ne.precio_2) || p1;
+                        const p3 = Number(ne.precio_3) || p2;
+                        return `
+                          <div class="py-1.5 flex items-center justify-between gap-2">
+                            <div class="truncate text-slate-200">
+                              <strong>${nomEsc}</strong> ${codEsc ? `<span class="text-slate-400 font-mono">(${codEsc})</span>` : ''}
+                              <span class="text-emerald-300 text-[10px] ml-1">P1: $${formatMoney(p1)} | P2: $${formatMoney(p2)}</span>
+                            </div>
+                            <button type="button" onclick="ModuloVentas.abrirModalNuevoProductoPrecios('${nomEsc}', '${codEsc}', '', ${p1}, ${p2}, ${p3})"
+                                    class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] shrink-0 cursor-pointer transition-transform active:scale-95">
+                              ➕ Agregar a la BD
+                            </button>
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  </div>
+                `;
+              })() : ''}
             </div>
           `;
         }
@@ -1465,8 +2137,10 @@ const ModuloVentas = (() => {
   // CATÁLOGO VISUAL DE PRECIOS Y EDICIÓN INLINE
   // ------------------------------------------------------------
   let debounceCatalogoBusq = null;
+  let busquedaCatalogoActual = '';
 
   async function cargarCatalogoPrecios(query = '') {
+    busquedaCatalogoActual = query;
     const cont = document.getElementById('catalogo-precios-tabla-container');
     if (!cont) return;
 
@@ -1495,7 +2169,23 @@ const ModuloVentas = (() => {
     if (!cont) return;
 
     if (!prods.length) {
-      cont.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs">No se encontraron productos en el catálogo</div>`;
+      cont.innerHTML = `
+        <div class="py-12 px-4 text-center space-y-3 bg-slate-50/70 rounded-2xl border border-dashed border-slate-300">
+          <div class="text-3xl">🔍</div>
+          <p class="text-sm font-semibold text-slate-700">
+            ${busquedaCatalogoActual 
+              ? `No se encontró ningún producto con "<strong>${escapeHtml(busquedaCatalogoActual)}</strong>"` 
+              : 'No hay productos en el catálogo de precios'}
+          </p>
+          <p class="text-xs text-slate-400 max-w-sm mx-auto">
+            ¿El producto aún no existe en el sistema? Puedes agregarlo ahora mismo con sus listas de precios P1, P2 y P3.
+          </p>
+          <button type="button" onclick="ModuloVentas.abrirModalNuevoProductoPrecios('${escapeHtml(busquedaCatalogoActual || '')}')"
+                  class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-2 shadow-sm transition-transform active:scale-95 cursor-pointer">
+            <span>➕</span> <span>Agregar ${busquedaCatalogoActual ? `"${escapeHtml(busquedaCatalogoActual)}"` : 'Nuevo Producto'} a la Base de Datos</span>
+          </button>
+        </div>
+      `;
       return;
     }
 
@@ -1578,6 +2268,193 @@ const ModuloVentas = (() => {
     }
     const digits = s.replace(/\D/g, '');
     return parseInt(digits, 10) || 0;
+  }
+
+  function abrirModalNuevoProductoPrecios(nombreSug = '', skuSug = '', barcodeSug = '', p1Sug = 0, p2Sug = 0, p3Sug = 0) {
+    const modal = document.getElementById('modal-nuevo-producto-precios');
+    if (!modal) return;
+
+    const inpNombre = document.getElementById('prod-precios-nombre');
+    const inpSku = document.getElementById('prod-precios-sku');
+    const inpBarcode = document.getElementById('prod-precios-barcode');
+    const inpCat = document.getElementById('prod-precios-categoria');
+    const inpStock = document.getElementById('prod-precios-stock');
+    const inpP1 = document.getElementById('prod-precios-p1');
+    const inpP2 = document.getElementById('prod-precios-p2');
+    const inpP3 = document.getElementById('prod-precios-p3');
+
+    if (inpNombre) inpNombre.value = nombreSug || '';
+    if (inpSku) {
+      if (skuSug) {
+        inpSku.value = skuSug;
+      } else {
+        // Generar SKU preliminar
+        const nextId = (catalogoPrecios.length > 0 ? Math.max(...catalogoPrecios.map(p => p.id || 0)) : 100) + 1;
+        inpSku.value = `P${String(nextId).padStart(4, '0')}`;
+      }
+    }
+    // Por el apartado de ventas no se agregan códigos de barras por el momento
+    if (inpBarcode) inpBarcode.value = '';
+    if (inpCat) inpCat.value = 'General';
+    if (inpStock) inpStock.value = '0';
+    if (inpP1) inpP1.value = p1Sug > 0 ? p1Sug : '';
+    if (inpP2) inpP2.value = p2Sug > 0 ? p2Sug : (p1Sug > 0 ? p1Sug : '');
+    if (inpP3) inpP3.value = p3Sug > 0 ? p3Sug : (p1Sug > 0 ? p1Sug : '');
+
+    modal.classList.remove('hidden');
+    setTimeout(() => inpNombre?.focus(), 100);
+  }
+
+  function cerrarModalNuevoProductoPrecios() {
+    const modal = document.getElementById('modal-nuevo-producto-precios');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function generarSiguienteSKUPrecios() {
+    try {
+      const res = await apiFetch('/productos/siguiente-sku');
+      if (res && res.ok && res.sku) {
+        const inpSku = document.getElementById('prod-precios-sku');
+        if (inpSku) inpSku.value = res.sku;
+      }
+    } catch (_) {
+      const inpSku = document.getElementById('prod-precios-sku');
+      if (inpSku) {
+        const rand = Math.floor(1000 + Math.random() * 9000);
+        inpSku.value = `P${rand}`;
+      }
+    }
+  }
+
+  function autoSincronizarPreciosNuevos(val) {
+    const p1 = parseFloat(val) || 0;
+    const inpP2 = document.getElementById('prod-precios-p2');
+    const inpP3 = document.getElementById('prod-precios-p3');
+    if (inpP2 && (!inpP2.value || inpP2.value === '0')) inpP2.value = p1;
+    if (inpP3 && (!inpP3.value || inpP3.value === '0')) inpP3.value = p1;
+  }
+
+  async function guardarNuevoProductoPrecios() {
+    const nombre = document.getElementById('prod-precios-nombre')?.value.trim() || '';
+    const sku = document.getElementById('prod-precios-sku')?.value.trim() || '';
+    // Por la parte de ventas no se agregan códigos de barras por el momento
+    const codigo_barras = '';
+    const categoria = document.getElementById('prod-precios-categoria')?.value.trim() || 'General';
+    const stock = parseInt(document.getElementById('prod-precios-stock')?.value, 10) || 0;
+    const precio_1 = parseFloat(document.getElementById('prod-precios-p1')?.value) || 0;
+    const precio_2 = parseFloat(document.getElementById('prod-precios-p2')?.value) || precio_1;
+    const precio_3 = parseFloat(document.getElementById('prod-precios-p3')?.value) || precio_2;
+
+    if (!nombre) {
+      showToast('El nombre del producto es obligatorio.', 'error');
+      document.getElementById('prod-precios-nombre')?.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btn-guardar-nuevo-prod-precios');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Guardando...</span>';
+    }
+
+    try {
+      // 1. Guardar en SQLite (backend)
+      const res = await apiFetch('/productos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sku,
+          nombre,
+          categoria,
+          stock,
+          precio: precio_1,
+          precio_1,
+          precio_2,
+          precio_3,
+          codigo_barras
+        })
+      });
+
+      if (res && res.ok && res.data) {
+        const prodCreado = res.data;
+
+        // 2. Sincronizar de inmediato en Firebase Firestore si está activo
+        if (window.FirebaseClient?.guardarProducto) {
+          try {
+            await window.FirebaseClient.guardarProducto(prodCreado);
+          } catch (e) {
+            console.warn('[Firebase] Error guardando nuevo producto:', e);
+          }
+        }
+
+        showToast(`¡Producto "${prodCreado.nombre}" creado con éxito!`, 'success');
+        cerrarModalNuevoProductoPrecios();
+        cargarCatalogoPrecios(busquedaCatalogoActual);
+      } else {
+        showToast(res?.error || 'Error al crear el producto en la base de datos', 'error');
+      }
+    } catch (e) {
+      showToast('Error de red al guardar el producto', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>💾</span> <span>Guardar en Base de Datos &amp; Firebase</span>';
+      }
+    }
+  }
+
+  async function agregarTodosNoEncontradosBD() {
+    if (!ultimosNoEncontrados || !ultimosNoEncontrados.length) {
+      showToast('No hay productos pendientes por agregar.', 'info');
+      return;
+    }
+
+    const btn = document.getElementById('btn-agregar-todos-no-encontrados');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Guardando productos...</span>';
+    }
+
+    try {
+      const res = await apiFetch('/productos/crear-lote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productos: ultimosNoEncontrados,
+          sin_barcodes: true
+        })
+      });
+
+      if (res && res.ok && res.creados) {
+        const creados = res.creados;
+
+        // Sincronizar en Firebase Firestore
+        if (window.FirebaseClient?.guardarProducto) {
+          for (const p of creados) {
+            try {
+              await window.FirebaseClient.guardarProducto(p);
+            } catch (_) {}
+          }
+        }
+
+        showToast(`¡Se agregaron ${creados.length} productos a la Base de Datos y Firebase!`, 'success');
+        ultimosNoEncontrados = [];
+
+        const boxNe = document.getElementById('box-no-encontrados-precios');
+        if (boxNe) boxNe.classList.add('hidden');
+
+        cargarCatalogoPrecios();
+      } else {
+        showToast(res?.error || 'Error al agregar productos en lote', 'error');
+      }
+    } catch (e) {
+      showToast('Error de red al agregar productos', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>⚡</span> <span>Agregar TODOS a la BD</span>';
+      }
+    }
   }
 
   function formatearInputPrecio(input) {
@@ -1957,9 +2834,27 @@ const ModuloVentas = (() => {
     enfocarBuscador();
   }
 
+  function ajustarCopiasImpresion(delta) {
+    const inp = document.getElementById('ticket-input-copias');
+    if (!inp) return;
+    let actual = parseInt(inp.value, 10) || 1;
+    actual = Math.min(10, Math.max(1, actual + delta));
+    inp.value = actual;
+  }
+
+  function fijarCopiasImpresion(val) {
+    const inp = document.getElementById('ticket-input-copias');
+    if (!inp) return;
+    let actual = parseInt(val, 10) || 1;
+    inp.value = Math.min(10, Math.max(1, actual));
+  }
+
   function imprimirTicketDirecto(facturaCustom) {
     const f = facturaCustom || ultimaFacturaCreada;
     if (!f) return;
+
+    const inpCopias = document.getElementById('ticket-input-copias');
+    const copias = Math.min(10, Math.max(1, parseInt(inpCopias ? inpCopias.value : '1', 10) || 1));
 
     let iframe = document.getElementById('iframe-impresion-ventas');
     if (!iframe) {
@@ -1985,12 +2880,23 @@ const ModuloVentas = (() => {
 
     const ticketHtml = generarHtmlTicketInterno(f, configFactura);
 
+    // Multiplicar por el número de copias seleccionadas
+    let cuerpoMultiplesCopias = '';
+    for (let i = 0; i < copias; i++) {
+      cuerpoMultiplesCopias += `
+        <div class="ticket-copia-item" style="${i < copias - 1 ? 'page-break-after: always; break-after: page; margin-bottom: 25px;' : ''}">
+          ${copias > 1 ? `<div style="text-align: center; font-size: 8px; color: #555; margin-bottom: 3px; font-weight: bold;">-- COPIA ${i + 1} DE ${copias} --</div>` : ''}
+          ${ticketHtml}
+        </div>
+      `;
+    }
+
     doc.write(`
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Factura POS - ${escapeHtml(f.numero_factura || 'Venta')}</title>
+        <title>Factura POS - ${escapeHtml(f.numero_factura || 'Venta')}${copias > 1 ? ` (${copias} copias)` : ''}</title>
         <style>
           @page {
             margin: 0;
@@ -2012,7 +2918,14 @@ const ModuloVentas = (() => {
             line-height: 1.22;
             padding: 2mm ${margenLat} !important;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+          }
+          .ticket-copia-item {
+            width: 100% !important;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
           }
           #ticket-print-area {
             width: 100% !important;
@@ -2031,7 +2944,7 @@ const ModuloVentas = (() => {
         </style>
       </head>
       <body>
-        ${ticketHtml}
+        ${cuerpoMultiplesCopias}
       </body>
       </html>
     `);
@@ -2202,6 +3115,20 @@ const ModuloVentas = (() => {
   // ------------------------------------------------------------
   async function cargarConfigFactura() {
     try {
+      // 1. Intentar cargar desde Firebase Firestore primero
+      if (window.FirebaseClient?.obtenerConfiguracion) {
+        try {
+          const fbConfig = await window.FirebaseClient.obtenerConfiguracion('factura');
+          if (fbConfig) {
+            const { tipo, updated_at, ...datosLimpios } = fbConfig;
+            configFactura = Object.assign({}, CONFIG_FACTURA_DEFAULT, datosLimpios);
+            localStorage.setItem('jispi_config_factura', JSON.stringify(configFactura));
+            console.log('[Factura] Formato cargado de Firebase Firestore.');
+            return;
+          }
+        } catch (_) {}
+      }
+
       const savedLocal = localStorage.getItem('jispi_config_factura');
       if (savedLocal) {
         try {
@@ -2571,7 +3498,18 @@ const ModuloVentas = (() => {
       if (res && res.ok && res.config) {
         configFactura = Object.assign({}, res.config);
         localStorage.setItem('jispi_config_factura', JSON.stringify(configFactura));
-        showToast('✓ Formato de factura guardado exitosamente.', 'success');
+
+        // Guardar configuración de factura directamente en Firebase Firestore
+        if (window.FirebaseClient?.guardarConfiguracion) {
+          try {
+            await window.FirebaseClient.guardarConfiguracion('factura', configFactura);
+            console.log('[Factura] Formato guardado en Firebase Firestore.');
+          } catch (e) {
+            console.warn('[Firebase Factura]', e);
+          }
+        }
+
+        showToast('✓ Formato de factura guardado exitosamente en Firebase y en el sistema.', 'success');
         cerrarModalConfigTicket();
 
         // Si el modal de ticket de factura está abierto, refrescar el ticket
@@ -2610,15 +3548,27 @@ const ModuloVentas = (() => {
     configFactura = backup;
   }
 
+  let enviandoImpresion = false;
   async function enviarAImpresoraTienda(facturaCustom) {
+    if (enviandoImpresion) {
+      showToast('Ya se está procesando el envío a la impresora...', 'info');
+      return;
+    }
+
     const f = facturaCustom || ultimaFacturaCreada;
     if (!f) {
       showToast('No hay ninguna factura activa para imprimir.', 'error');
       return;
     }
 
+    enviandoImpresion = true;
+    setTimeout(() => { enviandoImpresion = false; }, 3000);
+
+    const inpCopias = document.getElementById('ticket-input-copias');
+    const copias = Math.min(10, Math.max(1, parseInt(inpCopias ? inpCopias.value : '1', 10) || 1));
+
     const textoPlano = generarTextoPlanoTicket(f);
-    showToast('Enviando factura a la impresora física de la tienda...', 'info');
+    showToast(`Enviando ${copias > 1 ? `${copias} copias` : 'factura'} a la impresora física de la tienda...`, 'info');
 
     try {
       const res = await apiFetch('/impresion/encolar', {
@@ -2629,17 +3579,35 @@ const ModuloVentas = (() => {
           referencia_id: f.id,
           numero_factura: f.numero_factura,
           contenido_ticket: textoPlano,
-          usuario_nombre: f.usuario_nombre
+          usuario_nombre: f.usuario_nombre,
+          copias: copias,
+          forzar: copias > 1
         })
       });
 
       if (res && res.ok) {
-        showToast(`✓ Factura ${f.numero_factura} enviada a imprimir en tienda.`, 'success');
+        if (res.duplicado) {
+          showToast(`ℹ️ Factura ${f.numero_factura} ya estaba enviada. Si deseas otra copia, aumenta a 2 copias.`, 'info');
+        } else {
+          showToast(res.mensaje || `✓ ${copias} copia(s) de factura ${f.numero_factura} enviadas a la tienda.`, 'success');
+        }
       } else {
         showToast(res?.error || 'Error al enviar a la impresora de la tienda.', 'error');
       }
     } catch (err) {
       showToast('Error de red al enviar la impresión.', 'error');
+    }
+  }
+
+  async function limpiarColaImpresion() {
+    try {
+      const res = await apiFetch('/impresion/limpiar-cola', { method: 'POST' });
+      if (res && res.ok) {
+        showToast(res.mensaje || 'Cola de impresión limpiada con éxito.', 'success');
+        verificarEstadoServidorImpresion();
+      }
+    } catch (_) {
+      showToast('Error al limpiar la cola.', 'error');
     }
   }
 
@@ -2689,16 +3657,241 @@ const ModuloVentas = (() => {
     } catch (e) {}
   }
 
+  // ------------------------------------------------------------
+  // GESTIÓN DE CONFIGURACIÓN DE IMPRESORA LOCAL (GUARDADO EN FIREBASE Y LOCAL)
+  // ------------------------------------------------------------
+  let configImpresora = {
+    impresora_nombre: '',
+    ancho_papel: '80mm',
+    auto_imprimir: true
+  };
+
+  async function cargarConfigImpresora() {
+    try {
+      // 1. Intentar cargar desde Firebase Firestore primero
+      if (window.FirebaseClient?.obtenerConfiguracion) {
+        try {
+          const fbConfig = await window.FirebaseClient.obtenerConfiguracion('impresora');
+          if (fbConfig) {
+            configImpresora = {
+              impresora_nombre: fbConfig.impresora_nombre || '',
+              ancho_papel: fbConfig.ancho_papel || '80mm',
+              auto_imprimir: fbConfig.auto_imprimir !== false
+            };
+            aplicarConfigImpresoraEnUI();
+            console.log('[Impresora] Configuración cargada desde Firebase Firestore.');
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // 2. Cargar desde API backend (/api/impresion/config)
+      const res = await apiFetch('/impresion/config');
+      if (res && res.ok && res.config) {
+        configImpresora = {
+          impresora_nombre: res.config.impresora_nombre || '',
+          ancho_papel: res.config.ancho_papel || '80mm',
+          auto_imprimir: res.config.auto_imprimir !== false
+        };
+        aplicarConfigImpresoraEnUI();
+      }
+    } catch (e) {
+      console.warn('Error cargando configuración de impresora:', e);
+    }
+  }
+
+  function aplicarConfigImpresoraEnUI() {
+    const inpNombre = document.getElementById('impresora-config-nombre');
+    const selPapel = document.getElementById('impresora-config-papel');
+    const chkAuto = document.getElementById('impresora-config-auto');
+    const txtInfoNombre = document.getElementById('info-impresora-nombre');
+
+    if (inpNombre) inpNombre.value = configImpresora.impresora_nombre;
+    if (selPapel) selPapel.value = configImpresora.ancho_papel || '80mm';
+    if (chkAuto) chkAuto.checked = !!configImpresora.auto_imprimir;
+    if (txtInfoNombre) {
+      txtInfoNombre.textContent = configImpresora.impresora_nombre || 'Predeterminada de Windows';
+    }
+  }
+
+  async function guardarConfigImpresora() {
+    const inpNombre = document.getElementById('impresora-config-nombre');
+    const selPapel = document.getElementById('impresora-config-papel');
+    const chkAuto = document.getElementById('impresora-config-auto');
+
+    const nuevaConfig = {
+      impresora_nombre: inpNombre ? inpNombre.value.trim() : '',
+      ancho_papel: selPapel ? selPapel.value : '80mm',
+      auto_imprimir: chkAuto ? chkAuto.checked : true
+    };
+
+    const btn = document.getElementById('btn-guardar-config-impresora');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> <span>Guardando en Firebase...</span>';
+    }
+
+    try {
+      // 1. Guardar en Backend SQLite
+      const res = await apiFetch('/impresion/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nuevaConfig)
+      });
+
+      // 2. Guardar en Firebase Firestore
+      if (window.FirebaseClient?.guardarConfiguracion) {
+        try {
+          await window.FirebaseClient.guardarConfiguracion('impresora', nuevaConfig);
+        } catch (e) {
+          console.warn('[Firebase] Error guardando config impresora:', e);
+        }
+      }
+
+      configImpresora = nuevaConfig;
+      aplicarConfigImpresoraEnUI();
+      showToast('Configuración de impresora guardada con éxito en Firebase y servidor local.', 'success');
+    } catch (e) {
+      showToast('Error al guardar la configuración de impresora', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>💾</span> <span>Guardar en Firebase</span>';
+      }
+    }
+  }
+
   function abrirModalServidorImpresion() {
     const modal = document.getElementById('modal-servidor-impresion');
     if (modal) {
       modal.classList.remove('hidden');
+      cargarConfigImpresora();
       verificarEstadoServidorImpresion(false);
     }
   }
 
   function cerrarModalServidorImpresion() {
     const modal = document.getElementById('modal-servidor-impresion');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function abrirModalAyudaAtajosPOS() {
+    let modal = document.getElementById('modal-ayuda-atajos-pos');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'modal-ayuda-atajos-pos';
+      modal.className = 'fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4';
+      document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+        <div class="bg-slate-900 text-white p-4 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <span class="text-2xl">⌨️</span>
+            <div>
+              <h3 class="font-bold text-base leading-tight">Atajos de Teclado Rápidos (POS)</h3>
+              <p class="text-xs text-slate-300">Factura y cobra en segundos sin usar el mouse</p>
+            </div>
+          </div>
+          <button onclick="ModuloVentas.cerrarModalAyudaAtajosPOS()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer">✕</button>
+        </div>
+
+        <div class="p-4 sm:p-5 space-y-2.5 text-xs text-slate-700 max-h-[75vh] overflow-y-auto">
+          <div class="flex items-center justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+            <div>
+              <div class="font-bold text-emerald-950 text-xs flex items-center gap-1">⚡ Facturar / Completar Venta</div>
+              <div class="text-[11px] text-emerald-800">Genera la factura e imprime el ticket</div>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px] font-bold text-emerald-900">
+              <kbd class="px-2 py-1 bg-white border border-emerald-300 rounded shadow-2xs">Ctrl</kbd>+<kbd class="px-2 py-1 bg-white border border-emerald-300 rounded shadow-2xs">P</kbd>
+              <span class="text-slate-400 font-sans mx-0.5">o</span>
+              <kbd class="px-2 py-1 bg-white border border-emerald-300 rounded shadow-2xs">F2</kbd>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <div class="font-bold text-slate-900 text-xs">🔍 Ir al Buscador de Productos</div>
+              <div class="text-[11px] text-slate-500">Pone el cursor en la barra de búsqueda</div>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-800">
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">Ctrl</kbd>+<kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">F</kbd>
+              <span class="text-slate-400 font-sans mx-0.5">o</span>
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">F4</kbd>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <div class="font-bold text-slate-900 text-xs">💵 Efectivo Exacto</div>
+              <div class="text-[11px] text-slate-500">Completa el monto recibido con el total exacto</div>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-800">
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">Ctrl</kbd>+<kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">E</kbd>
+              <span class="text-slate-400 font-sans mx-0.5">o</span>
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">F9</kbd>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <div class="font-bold text-slate-900 text-xs">💳 Cambiar Método de Pago</div>
+              <div class="text-[11px] text-slate-500">Rota entre Efectivo, Transferencia, Datáfono y Crédito</div>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-800">
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">F8</kbd>
+              <span class="text-slate-400 font-sans mx-0.5">o</span>
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">Ctrl</kbd>+<kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">M</kbd>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <div class="font-bold text-slate-900 text-xs">🏷️ Cambiar Lista de Precios</div>
+              <div class="text-[11px] text-slate-500">Aplica Precio 1 (General), Precio 2 o Precio 3</div>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-800">
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">Alt</kbd>+<kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">1/2/3</kbd>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <div class="font-bold text-slate-900 text-xs">🗑️ Vaciar Carrito</div>
+              <div class="text-[11px] text-slate-500">Limpia la factura en curso</div>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-800">
+              <kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">Alt</kbd>+<kbd class="px-2 py-1 bg-white border border-slate-300 rounded shadow-2xs">V</kbd>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-indigo-50 rounded-xl border border-indigo-200">
+            <div>
+              <div class="font-bold text-indigo-950 text-xs">↕️ Navegar por la Lista de Búsqueda</div>
+              <div class="text-[11px] text-indigo-800">Mueve la selección e inserta con Enter</div>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px] font-bold text-indigo-900">
+              <kbd class="px-2 py-1 bg-white border border-indigo-300 rounded shadow-2xs">↑ / ↓</kbd>
+              <span class="text-slate-400 font-sans mx-0.5">+</span>
+              <kbd class="px-2 py-1 bg-white border border-indigo-300 rounded shadow-2xs">Enter</kbd>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3.5 bg-slate-100 border-t border-slate-200 flex justify-end">
+          <button onclick="ModuloVentas.cerrarModalAyudaAtajosPOS()" class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer">
+            Entendido
+          </button>
+        </div>
+      </div>
+    `;
+
+    modal.classList.remove('hidden');
+  }
+
+  function cerrarModalAyudaAtajosPOS() {
+    const modal = document.getElementById('modal-ayuda-atajos-pos');
     if (modal) modal.classList.add('hidden');
   }
 
@@ -2711,7 +3904,12 @@ const ModuloVentas = (() => {
     seleccionarListaPreciosGlobal,
     agregarProductoAlCarrito,
     agregarProductoPorId,
+    ajustarCantidadEntrada,
+    fijarCantidadEntrada,
     cambiarTipoPrecioItem,
+    toggleEditarPrecioItem,
+    guardarPrecioUnitarioItem,
+    editarPrecioItem,
     modificarCantidad,
     fijarCantidad,
     eliminarItem,
@@ -2740,7 +3938,10 @@ const ModuloVentas = (() => {
     abrirModalServidorImpresion,
     cerrarModalServidorImpresion,
     verificarEstadoServidorImpresion,
+    cargarConfigImpresora,
+    guardarConfigImpresora,
     enviarAImpresoraTienda,
+    limpiarColaImpresion,
     abrirModalConfigTicket,
     cerrarModalConfigTicket,
     cambiarTamanoPapel,
@@ -2752,6 +3953,19 @@ const ModuloVentas = (() => {
     guardarConfigTicket,
     restablecerConfigTicketDefault,
     probarImpresionConfigTicket,
-    cargarConfigFactura
+    cargarConfigFactura,
+    seleccionarClientePOS,
+    restablecerConsumidorFinal,
+    abrirModalNuevoClientePOS,
+    abrirModalNuevoProductoPrecios,
+    cerrarModalNuevoProductoPrecios,
+    generarSiguienteSKUPrecios,
+    autoSincronizarPreciosNuevos,
+    guardarNuevoProductoPrecios,
+    agregarTodosNoEncontradosBD,
+    abrirModalAyudaAtajosPOS,
+    cerrarModalAyudaAtajosPOS,
+    ajustarCopiasImpresion,
+    fijarCopiasImpresion
   };
 })();

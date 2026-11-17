@@ -13,7 +13,7 @@
 <body class="bg-slate-100 min-h-screen text-slate-800">
 
   <!-- ============ HEADER ============ -->
-  <header class="bg-slate-900 text-white sticky top-0 z-40 shadow-md">
+  <header id="app-header" class="bg-slate-900 text-white sticky top-0 z-40 shadow-md transition-all duration-200">
     <div class="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2 max-w-[1700px] mx-auto">
       <div class="flex items-center gap-2 sm:gap-3">
         <h1 class="text-base sm:text-lg font-bold flex items-center gap-1.5">
@@ -35,6 +35,22 @@
                 class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white flex items-center gap-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95">
           <span class="text-sm leading-none">👥</span>
           <span class="hidden sm:inline font-semibold">Clientes</span>
+        </button>
+
+        <!-- Botón Copia de Seguridad y Base de Datos -->
+        <button id="btn-global-backup-header" onclick="abrirModalBackup()"
+                title="Copia de Seguridad de la Base de Datos (Descargar y Restaurar .db)"
+                class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white flex items-center gap-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95">
+          <span class="text-sm leading-none">💾</span>
+          <span class="hidden sm:inline font-semibold">Respaldo BD</span>
+        </button>
+
+        <!-- Botón Firebase Firestore -->
+        <button id="btn-global-firebase-header" onclick="window.FirebaseClient.abrirModalFirebase()"
+                title="Base de Datos en la Nube (Firebase Firestore & Consultas)"
+                class="px-2.5 py-1 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-200 hover:text-white flex items-center gap-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95">
+          <span class="text-sm leading-none">🔥</span>
+          <span class="hidden sm:inline font-semibold">Firebase</span>
         </button>
       </div>
       <div id="header-user-badge" class="flex items-center gap-2"></div>
@@ -65,7 +81,7 @@
   <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 hidden max-w-sm w-[90%]"></div>
 
   <!-- ============ NAV INFERIOR (mobile-first) ============ -->
-  <nav class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] z-40">
+  <nav id="app-bottom-nav" class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] z-40 transition-all duration-200">
     <div id="nav-tabs-container" class="max-w-4xl mx-auto flex items-center justify-around">
       <button data-tab="carga" class="tab-btn flex-1 flex flex-col items-center py-3 gap-1 text-slate-500">
         <span class="text-xl">📥</span><span class="text-xs font-medium">Carga</span>
@@ -93,16 +109,17 @@
   </nav>
 
   <!-- ============ SCRIPTS ============ -->
-  <script src="js/utils.js?v=1.3"></script>
-  <script src="js/auth.js?v=1.6"></script>
+  <script src="js/utils.js?v=2.2"></script>
+  <script src="js/auth.js?v=1.7"></script>
   <script src="js/sound.js?v=1.2"></script>
   <script src="js/scanner.js?v=1.2"></script>
   <script src="js/recortador.js?v=1.2"></script>
   <script src="js/modulo-carga.js?v=1.4"></script>
   <script src="js/modulo-inventario.js?v=1.4"></script>
   <script src="js/modulo-empaque.js?v=1.5"></script>
-  <script src="js/modulo-domicilios.js?v=1.6"></script>
-  <script src="js/modulo-ventas.js?v=1.0"></script>
-  <script src="js/app.js?v=1.4"></script>
+  <script src="js/modulo-domicilios.js?v=1.7"></script>
+  <script src="js/modulo-ventas.js?v=1.2"></script>
+  <script type="module" src="js/firebase-client.js?v=2.2"></script>
+  <script src="js/app.js?v=2.0"></script>
 </body>
 </html>

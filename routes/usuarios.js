@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const fs = require('fs');
+const upload = multer({ dest: 'uploads/' });
 
 // Middleware: superadmin, admin (dueño del local) o usuario con permiso 'usuarios'
 router.use((req, res, next) => {
@@ -101,6 +105,15 @@ router.post('/', (req, res) => {
       JSON.stringify(arrayPermisos)
     );
 
+    // Sincronizar automáticamente el usuario como cliente en la base de datos
+    try {
+      db.prepare(`
+        INSERT INTO clientes (nombre, empresa, direccion, telefono, ciudad)
+        SELECT ?, '', '', '', ''
+        WHERE NOT EXISTS (SELECT 1 FROM clientes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)))
+      `).run(nombre.trim(), nombre.trim());
+    } catch (_) {}
+
     res.json({
       ok: true,
       id: infoUser.lastInsertRowid,
@@ -161,11 +174,100 @@ router.put('/:id', (req, res) => {
     if (sets.length > 0) {
       vals.push(id);
       db.prepare(`UPDATE usuarios SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+
+      // Si cambió el nombre, sincronizar en clientes
+      if (nombre && nombre.trim()) {
+        try {
+          db.prepare(`
+            INSERT INTO clientes (nombre, empresa, direccion, telefono, ciudad)
+            SELECT ?, '', '', '', ''
+            WHERE NOT EXISTS (SELECT 1 FROM clientes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)))
+          `).run(nombre.trim(), nombre.trim());
+        } catch (_) {}
+      }
     }
 
     res.json({ ok: true, mensaje: 'Usuario actualizado exitosamente' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------
+// POST /api/usuarios/importar -> Importación masiva de usuarios y clientes desde Excel
+// ------------------------------------------------------------------
+router.post('/importar', upload.single('archivo'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ ok: false, error: 'No se subió ningún archivo' });
+  }
+
+  const filePath = req.file.path;
+  try {
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    let creados = 0;
+    let actualizados = 0;
+
+    const stmtFind = db.prepare("SELECT id FROM usuarios WHERE LOWER(username) = LOWER(?) OR LOWER(nombre) = LOWER(?) LIMIT 1");
+    const stmtInsertUser = db.prepare(`
+      INSERT INTO usuarios (username, password_hash, nombre, rol, activo, permisos)
+      VALUES (?, ?, ?, ?, 1, ?)
+    `);
+    const stmtUpdateUser = db.prepare("UPDATE usuarios SET nombre = ?, rol = ? WHERE id = ?");
+    
+    const stmtFindCliente = db.prepare("SELECT id FROM clientes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR (telefono = ? AND telefono != '') LIMIT 1");
+    const stmtInsertCliente = db.prepare("INSERT INTO clientes (nombre, empresa, direccion, telefono, ciudad) VALUES (?, ?, ?, ?, ?)");
+    const stmtUpdateCliente = db.prepare("UPDATE clientes SET nombre = ?, empresa = ?, direccion = ?, telefono = ?, ciudad = ? WHERE id = ?");
+
+    const hashDefecto = db.hashPassword('123456');
+
+    const tx = db.transaction((filas) => {
+      for (const row of filas) {
+        const nombre = String(row.nombre || row.Nombre || row.CLIENTE || row.Cliente || row.usuario || row.Usuario || '').trim();
+        if (!nombre) continue;
+
+        let username = String(row.username || row.Username || row.usuario || row.Usuario || nombre.toLowerCase().replace(/[^a-z0-9]/g, '')).trim();
+        if (username.length < 3) username = username + '_' + Math.floor(Math.random() * 1000);
+
+        const rol = ['admin', 'domiciliario', 'operador'].includes(row.rol) ? row.rol : 'operador';
+        const telefono = String(row.telefono || row.Telefono || row.celular || '').trim();
+        const direccion = String(row.direccion || row.Direccion || '').trim();
+        const ciudad = String(row.ciudad || row.Ciudad || '').trim();
+        const empresa = String(row.empresa || row.Empresa || '').trim();
+
+        // 1. Sincronizar en usuarios
+        const existUser = stmtFind.get(username, nombre);
+        if (existUser) {
+          stmtUpdateUser.run(nombre, rol, existUser.id);
+          actualizados++;
+        } else {
+          stmtInsertUser.run(username, hashDefecto, nombre, rol, JSON.stringify(['inventario', 'empaque']));
+          creados++;
+        }
+
+        // 2. Sincronizar en clientes
+        const existCli = stmtFindCliente.get(nombre, telefono);
+        if (existCli) {
+          stmtUpdateCliente.run(nombre, empresa, direccion, telefono, ciudad, existCli.id);
+        } else {
+          stmtInsertCliente.run(nombre, empresa, direccion, telefono, ciudad);
+        }
+      }
+    });
+
+    tx(rows);
+    try { fs.unlinkSync(filePath); } catch (_) {}
+
+    res.json({
+      ok: true,
+      mensaje: `Importación completada: ${creados} nuevos, ${actualizados} actualizados.`,
+      resumen: { creados, actualizados, totalProcesados: rows.length }
+    });
+  } catch (err) {
+    try { fs.unlinkSync(filePath); } catch (_) {}
+    res.status(500).json({ ok: false, error: 'Error al importar: ' + err.message });
   }
 });
 

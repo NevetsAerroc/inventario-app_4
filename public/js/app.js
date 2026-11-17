@@ -98,8 +98,37 @@ const App = (() => {
           switchTab('carga');
         }
       }
-    } else {
-      switchTab('carga');
+    }
+
+    // Detección inteligente de teclado virtual en móviles (Resize del Viewport)
+    if (window.visualViewport) {
+      const initialHeight = window.visualViewport.height;
+      window.visualViewport.addEventListener('resize', () => {
+        const currentHeight = window.visualViewport.height;
+        const header = document.getElementById('app-header');
+        const bottomNav = document.getElementById('app-bottom-nav');
+        const mobileBar = document.getElementById('pos-mobile-bottom-bar');
+        
+        // Si la diferencia de altura es notable (> 150px), el teclado virtual está abierto
+        const tecladoAbierto = (initialHeight - currentHeight) > 150;
+
+        if (header) {
+          header.style.transform = tecladoAbierto ? 'translateY(-100%)' : 'translateY(0)';
+          header.style.opacity = tecladoAbierto ? '0' : '1';
+          header.style.pointerEvents = tecladoAbierto ? 'none' : 'auto';
+        }
+
+        if (bottomNav) {
+          bottomNav.style.transform = tecladoAbierto ? 'translateY(100%)' : 'translateY(0)';
+          bottomNav.style.opacity = tecladoAbierto ? '0' : '1';
+          bottomNav.style.pointerEvents = tecladoAbierto ? 'none' : 'auto';
+        }
+
+        if (mobileBar) {
+          // Si el teclado está abierto, pegamos la barra de facturar justo al fondo de la pantalla (sin la nav debajo)
+          mobileBar.style.bottom = tecladoAbierto ? '0px' : '58px';
+        }
+      });
     }
   }
 
